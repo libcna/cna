@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// RasterizerState culling conformance (docs/rasterizerstate-support.md, section 3): minimal,
+// RasterizerState culling conformance (docs/rasterizerstate-support.md, "Culling and winding"): minimal,
 // deterministic CullMode reproducer under a REAL camera (perspective/orthographic projection +
 // Matrix::CreateLookAt), extending the existing identity-transform-only coverage in
 // examples/easygl_rasterizerstate_cullmode_test.cpp (Tasks 323-325/765). That existing test already

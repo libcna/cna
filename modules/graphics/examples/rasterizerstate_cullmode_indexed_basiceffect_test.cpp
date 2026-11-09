@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// RasterizerState culling conformance (docs/rasterizerstate-support.md, section 3): checks whether
+// RasterizerState culling conformance (docs/rasterizerstate-support.md, "Culling and winding"): checks whether
 // CullMode is handled consistently on the REAL code path
 // Microsoft::Xna::Framework::Graphics::Model / ModelMesh::Draw() actually uses --
 // GraphicsDevice::DrawIndexedPrimitives() with a real bound VertexBuffer/IndexBuffer and a

@@ -1,28 +1,17 @@
 # SurfaceFormat support — EasyGL
 
-> Current source audit: 2026-10-31. This page covers the EasyGL renderer family
+> This page covers the EasyGL renderer family
 > (`OPENGLES3`, `OPENGL33`, and `WEBGL2`). Other renderers publish their capability boundary in
 > their own renderer documentation and in `graphics-renderer-feature-matrix.md`.
 
 ---
 
-## Canonical `SurfaceFormat` enum values (Task 281)
+## Canonical `SurfaceFormat` enum values
 
-The authoritative list, ordinal values, and descriptions below are taken directly from FNA's
-`SurfaceFormat.cs` (`Microsoft.Xna.Framework.Graphics.SurfaceFormat`). Ordinal values are load-bearing
-— every renderer does `static_cast<int>(format)` at some point, so CNA's enum must declare these 27
-values in exactly this order.
-
-**Task 281 finding, fixed:** values 20–26 previously did **not** match FNA at all. CNA's enum instead
-declared 7 invented "Srgb" variants at those ordinals (`ColorSrgb`, `Bgr565Srgb`, `Bgra5551Srgb`,
-`Bgra4444Srgb`, `Dxt1Srgb`, `Dxt3Srgb`, `Dxt5Srgb`) that have no FNA equivalent at all, while omitting
-FNA's real values entirely. This violated the project's hard rule that enum names must match XNA/FNA
-exactly. Fixed in `SurfaceFormat.hpp` to match FNA's actual 27 values below; pinned by 27 new/existing
-ordinal-value unit tests in `SurfaceFormatTests.cpp` (0–19 were already correct and tested; 20–26 are
-new). Blast radius was small: only one example test (`easygl_surface_format_throws_test.cpp`)
-referenced the old invented names, since `Texture::ValidateFormat` only special-cases `Color` and
-throws for every other value — the specific identity of the "other" value never mattered to any
-validation logic.
+The list, ordinal values, and descriptions below are FNA's `SurfaceFormat.cs`
+(`Microsoft.Xna.Framework.Graphics.SurfaceFormat`). Ordinal values are load-bearing — every
+renderer does `static_cast<int>(format)` at some point, so CNA's enum declares these 27 values in
+exactly this order. `SurfaceFormatTests.cpp` pins every ordinal.
 
 | # | Name | XNA 4.0 original? | Description |
 |--:|------|:---:|---|
@@ -54,18 +43,16 @@ validation logic.
 | 25 | `ByteEXT` | ❌ FNA ext. | Unsigned 8-bit, one channel (red). |
 | 26 | `UShortEXT` | ❌ FNA ext. | Unsigned 16-bit, one channel (red). |
 
-"FNA ext." means the value doesn't exist in the original Microsoft XNA4 enum but is part of FNA's
-real, current `SurfaceFormat.cs` — these are still the authoritative reference for this project (per
-project convention: "the authoritative behavioral and API reference is the local FNA source tree"),
-not CNA inventions.
+"FNA ext." means the value does not exist in the original Microsoft XNA4 enum but is part of FNA's
+`SurfaceFormat.cs`; CNA declares them with FNA's names and ordinals, not as CNA inventions.
 
 ---
 
-## Per-format CPU size (Task 282)
+## Per-format CPU size
 
-Ported directly from FNA's `Texture.cs` ("Static SurfaceFormat Size Methods" region) as two public
-static methods on CNA's `Texture` class — real FNA API, so no `SurfaceFormatHelper` class was
-invented; both throw `System::ArgumentOutOfRangeException` for an unrecognized enum value.
+FNA's `Texture.cs` ("Static SurfaceFormat Size Methods" region) provides these as static methods on
+`Texture`; CNA keeps them there. Both throw `System::ArgumentOutOfRangeException` for an
+unrecognized enum value.
 
 | Format | `GetBlockSizeSquaredEXT` | `GetFormatSizeEXT` (bytes) |
 |---|:---:|:---:|
@@ -77,7 +64,7 @@ invented; both throw `System::ArgumentOutOfRangeException` for an unrecognized e
 | HalfVector4, Rgba64, Vector2, HdrBlendable | 1 | 8 |
 | Vector4 | 1 | 16 |
 
-**Task 283** ported the remaining two methods from the same FNA region:
+The same FNA region provides two more methods:
 
 - `Texture::GetPixelStoreAlignment(format)` — `min(8, GetFormatSizeEXT(format))`, the OpenGL 2.1
   `GL_PACK_ALIGNMENT`/`GL_UNPACK_ALIGNMENT` cap.
@@ -91,7 +78,7 @@ them (`modules/c-api/spec/Texture.toml`).
 `ValidateGetDataFormat` is wired into all 4 of FNA's real call sites: `Texture2D::GetData`,
 `Texture3D::GetData`, `TextureCube::GetData`, `GraphicsDevice::GetBackBufferData` — all using
 `elementSizeInBytes = 4` (this project's `Color`/RGBA-raw-bytes convention). Renderer-specific
-promotion gates now use it for supported non-Color formats, including EasyGL's ES 3-class
+promotion gates use it for supported non-Color formats, including EasyGL's ES 3-class
 `NormalizedByte4` path.
 
 ---
@@ -185,8 +172,8 @@ relevant, multisample resolve support. `Rg32` and `Rgba64` additionally require 
 Capability queries, preferred-format selection, 2D/cube construction, binding, clearing, typed
 readback, mip generation, MSAA resolve, MRT, and sampling are tested against the same classifier.
 
-Depth/stencil support is documented separately in `depthstencilstate-support.md`; it is not fixed
-to a single GL depth format as the former version of this page claimed.
+Depth/stencil support is documented separately in `depthstencilstate-support.md` and
+`rendertarget-support.md`; it is not fixed to a single GL depth format.
 
 ## Remaining limitations
 
@@ -215,5 +202,5 @@ suites are:
 - `EasyGL_DxtFormat`, `EasyGL_DxtTextureCube`, `EasyGL_ShaderEffect_Texture3D`, and
   `EasyGL_Pbr_SrgbTransfer` — standalone renderer integration coverage.
 
-For a cross-renderer view, use `graphics-renderer-feature-matrix.md`. Current unresolved defects,
-rather than completed implementation history, belong in `KNOWN_ISSUES.md`.
+For a cross-renderer view, use `graphics-renderer-feature-matrix.md`; current defects are in
+`KNOWN_ISSUES.md`.

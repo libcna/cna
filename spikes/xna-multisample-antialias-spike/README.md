@@ -1,7 +1,8 @@
 # `RasterizerState.MultiSampleAntiAlias` on the real XNA 4.0 runtime
 
 First run for **VULKAN-099** (the retired VULKAN renderer's plan, kept in Git history); the result
-is recorded in `docs/rasterizerstate-support.md` §8 and does not depend on that renderer.
+is recorded under "`MultiSampleAntiAlias`" in `docs/rasterizerstate-support.md` and does not
+depend on that renderer.
 
 ## Why this exists
 
@@ -54,6 +55,6 @@ goes to stdout and to `probe-output.txt` next to the executable.
 
 ## Result
 
-Recorded in `docs/rasterizerstate-support.md` §8. This file deliberately does not duplicate the
-numbers — a spike README that carries its own copy of a measurement is how two versions of it start
-to exist.
+Recorded under "`MultiSampleAntiAlias`" in `docs/rasterizerstate-support.md`. This file
+deliberately does not duplicate the numbers — a spike README that carries its own copy of a
+measurement is how two versions of it start to exist.

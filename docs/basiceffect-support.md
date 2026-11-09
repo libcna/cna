@@ -1,11 +1,8 @@
 # `BasicEffect` current contract
 
-Current-state reconciliation: 2026-11-01.
-
 `BasicEffect` implements the XNA 4.0 stock-effect contract and also exposes explicitly marked CNA
 extensions for owned textures, shadows and punctual lights. This page describes the behavior that
-callers and renderer implementations may rely on now. It is not a list of completed implementation
-tasks.
+callers and renderer implementations may rely on.
 
 ## Sources of truth
 
@@ -19,8 +16,7 @@ tasks.
 | Current defects and limitations | [KNOWN_ISSUES.md](../KNOWN_ISSUES.md) |
 
 The generated XNA runtime-member report answers whether the public API exists. This page answers how
-the effect behaves; it deliberately avoids fixed test totals, which become stale whenever coverage
-grows.
+the effect behaves.
 
 ## XNA public state
 
@@ -115,11 +111,9 @@ fog is disabled, the effect resets that vector and selects a no-fog shader varia
 `FogStart == FogEnd` uses the stock degenerate vector and produces full fog rather than a
 division-by-zero artifact. Fog blends RGB toward `FogColor * composedAlpha` while preserving
 the fragment alpha. `composedAlpha` includes the effect's `Alpha` and any enabled texture and
-vertex-color alpha contributions; it is not just the `Alpha` property.
-
-CNA-FIX-D01 corrects that multiplication in SDLGPU's stock fragments. The shared pixel regression
-checks effect/vertex alpha and lit/unlit textured BasicEffect paths, alongside the other stock
-effects; see [sdl-gpu-renderer.md](sdl-gpu-renderer.md#parity-with-easygl) for the bounded evidence.
+vertex-color alpha contributions; it is not just the `Alpha` property. The shared fog pixel
+contract and its SDLGPU caveat (CNA-FIX-D01) are in
+[sdl-gpu-renderer.md](sdl-gpu-renderer.md#stock-effect-fog-alpha-cna-fix-d01).
 
 ## D3D9 vertex-color-output saturation
 
@@ -179,12 +173,3 @@ The stable evidence names are more useful than totals:
   punctual lights.
 
 Use the private GPU runner described in the repository instructions for every rendered test.
-
-## Historical task map
-
-Tasks 361-370 established the original property, unlit, lighting, material and integration
-coverage. Tasks 885/886 completed lit emissive, three-light and specular transport; Tasks 1102 and
-1111 corrected vertex/pixel dispatch and fog; FX-123/124/125 captured vertex-output saturation,
-large-world specular precision and lit color declarations. All of that work is closed. Git history
-is the detailed task narrative; this page and the executable evidence above are the maintained
-contract.

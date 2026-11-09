@@ -1,12 +1,11 @@
 # FNA3D renderer
 
-**Status: reconciled with the implementation on 2026-10-31.** `FNA3D` is an
-**Experimental** real-pixel renderer family. It presents XNA's graphics API through the FNA3D C
+`FNA3D` is an **Experimental** real-pixel renderer family. It presents XNA's graphics API through the FNA3D C
 library, which selects one of its OpenGL, Direct3D 11 or SDL_GPU drivers at runtime. It is not a
 second name for any of those CNA renderer identities.
 
-This page is the current renderer contract. Retired `FNA3D-0`..`63` task evidence and the dated
-XNA image comparison report are in Git history, and the authoritative list of current defects is [KNOWN_ISSUES.md](../KNOWN_ISSUES.md).
+This page is the renderer contract; source comments cite the renderer tasks as `FNA3D-0`..`63`
+(`docs/task-id-index.md`), and current defects are in [KNOWN_ISSUES.md](../KNOWN_ISSUES.md).
 
 ## Build and test
 
@@ -74,7 +73,7 @@ driver selection.
 | Component | CNA source |
 |---|---|
 | FNA3D | [`libcna/FNA3D`](https://github.com/libcna/FNA3D), commit `76a76cf98544f008584a5c6e0a1f5eb5b468795b` |
-| FNA3D upstream base | FNA3D release 26.10, followed by CNA's dependency-audit and fork repairs published 2026-11-08 |
+| FNA3D upstream base | FNA3D release 26.10, followed by CNA's dependency-audit and fork repairs |
 | MojoShader | [`libcna/mojoshader`](https://github.com/libcna/mojoshader), submodule commit `6f1e91b65c8dfe493ec1ace818b294b7181fa1b6` |
 | System contract | SDL 3.2 or newer, supplied by CNA's existing SDL target |
 | Integration | `cmake/ThirdPartyFNA3D.cmake`; FNA3D and MojoShader are linked as static archives |
@@ -84,31 +83,20 @@ Configure does not patch either checkout. `cmake/Fna3dSourceCheck.cmake` verifie
 revision, the recorded and checked-out MojoShader revisions, and local modifications. A pin is
 always a full commit SHA, never a moving branch.
 
-The 2026-11-06 repairs are FNA3D `912e26d` (two-sided stencil, SDL_GPU upload ordering and
-unsigned mip bounds), MojoShader `04616e1` (duplicate Effect object ownership) and `6ae750b`
-(SPIR-V BEM/TEXDEPTH), delivered by the recorded gitlink pair. The owner qualified the fork
-witnesses on OpenGL and SDL_GPU, including pre-fix and mutant failures. CNA's post-pin pixel and
-whole-module runs are a separate integration gate; see the defect ledger for the remaining limits.
-
-The pair published on 2026-11-08 also carries scalar-dot specular reflection, sampled-result
-selectors, typed gradients/predicated writes, portable predicated TEXKILL, and ps_1.x
-scale-before-saturation. SPIR-V now admits `TEXREG2AR`, `TEXREG2GB`, `TEXREG2RGB`, `TEXDP3`,
-`TEXDP3TEX` and `TEXM3X2DEPTH`. FNA3D's startup repair
-materializes an otherwise empty render pass only for pending clears. The shared CNA contracts
-add full-image 2D sampling witnesses for the five admitted instructions; current private GPU
-qualification is still required. TQ-TEXM3X2DEPTH-01 (`0dc4f2e` / `86e1fa0`) adds guarded
-matrix depth, independent source modifiers and ES3 float depth-API selection.
-TQ-SAMPLER-INFER-01 (`93ee117` / `866d402`) resolves legacy dimensions from typed Effect
-Texture bindings before shader compilation, preserving explicit caller maps. CNA's new public
-matrix-depth and 2D/cube/volume inference replays require private GPU qualification on both
-FNA3D drivers. See [`fx-compiled-effects.md`](fx-compiled-effects.md) for witnesses and limits.
+The fork repairs carried by the pin (stencil faces, upload ordering, mip bounds, Effect object
+ownership and truncation, legacy SPIR-V instructions and sampler inference, ps_1.x modifiers,
+predication, ES3 depth APIs, presentation) are listed with their remaining qualification limits in
+[`fna3d-dependency-defects.md`](fna3d-dependency-defects.md#fixed-on-the-forks). FNA3D's startup
+repair materializes an otherwise empty render pass only for pending clears. The compiled-effect
+witnesses and limits are in [`fx-compiled-effects.md`](fx-compiled-effects.md).
 
 ## The two forks
 
 The pinned FNA3D revision is on `cna-audit-fixes`; MojoShader is on `cna`. These forks carry
-CNA-required behavior as ordinary reviewable commits while the default branches track upstream. They are not drop-in ABI replacements for upstream shared
-libraries: CNA adds extension entry points, render-state values and public-structure fields, and
-links both libraries statically.
+CNA-required behavior as ordinary reviewable commits while the default branches track upstream. They
+are not drop-in ABI replacements for upstream shared libraries: CNA adds extension entry points,
+render-state values and public-structure fields, and links both libraries statically.
+
 
 - The FNA3D fork owns the XNA pixel-centre and legacy bump-map controls, format-exact bounded
   transfers, multi-device GL context handling, corrected OpenGL and SDL_GPU resolve/readback
@@ -123,10 +111,8 @@ compiled-effect suites through the affected drivers, and only then move
 `CNA_FNA3D_GIT_TAG`. The detailed compiled-effect dependency boundary is in
 [`fx-compiled-effects.md`](fx-compiled-effects.md).
 
-The owner authorized AI changes to these forks on 2026-11-06 for the commissioned repair lanes.
-Configure still never patches a checkout. Defects and fixed repairs, with reproducers and CNA's
-handling, are collected in
-[`fna3d-dependency-defects.md`](fna3d-dependency-defects.md).
+Configure never patches a checkout. Defects and fixed repairs, with reproducers and CNA's handling,
+are collected in [`fna3d-dependency-defects.md`](fna3d-dependency-defects.md).
 
 ## Shader and effect contract
 
@@ -171,7 +157,6 @@ execution, while retaining the user's BlendFactor and restoring it for weighted 
 ordinary RGBA/HiDef matrix includes independent colour/alpha functions, all sixteen Min/Max
 refusals, dynamic factor changes and the subsequent weighted draw; see the
 [reference provenance](../tests/reference/xna40/blend-function-one-zero/PROVENANCE.json).
-
 
 FNA3D's enumerations intentionally match XNA's numeric values. `Fna3dEnumMapping.hpp` pins that
 assumption with compile-time assertions so a future mismatch fails the build rather than silently
@@ -255,17 +240,14 @@ D3D11-driver findings and every other open item.
 
 - Linux is exercised through FNA3D's OpenGL driver and its SDL_GPU/Vulkan driver, including stock
   and compiled effects, resources, targets, formats and presentation.
-- The Apple M4 campaign exercised the full macOS tree through FNA3D's Metal-selected SDL_GPU
-  route. Its current known format/query limits are recorded in
-  [`apple-platforms.md`](apple-platforms.md), not generalized to iOS.
+- macOS was exercised through FNA3D's Metal-selected SDL_GPU route (`AM4-*`); its known
+  format/query limits are in [`apple-platforms.md`](apple-platforms.md), not generalized to iOS.
 - Native Direct3D 11 execution remains an external qualification gate. Cross-compiled and
   Wine-visible coverage does not establish native-Windows driver correctness.
-- The 2026-08-11 39-scene comparison against checked-in real-XNA images (`tools/xna-oracle`,
-  `scripts/xna-diff.py` at tolerance 0, FNA3D's OpenGL driver on Mesa llvmpipe) gave 10/39 exact,
-  29 differing and none failing to render, the same count as EasyGL on that machine; the corpus
-  carries a host-wide GL-vs-XNA divergence. No scene was worse than the EasyGL baseline, and the one
-  defect it found (FNA3D-27a) is fixed. SDLGPU and D3D11 drivers were not measured. This is a
-  historical measurement, not a current pass-count dashboard or release gate.
+- The real-XNA image corpus (`tools/xna-oracle`, `scripts/xna-diff.py` at tolerance 0) is a
+  measurement, not a release gate: through FNA3D's OpenGL driver every scene rendered and none
+  diverged further than EasyGL on the same host (the corpus carries a host-wide GL-vs-XNA
+  divergence). The SDLGPU and D3D11 drivers have not been measured with it.
 
 When rerunning the image corpus, keep it off the live desktop:
 
@@ -275,5 +257,4 @@ tools/platform/run_gpu_tests_private.sh --exec \
   ./cmake-build-fna3d/cna_oracle_render_fna3d
 ```
 
-Registered suite totals are intentionally not copied here: `ctest -N -L Fna3d` in the actual
-build tree is the authoritative inventory.
+`ctest -N -L Fna3d` in the build tree lists the registered suite.

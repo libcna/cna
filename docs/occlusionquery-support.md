@@ -1,8 +1,5 @@
 # `OcclusionQuery` support and precision
 
-Status: reconciled with the public XNA object, the logical-interval coordinator, all eight active
-renderer implementation families and their focused tests on **2026-10-31**.
-
 This page is the focused source of truth for
 `Microsoft::Xna::Framework::Graphics::OcclusionQuery`. The cross-renderer summary remains
 [`graphics-renderer-feature-matrix.md`](graphics-renderer-feature-matrix.md); current defects belong
@@ -22,8 +19,8 @@ that state once in the renderer-neutral public object:
 - after `Begin`/`End`, the same object cannot begin again until `IsComplete` has been queried,
   directly or through `PixelCount`; XNA records the observation even when it returned `false`;
 - a new successful `Begin` makes the previous result unavailable and counts only the new run;
-- after `Dispose()` the object follows XNA rather than CNA's general use-after-dispose rule
-  (owner decision 2026-11-04): no member throws `ObjectDisposedException`. Dispose releases only
+- after `Dispose()` the object follows XNA rather than CNA's general use-after-dispose rule (owner
+  decision): no member throws `ObjectDisposedException`. Dispose releases only
   the native query; the state machine above survives. `IsComplete` answers `false` and still
   records the observation, `PixelCount` throws `InvalidOperationException`, and `Begin`/`End` first
   apply their ordinary state checks and otherwise throw `NullReferenceException`, as XNA's call
@@ -43,7 +40,7 @@ creating unused logical objects does not exhaust native query capacity.
 zero versus non-zero is meaningful. HEADLESS acceptance is a validation facility, not raster
 support.
 
-| Implementation family | Availability | Result contract | Current evidence and boundary |
+| Implementation family | Availability | Result contract | Evidence and boundary |
 |---|---|---|---|
 | **EasyGL** (`OPENGL33`, `OPENGLES3`, `WEBGL2`) | HiDef; live GL query | Exact with `GL_SAMPLES_PASSED`; visibility with `GL_ANY_SAMPLES_PASSED` | Visible/occluded pixel tests, precision test, lifecycle and overlap tests. Desktop GL is measured exact; GLES/WebGL cannot provide a coverage count. |
 | **WebGPU** | HiDef; real `WGPUQuerySet`, resolve and asynchronous readback | Adapter-dependent: measured exact on Vulkan, visibility-only on Metal; other native/browser backends are unmeasured | Visible/occluded pixel test plus lifecycle and overlap tests. Separate contiguous runs, including runs divided by `Clear`/render-pass boundaries, receive separate slots and are aggregated into the logical result. |
@@ -54,7 +51,7 @@ support.
 | **Headless** | Accepted deliberately | Fixed positive sentinel (`1`) | Resource lifetime, counters and trace are validated. It has no raster samples and makes no count or pixel-fidelity claim; the sentinel conservatively keeps game-logic visibility branches active. |
 | **Stub** | Unsupported | None | Reports no graphics capabilities and creates no query resource. |
 
-The availability column is still only a summary. Code that chooses an optional path must ask the
+The availability column is only a summary. Code that chooses an optional path must ask the
 live `GraphicsDevice::SupportsCapability(GraphicsCapability::OcclusionQuery)`. Construction is the
 matching enforcement point and will not hand out a public query backed by a null native factory.
 
@@ -91,9 +88,8 @@ only once per resolve, so later runs—including the run after a `Clear` opens a
 pass—receive additional slots. Readback aggregates those slots: exact adapters add sample counts,
 while a visibility-only adapter promises only the aggregate's zero/non-zero meaning. The lifecycle
 regression compares a full-viewport run with two half-viewport runs separated by `Clear`; exact
-adapters must match counts and imprecise adapters must remain positive. The former limitation that
-only the first render-pass segment was recorded is closed and must not be repeated in capability
-summaries.
+adapters must match counts and imprecise adapters must remain positive. Every render-pass segment
+is recorded, not only the first.
 
 ## Executable evidence
 
@@ -111,5 +107,4 @@ The maintained coverage is split by responsibility:
 
 Implementation sources are `modules/graphics/src/Xna/OcclusionQuery.cpp`,
 `modules/graphics/src/Internal/OcclusionQueryIntervals.cpp` and each renderer family's
-`CreateOcclusionQuery()`/native query class. Those sources and executable tests take precedence over
-closed task IDs and older campaign snapshots.
+`CreateOcclusionQuery()`/native query class.

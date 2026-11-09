@@ -1,8 +1,6 @@
 # `RasterizerState` support
 
-**Status:** reconciled with current source and focused regressions on 2026-10-31. This page is the
-current contract for the XNA `RasterizerState` object and its renderer consumption. The original
-Phase 38 task-by-task audit remains available in Git history.
+This page is the contract for the XNA `RasterizerState` object and its renderer consumption.
 
 ## Public object contract
 
@@ -35,17 +33,14 @@ common renderer seam is deliberately split:
 - `ApplyRasterizerState(...)` carries culling, fill, scissor enablement and both depth-bias values;
 - `ApplyRasterizerMultiSampleState(...)` carries `MultiSampleAntiAlias` separately.
 
-The second call is important: the property is no longer dropped by `GraphicsDevice`, but its
-default renderer implementation is a no-op. The per-family table below says which renderers
-actually consume it.
+The second call's default renderer implementation is a no-op; the per-family table below says which
+renderers actually consume it.
 
 ## Measured Microsoft XNA behavior
 
 ### Culling and winding
 
-Task 954 measured the following contract on Microsoft XNA 4.0 with two opposite-winding
-triangles. The complete investigation and screenshots remain in Git history at `be7707579` and
-`76a305efd`.
+Measured on Microsoft XNA 4.0 with two opposite-winding triangles (Task 954):
 
 | `CullMode` | Clockwise triangle | Counter-clockwise triangle |
 |---|---|---|
@@ -71,9 +66,9 @@ the MSAA rows in `graphics-renderer-feature-matrix.md` describe target storage. 
 independent per-sample rasterization on an already multisampled destination; setting it to `false`
 must not silently turn a four-sample target into a one-sample target.
 
-## Current renderer matrix
+## Renderer matrix
 
-The cells describe current implementation routes, not merely API acceptance. “No-op” means the
+The cells describe implementation routes, not merely API acceptance. “No-op” means the
 public value is retained and frozen but has no renderer effect.
 
 | Renderer family | Cull mode | Wireframe | Depth bias | Scissor | `MultiSampleAntiAlias` |
@@ -126,22 +121,21 @@ the same state with `GL_MULTISAMPLE`, selected from the device's runtime profile
 binary's default is a different renderer. OpenGL ES and WebGL have no equivalent switch and never
 receive that desktop-only capability.
 
-FNA3D forwards the property in `FNA3D_RasterizerState` (CNA-FIX-L20, 2026-11-02): its OpenGL
-driver toggles `GL_MULTISAMPLE`, and the shared contract (`Fna3d_MsaaFragmentContract`,
-registered for the OpenGL test driver) passes all 29 checks there; it failed exactly the six
-`false` checks before. D3D11's `MultisampleEnable` changes line rasterization, not triangles, and
-FNA3D's SDL_GPU-based drivers record the value without a native switch (they also lack a sample
-mask: 14 of 29 checks pass there). DirectX9 writes `D3DRS_MULTISAMPLEANTIALIAS` as XNA does; its
+FNA3D forwards the property in `FNA3D_RasterizerState` (CNA-FIX-L20): its OpenGL driver toggles
+`GL_MULTISAMPLE`, and the shared contract (`Fna3d_MsaaFragmentContract`, registered for the OpenGL
+test driver) passes there. D3D11's `MultisampleEnable` changes line rasterization, not triangles,
+and FNA3D's SDL_GPU-based drivers record the value without a native switch (they also lack a sample
+mask, so the shared contract only partly passes there). DirectX9 writes `D3DRS_MULTISAMPLEANTIALIAS` as XNA does; its
 pixel effect is unmeasured because DXVK reports the state unhandled.
 
-WebGPU and SDLGPU still inherit the no-op renderer method: neither API has a per-draw multisample
+WebGPU and SDLGPU inherit the no-op renderer method: neither API has a per-draw multisample
 rasterization switch. This is a real fidelity limitation, not proof that the XNA property is
 inert. It does not invalidate their separate MSAA-target support: those renderers may still
 allocate, rasterize and resolve multisampled targets while ignoring this per-state toggle.
 
-## Active evidence
+## Evidence
 
-The current contract is pinned at several layers:
+The contract is pinned at several layers:
 
 - `RasterizerStateTest`, `GraphicsDeviceDefaultStateTest` and the assigned/default-state alias
   tests cover defaults, preset names, all setters, device defaults and bound-state freezing;
@@ -159,6 +153,5 @@ The current contract is pinned at several layers:
   additionally register `EasyGL_RuntimeMsaaFragmentContract_*` for compiled nondefault native GL
   profiles and `EasyGL_RuntimeMultiSampleState_*` to inspect the native state and GL errors.
 
-The broader renderer capability overview remains
-`graphics-renderer-feature-matrix.md`; renderer-specific device/build restrictions remain in each
-renderer page and in `KNOWN_ISSUES.md`.
+The broader renderer capability overview is `graphics-renderer-feature-matrix.md`;
+renderer-specific device/build restrictions are in each renderer page and in `KNOWN_ISSUES.md`.

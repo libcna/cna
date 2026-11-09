@@ -1,11 +1,8 @@
 # Fuzzing compiled XNA effect bytecode
 
-Current harness/build scope checked on 2026-11-02 (CNA-FIX-L14). FX-051's original campaigns and
-defects are retained below as dated evidence; a later dependency pin or replay is not a new
-million-run pass.
-
-MTH-SAFE-003 extends the harness controls below. Its new GPU gates require an owner-run replay;
-the historical execution counts further down describe the previous harness.
+The compiled-effect fuzzer harness, the CI gates that run it, how to reproduce and minimize a
+finding, and what a run does and does not qualify. The original FX-051 campaign's acceptance bar
+and its limits are at the end of this page.
 
 ## Repeatable CPU sanitizer gate
 
@@ -21,7 +18,7 @@ This gate does **not** qualify GPU parsing/apply/draw/readback or dependency/dri
 No libFuzzer-guided run is configured and no exhaustive safety claim is made; the separately
 scheduled longer campaign is [below](#scheduled-long-campaign).
 
-The workflow is the owning CI recipe (`2183762f4`); it lists Ubuntu packages, sibling/submodule
+The workflow is the owning CI recipe; it lists Ubuntu packages, sibling/submodule
 setup, configure/build commands and artifact checks. To replay its bounded CPU selection in an
 existing SOFTWARE tree configured with `CNA_SOFTWARE_COMPILED_EFFECTS=ON`,
 `CNA_CNB_ZSTD=ON`, `CNA_ENABLE_DRACO=ON`, tests and `CNA_SANITIZE=address,undefined`
@@ -46,7 +43,7 @@ not bypassing `SafeInputProvenance`.
 
 ## Scheduled long campaign
 
-MTH-SAFE-007's longer campaign is
+The longer campaign (MTH-SAFE-007) is
 [robustness-long-fuzz.yml](../.github/workflows/robustness-long-fuzz.yml): weekly (Saturday 01:23
 UTC) and on dispatch, in the bounded gate's configuration (SOFTWARE with
 `CNA_SOFTWARE_COMPILED_EFFECTS=ON`, ASan+UBSan at O0, leak detection on) plus `CNA_BUILD_C_API=ON`.
@@ -93,9 +90,8 @@ stop a target. The job fails on any finding (exit 1) or any failed rule (exit 2)
 uploads everything for 30 days and the findings for 90.
 
 Budgets (`tools/fuzz/campaign_targets.json`) were chosen from a 180-second measurement of each
-target in `build-asan` (GCC 14, Debug, ASan+UBSan O0) on 2026-11-03, four targets at once on a
-shared 16-core host at load 16-18, so a dedicated runner may be faster. Each run's summary records
-its own attempts/s.
+target in an ASan+UBSan O0 Debug build (GCC 14), four targets at once on a shared 16-core host at
+load 16-18, so a dedicated runner may be faster. Each run's summary records its own attempts/s.
 
 | Target | Attempts/s measured | Peak RSS | Budget | Attempts per weekly run |
 |---|---:|---:|---:|---:|
@@ -103,46 +99,21 @@ its own attempts/s.
 | `xna-intermediate` | 1,061 | 550 MB | 45 min | about 2.9e6 |
 | `xna-model` | 1,640 | 434 MB | 30 min | about 3e6 |
 | `c-api-string-view` | 83,263 | 550 MB | 10 min | about 5e7 |
-| `xnb-reader` | 319 (measured alone, 2026-11-04) | 1.2 GB | 30 min | about 5.7e5 |
+| `xnb-reader` | 319 (measured alone) | 1.2 GB | 30 min | about 5.7e5 |
 
 With two targets at a time the plan is 94 minutes; `budget_scale` scales all five, and the plan is
 refused before the build if it would exceed 210 minutes. The RSS limits (4 GiB, 2 GiB for the C
 API target) and per-candidate timeouts (120 s for effects, 60 s/30 s otherwise) are generous
 multiples of what was measured.
 
-The first local runs on 2026-11-03 (`build-asan`, LeakSanitizer on; 21 minutes per target, four at
-once; evidence in `cnaplan/evidence/safe007/long-campaign/`) found, and the repairs pin:
-
-- `EffectParameter`'s Int32 view of a Single cell converted NaN and out-of-range floats in C++
-  (UBSan float-cast-overflow); they now answer 0x80000000
-  (`EffectTest.CompiledInt32ConversionOfAnUnrepresentableSingleIsTheIndefiniteInteger`);
-- the compiled-effect state translation loaded file-supplied render- and sampler-state values
-  through their MojoShader enum types (UBSan invalid enum load); they are now read as storage and
-  refused when unknown (`MojoShaderEffectStateTranslation.*`);
-- the binary FBX reader followed a record end offset that pointed behind the record, re-reading
-  it up to the node ceiling (106 s, 2.4 GB from 23 KB); such offsets are now refused
-  (`XnaModelReaderHardening.ARecordEndIsNeverBehindWhatTheRecordAlreadyRead`);
-- the intermediate harness counted two refusals XNA itself makes as findings (a null root's
-  `ArgumentNullException` from Serialize, `NullReferenceException` for `Null="true"` on a value
-  type; both measured in `tests/reference/xna40/intermediate/manifest.json`).
-
-Two were open defects when this page was written (check `KNOWN_ISSUES.md` for their current state), and the weekly job fails while they are: ill-formed
-UTF-8 accepted by sharp-runtime's `XmlReader` and refused by its writer (`xna-intermediate`), and
-MojoShader leaking a compiled shader, string or sampler name when two small-object records name
-the same object (`compiled-effect`, LeakSanitizer).
-
-`xnb-reader` (TQ-018, first runs 2026-11-04 in `build-asan`: 81 + 180 + 900 seconds, LeakSanitizer
-on) reached the four defects found by reading the reader -- an LZX match running past the 64 KiB
-window, a negative frame start, code lengths outside 0..16 and an external-reference cycle
-(`LzxDecoderMalformedStreamTest.*`, `ContentExternalReferenceCycleTest.*`) -- and found one more,
-a version-5 Texture2D naming CNA's `ColorBgraEXT` and reaching the renderer
-(`Texture2DContentTypeReaderTest.CnaExtensionFormatInAVersion5ContainerIsRefusedLikeAnyNonXnaFormat`).
-It also reached three defects outside the content module. Two are fixed: a signed overflow of the
-MS-ADPCM step (`MsAdpcmDecoderTest.*`) and an undefined float-to-int conversion of an unbounded
-cycle count in `Curve::GetNumberOfCycle` (`CurveTest.CycleCountOutsideIntRangeFollowsXnaConvI4`).
-The third is in the dependency: MojoShader's `readlargeobjects` leaks a compiled shader the same
-way `readsmallobjects` does ([FNA3D-6](fna3d-dependency-defects.md), sibling of FNA3D-2), so this
-target fails with leak detection on until the fork is repaired, like `compiled-effect`.
+Each finding of the first campaigns is fixed and pinned by a named regression beside the code it
+fixed (for example `XnaModelReaderHardening.*`, `MojoShaderEffectStateTranslation.*`,
+`LzxDecoderMalformedStreamTest.*`, `IntermediateUtf8Tests`). Ill-formed UTF-8 that sharp-runtime's
+`XmlReader` accepted is refused on read (GAP-22; minimized seed in `tests/fuzz/xna-intermediate/`).
+MojoShader's duplicate small- and large-object leaks are repaired at the current fork pin
+(FNA3D-2, FNA3D-6); their LeakSanitizer replay is still pending
+([`fna3d-dependency-defects.md`](fna3d-dependency-defects.md#pending-qualification)). Any current
+open finding is listed in `KNOWN_ISSUES.md`; the job fails while one reproduces.
 
 Run it locally in an existing sanitizer tree, window-free (`--plan` prints the schedule only):
 
@@ -216,12 +187,9 @@ selected renderer or unavailable device reports `not qualified` explicitly (exit
 oversized inputs are counted as skipped without constructing Effect. Native crashes, sanitizer
 failures and externally detected timeout/RSS failures remain findings.
 
-The 2026-11-02 extension found a defect on its first replay: a pass that binds no shader, applied
-while nothing else had bound one (`crash-corpus/clone-effect-null-parse-data.fxb`), left FNA3D
-without a program, and the draw dereferenced it -- SIGSEGV on the OpenGL driver, an SDL assertion
-in `MOJOSHADER_sdlGetShaders` on SDL_GPU. CNA's FNA3D renderer now refuses such a draw with XNA's
-`CannotDrawNoShader` `InvalidOperationException` (`Fna3dDraw.cpp`), pinned by
-`Fna3dCompiledEffectTest.CrashCorpusPassesDrawOrRefuseWithoutCrashing`.
+A pass that binds no shader, drawn while nothing else has bound one
+(`crash-corpus/clone-effect-null-parse-data.fxb`), is refused with XNA's `CannotDrawNoShader`
+`InvalidOperationException` (CNA-FIX-L14, `Fna3dDraw.cpp`).
 
 ## Standalone replay
 
@@ -261,18 +229,17 @@ tools/platform/run_gpu_tests_private.sh --exec \
 
 The directory reader takes regular files, not only .fxb; text/source files exercise rejection.
 For a precise seed inventory, copy selected binaries to a scratch corpus and record its hashes.
-On 2026-11-01 the effects directory contains twelve .fxb files: six redistributed stock effects
-plus CNA-specific effects. The crash directory contains fourteen .fxb artifacts, not one artifact
-per historical crash class. Preserve its README/provenance.
+The effects directory holds six redistributed stock effects plus CNA-specific effects. The crash
+directory holds one artifact per retained input, not one per historical crash class; its
+[README](../tests/fixtures/compiled-effects/crash-corpus/README.md) records the defect each pins.
 
 Repeat driver-specific work with FNA3D_FORCE_DRIVER=SDLGPU. This is FNA3D's SDL_GPU driver,
 distinct from selecting CNA's SDLGPU renderer. A single/default renderer build can use the same
 recipe without the multi-tree runtime selector.
 
-For MTH-SAFE-003, use the assigned existing `cmake-build-fna3d` tree. Build only the harness and
-support target with `CCACHE_DIR=/rv/cnaccache CCACHE_BASEDIR=/rv` and `--parallel 4`. Run the CLI
-gate on both drivers through the private compositor (the CTest registration fixes OpenGL, so use
-the script directly for SDL_GPU):
+In an existing FNA3D tree (`cmake-build-fna3d` below), build only the harness and its support
+target. Run the CLI gate on both drivers through the private compositor (the CTest registration
+fixes OpenGL, so use the script directly for SDL_GPU):
 
 ```sh
 tools/platform/run_gpu_tests_private.sh --exec \
@@ -292,16 +259,17 @@ state reset. The poison/refusal/valid sequence requires three resets and the las
 counts and pixels equal its isolated run. The Vector4 setter leaves Tint=(1,1,0,1), so P0 must
 produce magenta for all three bindings and StatePass/P1 must produce red, green, red. The
 15-pixel sequence (magenta × 3, red/green/red, red/green/red, magenta × 3, red/green/red) repeats
-for source, clone, and clone after source destruction. These are assertions awaiting GPU execution,
-not measured results. The unsupported STUB selector must fail with `not qualified` and no summary.
+for source, clone, and clone after source destruction; `CompiledEffectFuzzerCliTests` asserts these
+counts and pixels. The unsupported STUB selector must fail with `not qualified` and no summary.
 A single-renderer build checks an unavailable selector; checking an instantiated renderer without
 CompiledEffects requires the existing multi-renderer tree with STUB selectable.
 
 For a fixed file list with known operation counts, generate the three fixtures and a refusal into
-an assigned scratch directory, then replay exactly these files twice per driver:
+a scratch directory, then replay exactly these four files, in this order, twice per driver
+(`tools/safe_inputs_manifest.py` pins their generated bytes as `FX_REPLAY`):
 
 ```sh
-# Set fx_replay_dir to an existing, assigned scratch directory.
+# Set fx_replay_dir to an existing scratch directory.
 cmake-build-fna3d/cna_compiled_effect_fuzzer_support_tests --write-poison-fixture "$fx_replay_dir/a-poison.fxb"
 printf 'refused effect' > "$fx_replay_dir/b-refused.bin"
 cmake-build-fna3d/cna_compiled_effect_fuzzer_support_tests --write-sampling-fixture "$fx_replay_dir/c-sampling.fxb"
@@ -352,13 +320,14 @@ cmake -S . -B cmake-build-fx-fuzz \
   -DCMAKE_CXX_FLAGS="-fsanitize=fuzzer-no-link,address -fno-omit-frame-pointer" \
   -DCMAKE_EXE_LINKER_FLAGS="-fsanitize=address"
 cmake --build cmake-build-fx-fuzz --target cna_compiled_effect_fuzzer --parallel 4
-mkdir -p /tmp/cna-fx-seeds /tmp/cna-fx-findings
-cp modules/renderers/fna3d/effects/*.fxb /tmp/cna-fx-seeds/
+# fx_fuzz_dir: a scratch directory for the seed copy and the findings.
+mkdir -p "$fx_fuzz_dir/seeds" "$fx_fuzz_dir/findings"
+cp modules/renderers/fna3d/effects/*.fxb "$fx_fuzz_dir/seeds/"
 tools/platform/run_gpu_tests_private.sh --exec \
   env CNA_GRAPHICS_RENDERER=FNA3D FNA3D_FORCE_DRIVER=OpenGL SDL_ASSERT=abort \
   cmake-build-fx-fuzz/cna_compiled_effect_fuzzer \
   -detect_leaks=0 -max_len=1048576 -rss_limit_mb=4096 -timeout=30 \
-  -max_total_time=2400 -artifact_prefix=/tmp/cna-fx-findings/ /tmp/cna-fx-seeds
+  -max_total_time=2400 -artifact_prefix="$fx_fuzz_dir/findings/" "$fx_fuzz_dir/seeds"
 ```
 
 CNA_FX_FUZZER_ENTRY_POINT removes main; Clang links libFuzzer for this target. Other compatible
@@ -382,67 +351,21 @@ iteration count and seed (decimal count, decimal or `0x` seed) reproduce the sam
 zero, signed, partial or out-of-range numbers are refused with exit 2. This mode is not
 coverage-guided and does not automatically retain each crashing candidate.
 
-On 2026-11-02 (cmake-build-multi, FNA3D, `SDL_ASSERT=abort`) the replay of the twelve stock/CNA
-effects plus the crash corpus and a 500-iteration campaign over the effects (seed `0x4c3134`) both
-completed on the OpenGL and the SDL_GPU driver: 34 inputs, 188,951 operations, 129 applies and 42
-draws/readbacks per replay; 500 candidates, 314,636 operations and 63 draws per campaign.
-
 Fna3dCompiledEffectTests.cpp separately exercises synthetic state-only, shader-bearing and stock
 mutations, with failure traces and stricter bad_alloc handling. Its fixed counts/timing are source/
 build-specific rather than a general per-commit performance guarantee. Current parser fixes are
 commits in the pinned forks, including the effect-parser-robustness change, not a loose patch
 assumed to apply to every upstream revision.
 
-## Historical defect record (2026-08-14/15)
+## Defects the original campaign fixed
 
-All but one were in the pinned MojoShader, fixed by the `effect-parser-robustness` commit on CNA's
-fork libcna/mojoshader (then `cmake/patches/mojoshader-6333f74-effect-parser-robustness.patch`); the
-last one is CNA's own and is
-fixed in `Fna3dCompiledEffect.cpp`. Each fix was confirmed by the campaign running measurably
-deeper afterwards: on the GLSL profile the first crash moved from iteration 0 to 100, 300, 500,
-700, 1,200, 3,700, 4,000, 6,400, 8,700 and then away entirely.
-
-| Site | Defect |
-|---|---|
-| `mojoshader_effects.c` `readlargeobjects` | `MOJOSHADER_parsePreshader`'s NULL result dereferenced on the next line -- upstream's own `// !!! FIXME: check for errors.` |
-| `mojoshader_profile_spirv.c` `spv_add_attrib_fixup` | `assert(r != NULL)` on a fixup with no matching attribute register; a release build would dereference NULL |
-| `mojoshader_effects.c` `copy_parameter_data` | Copies sized by the shader constant table's register count rather than by the parameter storage that was actually parsed |
-| `mojoshader.c` `parse_preshader` | Instruction operand count taken from tokens with no bound against the fixed four-entry operand array |
-| `mojoshader.c` `parse_preshader` | `assert(0)` on an unrecognised operand type; a release build would carry on with an unassigned type |
-| `mojoshader.c` `parse_preshader` | Instruction count used to allocate and zero a buffer *before* the block-size check that bounds it |
-| `mojoshader.c` `parse_preshader` | `assert()` on a constant-table symbol in the wrong register set, and an unbounded array-register count allocated before validation -- upstream's other FIXME |
-| `mojoshader_effects.c` `MOJOSHADER_effectCommitChanges` | Shader-array selector used as an unchecked index into a parameter's values and then into the object table, and register copies unbounded by the preshader's register file |
-| `mojoshader_effects.c` `run_preshader` | Every literal, input, output and temp index in the preshader interpreter guarded only by asserts; the output register span was not even reported to it, so a one-float selector output could be written past |
-| `mojoshader_effects.c` `copy_parameter_data` | Destination register index never bounded against the register file it writes into, and the int/bool files written through NULL when a preshader's float-only file was the target |
-| `mojoshader_effects.c` `MOJOSHADER_effectBeginPass` | A pass's shader object index taken from parsed content with no range check, and no check that the object is a shader at all -- `MOJOSHADER_effectObject` is a union, so a string or sampler object read as a shader yields garbage pointers |
-| `mojoshader_effects.c` shader-array selector | The selector a preshader computes was converted to an integer before being range-checked. Converting an out-of-range float is undefined and yields `INT_MIN` on x86, which then indexed far below the parameter's values. It is now range-checked as a float, which also rejects NaN |
-| `mojoshader_effects.c` `run_preshader`, preshader register copy | The bounds added above were written as `index + span > count`, which wraps for an index near `UINT_MAX` and passes. All of them now subtract instead |
-| `mojoshader_profile_spirv.c` `spv_check_read_reg_id` | `assert()` on a sampler or texture register in a shader model that cannot declare one |
-| `mojoshader_effects.c` `readstring` | Took a base pointer and an offset but no length, so the file's own length prefix chose how many bytes to copy and from where -- upstream's `// !!! FIXME: sanity checks!` and `// !!! FIXME: verify this doesn't go past EOF looking for a null.` The payload length is now threaded through the parser, and the copy is NUL-terminated, which it never was |
-| `mojoshader_effects.c` `MOJOSHADER_compileEffect` | Parameter, technique and object counts read from the file, used both to size allocations and to bound the loops that fill them, with no bound and no overflow check on the size multiplication |
-| `mojoshader_effects.c` `MOJOSHADER_cloneEffect` | Its local `COPY_STRING` dereferenced without a NULL check, unlike the file's other one -- and `readstring` returns NULL for a zero-length string, which is ordinary content rather than hostile content |
-| `mojoshader.c` `parse_preshader` | The array-register bound added earlier was written as `(count * 2) + 5 > tokcount`, which wraps for a 32-bit count from the file and let an absurd one through into an allocation |
-| `mojoshader_profile_spirv.c` `spv_loadreg` | Dereferenced the result of `reglist_find` for a sampler register the shader never declared, and asserted rather than failed when a register had no declaration id |
-| `mojoshader_profile_spirv.c` `spv_swizzle` | Asserted on a zero type id, on a write mask outside the four legal values, and on a type it could not classify -- all three come straight from a destination token |
-| `mojoshader_profile_spirv.c` `emit_SPIRV_dotproduct` | Asserted that both operands share a type; either can be a value whose load was already refused |
-| `mojoshader_profile_spirv.c` `spv_output_color_location`, `spv_output_attrib_location` | A colour-output register number, a vertex attribute usage and its register number all index fixed sixteen-entry tables with no bound, so an out-of-range one wrote past the patch table into whatever followed it |
-| `mojoshader_effects.c` `MOJOSHADER_cloneEffect` | Dereferenced a shader's parse data without checking the shader compiled at all, and indexed its symbol and parameter tables unbounded |
-| `mojoshader_effects.c` sampler binding | A shader's sampler symbol was matched to an effect parameter by name alone, and its value storage then reinterpreted as an array of sampler states. A parameter that is not a sampler makes that count and that pointer disagree by a factor of the struct size |
-| `mojoshader_profile_common.c` output stack, `mojoshader_profile_spirv.c` `emit_SPIRV_attribute` | The emitters' output-section stack was guarded by asserts, and how often an emitter pushes depends on the shader it translates; and an attribute declared for a register the shader never used dereferenced a null register-list entry |
-| `mojoshader.c` / `mojoshader_effects.c` preshader temps | The temp-register count is grown from operand indices and `run_preshader` `alloca()`s one double per temp, so an invented index blew the process stack. Bounded structurally at parse time, with a ceiling in the interpreter as a second line of defence. Found after 536,926 SDLGPU executions |
-| `mojoshader_effects.c` struct member tables | `readvalue` and `copysymboltypeinfo` both allocated member tables without zeroing them, and neither assigns every field: the parser leaves the nested-struct fields alone (upstream's FIXME) and the copy assigns nothing when a member name is NULL. A consumer then read a garbage name pointer and a garbage nested member count -- the first finding that surfaced inside CNA's own frame, and one CNA could not have defended against |
-| `mojoshader_profile_spirv.c` `emit_SPIRV_sampler` | Dereferenced the register list's result for a sampler stage the shader never declared, and indexed the per-stage extras array with an unbounded stage. Found after 400,319 SDLGPU executions |
-| `mojoshader_profile_spirv.c` operand-type asserts | `emit_SPIRV_MAD`, `emit_SPIRV_LRP`, `emit_SPIRV_MOVA`, the matrix-instruction helper and the exp/log helper asserted that their operands share a type, or that a destination shape is one of the legal ones. Both come from parsed bytecode, and a load that was already refused returns a zeroed type |
-| `mojoshader_profile_spirv.c` branch/loop stacks | `spv_branch_push/get/pop` and `spv_loop_push/get/pop` were guarded only by asserts, so a shader closing a branch or loop it never opened underflowed the stack and deep nesting overflowed it. Found by the SDLGPU campaign after 56,261 executions |
-| `mojoshader_effects.c` object tables | Three related holes that all end in the shader parser running off the payload: an object block's length was never bounded against what remains, the XNA4 wrapper skip *added* to the remaining-length counter instead of subtracting (and every real XNA4-wrapped effect takes that branch), and a zero-length shader program told `MOJOSHADER_parse` the size was unknown, which sets its token count to 4 billion and scans for an end token that is not there. Found after 395,357 coverage-guided executions |
-| `mojoshader.c` `parse_ctab_typeinfo` | A struct's member-table offset was read from the constant table and never bounded, so a structure in untrusted bytecode could point its member list anywhere. Found after 275,896 coverage-guided executions |
-| `mojoshader_common.c` `MOJOSHADER_printFloat` | Advances its cursor past the buffer on purpose, so the return value stays the length the caller needed -- but then kept formatting *through* that cursor, writing past the end. Each step now asks `snprintf` for the needed length instead of writing once the cursor is out of bounds |
-| `mojoshader.c` `parse_preshader` | How many preshaders a shader declares is content, and it was guarded by an assert -- upstream's own `// !!! FIXME: can you have more than one?` is still unanswered. A second declaration also overwrote the first and leaked it. Found after 8,192 SDLGPU executions |
-| `Fna3dCompiledEffect.cpp` `BuildSamplerMap` | **The one finding whose root cause is CNA's own.** Same defect as the row below, in CNA's code and with every fact needed to avoid it in hand: the sampler-texture map selected parameters by sampler *type* and then walked `valuesSS`, so a parameter naming a sampler type in a non-object class had its much smaller value buffer read as an array of sampler states. Found after 1,627,248 SDLGPU executions -- the deepest finding so far, and past the point where the driver had already run a million clean |
-| `mojoshader_effects.c` `freevalue` | A value's storage layout is chosen by its class first and its type second: only an OBJECT of a sampler type is allocated as an array of sampler states. `readvalue` and `copyvalue` both ask that two-part question; `freevalue` asked about the type alone, so a parameter naming a sampler type in some other class was freed as an array of much larger structures -- `free()` on whatever the heap held past the end. The two-part test is now one shared predicate, used by `freevalue`, by both shader-sampler binding sites and by the object table's sampler-state lookup, which also gained the range checks its content-supplied indices never had. Found after 660,870 SDLGPU executions |
-
-The one pre-existing fix in the same patch -- a missing shader-to-effect parameter match, which
-asserted and then dereferenced -- was found earlier by the deterministic in-build corpus.
+The FX-051 campaign's parser and translator defects are fixed in the fork's
+`effect-parser-robustness` commit on libcna/mojoshader's `cna` branch
+(`git log --grep=effect-parser-robustness`), plus one CNA-side fix in `Fna3dCompiledEffect.cpp`
+(`BuildSamplerMap`). The artifacts that still pin them, with the defect each one reproduces, are
+in [`tests/fixtures/compiled-effects/crash-corpus/README.md`](../tests/fixtures/compiled-effects/crash-corpus/README.md);
+`Fna3dCompiledEffectTest.CrashCorpusIsRejectedWithoutCrashing` and
+`CrashCorpusPassesDrawOrRefuseWithoutCrashing` replay them on every build.
 
 ## Historical acceptance bar and present limits
 
@@ -451,17 +374,14 @@ recorded seeds under ASan with asserts fatal and no new crash/timeout/allocation
 A finding ends that window; fixing it and restarting is distinct from reporting the interrupted
 window as passed.
 
-The retained 2026-08-15 record at 17bab8ee2 reports 3,079,834 OpenGL/GLSL and 2,669,555
-SDLGPU/SPIR-V executions without a new artifact after forty-one crash classes were fixed.
-Its separate 340-case sanitizer record attributed remaining reports to the then-pinned dependencies.
-Those are historical observations, not evidence that current CNA/dependencies are universally
-clean under ASan, UBSan or LSan.
+The retained record (CNA `17bab8ee2`) reports about 3.08 million OpenGL/GLSL and 2.67 million
+SDLGPU/SPIR-V executions without a new artifact after forty-one crash classes were fixed, and a
+separate sanitizer record attributed the remaining reports to the then-pinned dependencies. Those
+runs used their recorded revision and seeds; they are not evidence that current CNA or current
+dependency pins are clean under ASan, UBSan or LSan, and current parser hardening plus finite
+replay do not prove safe behavior for all inputs.
 
 Current pins are selected by cmake/ThirdPartyFNA3D.cmake and checked by the source-pin gate.
 Parser hardening, bounded reflection and retained artifacts reduce known failure paths; finite
 campaigns do not prove safe behavior for all bytecode, native drivers or future pins. Dependency
 findings remain reachable through the public API and must be tracked with their actual revision.
-
-The 2026-11-01 audit builds the harness and runs focused regressions/replay as recorded in
-[compiled effects](fx-compiled-effects.md). It does not regenerate the historical campaign,
-claim exhaustive public-API fuzz coverage or change parser/runtime implementation.

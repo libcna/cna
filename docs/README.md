@@ -78,23 +78,26 @@ their stated metadata/source checks, rather than proving complete behavioral par
 - [webgl2-renderer.md](webgl2-renderer.md) — Browser WebGL 2 context, shader dialect, validation and
   qualification boundary.
 - [sdl-gpu-renderer.md](sdl-gpu-renderer.md) — SDLGPU build options, SDL driver selection,
-  presentation/resource rules and bounded parity evidence.
+  presentation/resource rules, bounded parity evidence and the stock-effect fog-alpha contract
+  (CNA-FIX-D01).
 - [webgpu-renderer.md](webgpu-renderer.md) — Supported native/browser WebGPU path, pinned
   dependency, parity evidence and important limitations.
 - [directx9-renderer.md](directx9-renderer.md) — Direct3D 9 implementation, capability and platform
   contract.
-- [d3d9-divergence-report.md](d3d9-divergence-report.md) — Retained D3D9 divergence evidence and
-  current dispositions.
+- [d3d9-divergence-report.md](d3d9-divergence-report.md) — D3D9 oracle measurement against real XNA 4.0: method, corpus coverage,
+  unmeasured areas and the six project-wide divergence statuses.
 - [fna3d-renderer.md](fna3d-renderer.md) — Experimental FNA3D family, pinned dependencies, driver
   selection and compiled-effect route.
+- [fna3d-dependency-defects.md](fna3d-dependency-defects.md) — Open FNA3D/MojoShader fork defects
+  (FNA3D-8, FNA3D-3), pending qualification and the fixed fork repairs.
 - [software-renderer.md](software-renderer.md) — Experimental CPU rasterizer, presentation paths,
   resource limits and effect execution boundaries.
 - [headless-renderer.md](headless-renderer.md) — HEADLESS rendering contract, simulated resources
   and test boundaries.
 - [stub-renderer.md](stub-renderer.md) — STUB no-op renderer, accepted surface and intentional
   limitations.
-- [removed-renderers.md](removed-renderers.md) — Retired identities and the supported migration
-  boundary.
+- [removed-renderers.md](removed-renderers.md) — Retired identities, reserved C ABI values, removal commits, reasons
+  and dependency coordinates.
 
 ## Graphics APIs and effects
 
@@ -144,8 +147,8 @@ their stated metadata/source checks, rather than proving complete behavioral par
   translation, reflection, state and renderer execution.
 - [sdlgpu-shader-effect-layout.md](sdlgpu-shader-effect-layout.md) — SDLGPU source/bytecode resource
   bindings and ShaderEffect layout contract.
-- [fx-bytecode-fuzzing.md](fx-bytecode-fuzzing.md) — Compiled-effect byte-boundary fuzzing, corpus
-  and reproduction scope.
+- [fx-bytecode-fuzzing.md](fx-bytecode-fuzzing.md) — Compiled-effect fuzzing gates, the scheduled long campaign,
+  reproduction recipes and the FX-051 campaign's limits.
 - [cnaext-engine-layer.md](cnaext-engine-layer.md) — Standalone graphics extensions and the
   retirement of the former modern engine layer.
 - [ascii-post-process-effect.md](ascii-post-process-effect.md) — Renderer-neutral ASCII/glyph

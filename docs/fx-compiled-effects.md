@@ -1,15 +1,14 @@
 # Compiled XNA effects in CNA
 
-Current source/test contract checked on 2026-11-01. This is the porter-facing guide to
-`Effect(GraphicsDevice&, byte[])` — the API an XNA/FNA game uses
+This is the porter-facing guide to `Effect(GraphicsDevice&, byte[])` — the API an XNA/FNA game uses
 to load a compiled effect it shipped as content. It covers what the format boundary is, how to
 load, inspect, apply and clone an effect, which renderer supports it, and how to read every error
 the path can produce.
 
 The architecture is one renderer-neutral `ICompiledEffectRuntime` per effect: the graphics layer
 owns the reflected XNA object graph and every instance's mutable values, and the renderer owns the
-native shaders, pass application and device-bound resources. The tasks that built it
-(`FX-001`..`FX-147`, 2026-08/10) are in Git history; source comments cite them as "FX-nnn".
+native shaders, pass application and device-bound resources. Source comments cite the tasks that
+built it as "FX-nnn" (`docs/task-id-index.md`).
 For the difference from the CNAEXT source-based shader API, see
 [`shader-effect-vs-fx-bytecode.md`](shader-effect-vs-fx-bytecode.md). For fuzzing, see
 [`fx-bytecode-fuzzing.md`](fx-bytecode-fuzzing.md).
@@ -28,11 +27,9 @@ The binary is untrusted input. It is bounded at 64 MiB, its reflected object gra
 arithmetic-checked. Header/limit/unsupported-format checks are distinct; native parser/shader
 failures can still use renderer-specific runtime diagnostics.
 
-**Trust boundary.** The retained FX-051 record reports more than three million OpenGL and
-2.6 million SDL_GPU driver executions under ASan after forty-one historical crash classes were
-fixed. Those runs used their recorded revision/seeds; current parser hardening and finite replay
-do not prove safe behavior for all inputs or a clean current sanitizer campaign.
-[Fuzzing scope](fx-bytecode-fuzzing.md) records the entry point's actual coverage and blind spots.
+**Trust boundary.** Parser hardening and finite fuzz campaigns do not prove safe behavior for all
+inputs. [Fuzzing scope](fx-bytecode-fuzzing.md) records the entry point's actual coverage, its
+blind spots and what the historical FX-051 campaign does and does not establish.
 
 **Standing decisions, not gaps.** CNA embeds no HLSL compiler, reads no MonoGame MGFX, and never
 translates a compiled effect into a `ShaderEffect`. A `.fx` source is compiled by the XNA/FNA
@@ -196,9 +193,8 @@ half is that the state actually filters the sampled texture. The relevant state 
 
 The common contracts distinguish Filter, AddressU/V/W, anisotropy, MaxMipLevel and
 MipMapLevelOfDetailBias from the native route that implements them. See
-[sampler state support](sampler-state-support.md) for current profile/driver boundaries; the old
-four-column table omitted later WebGPU/CPU/D3D9 work and incorrectly called SDLGPU AddressW
-unobservable after the volume path existed.
+[sampler state support](sampler-state-support.md) (§6b) for the per-renderer and per-profile
+boundaries.
 
 The supported sampling paths are checked by drawing, not only by reading CNA's state objects back:
 `RunCompiledEffectSamplerPixelContract` binds a real texture, applies the pass, draws, reads the
@@ -228,11 +224,11 @@ A slot no pass has assigned keeps whatever the game selected. The compiled-effec
 `GraphicsDevice.SamplerStates[slot]` for those, so `SpriteBatch.Begin`'s own sampler state, for
 example, is not overwritten with defaults by an effect that never mentions slot 0.
 
-The reverse also holds, and used to not: a slot a compiled Effect *did* assign must not keep that
-assignment once a stock draw takes over. A renderer that mutates one long-lived sampler object per
-slot has to re-establish every property on each application, or an effect's `MaxMipLevel` outlives
-it into the next `SpriteBatch` flush and clamps a texture the game never asked to clamp. Both EasyGL
-and FNA3D had that leak; `RunCompiledEffectStockDrawIsolationContract` pins the fix (FX-092).
+The reverse also holds: a slot a compiled Effect *did* assign must not keep that assignment once a
+stock draw takes over. A renderer that mutates one long-lived sampler object per slot (EasyGL,
+FNA3D) re-establishes every property on each application, or an effect's `MaxMipLevel` would
+outlive it into the next `SpriteBatch` flush; `RunCompiledEffectStockDrawIsolationContract` pins
+this (FX-092).
 
 ## 8. Cloning
 
@@ -268,7 +264,7 @@ SOFTWARE has a bounded instruction executor with named unsupported-opcode/shape 
 |---|---|---|---|
 | `FNA3D` | **true** | always on | MojoShader runtime with native-driver-specific execution; focused shared contracts |
 | `SDLGPU` | **true** | `CNA_SDLGPU_COMPILED_EFFECTS` (off by default) | MojoShader SDL_GPU adapter and queued compiled draw route |
-| EasyGL family (`OPENGLES3`, `OPENGL33`, `WEBGL2`) | **true** | `CNA_EASYGL_COMPILED_EFFECTS` (default ON for OPENGL33 without ES/WebGL identities; otherwise OFF) | MojoShader OpenGL adapter with instance-owned GL profile selection |
+| EasyGL family (`OPENGLES3`, `OPENGL33`, `WEBGL2`) | **true** | `CNA_EASYGL_COMPILED_EFFECTS` (default below) | MojoShader OpenGL adapter with instance-owned GL profile selection |
 | `WEBGPU` | **true** | `CNA_WEBGPU_COMPILED_EFFECTS` (off by default) | CNA's MojoShader SPIR-V binding, translated to WGSL for the browser (WEBGPU-167, WEBGPU-203/204) |
 | `SOFTWARE` | **true** | `CNA_SOFTWARE_COMPILED_EFFECTS` (off by default) | Bounded CPU executor with named instruction/shape limits (SOFTWARE-162/165) |
 | `DIRECTX9` | **true** | `CNA_DIRECTX9_COMPILED_EFFECTS` (off by default) | Native D3D9 shader tokens from the effect; MojoShader only for the container and reflection (FX-070) |
@@ -280,9 +276,17 @@ does not accept `MOJOSHADER_glBestProfile` choosing `glspirv` on a newer desktop
 adapter assumes a complete vertex/pixel pair, while an XNA Effect pass may validly assign only one
 stage and inherit the other at draw time.
 
-The opt-in options control the additional parser/translation/executor dependency and code. With the option off the renderer reports `CompiledEffects == false` and refuses a
-compiled `Effect` exactly like any unsupported backend -- the capability never claims more than the
-build actually contains.
+**EasyGL default.** `CNA_EASYGL_COMPILED_EFFECTS` is one shared cache option and compile
+definition for all three EasyGL identities. A fresh selection containing `OPENGL33` and neither
+`OPENGLES3` nor `WEBGL2` defaults ON; any selection with `OPENGLES3` or `WEBGL2` (including
+`OPENGL33;OPENGLES3`) defaults OFF, because one flag cannot enable just one profile in a binary.
+Other renderer identities in the set do not change it, an existing cache value is preserved, and
+an explicit ON/OFF always wins (`cmake/RendererSelection.cmake`, checked by
+`CnaCompiledEffectsDefaults`). The other opt-in families default OFF.
+
+The options control the additional parser/translation/executor dependency and code. With the
+option off the renderer reports `CompiledEffects == false` and refuses a compiled `Effect` exactly
+like any unsupported backend -- the capability never claims more than the build actually contains.
 
 An unsupported renderer refuses construction with a `NotSupportedException` naming the capability.
 It never accepts the bytecode and quietly draws with a stock shader — a silent fallback would make
@@ -299,94 +303,63 @@ vertex-stage textures and sampler descriptions when a draw is issued, including 
 `EffectPass.Apply()`, and retains the sampled resources through deferred submission. Single and
 Vector4 textures have pixel regression coverage. WebGPU also captures vertex bindings and uses
 non-filtering layouts for point-sampled float32 textures; its native and WGSL routes share the
-same pixel oracle. The museum's `fx-compiled` room confirms both on RADV (2026-10-25); the exact
-repair evidence is in Git history (`git show 9d49828f4:CNA_MUSEUM_REPAIR_HANDOFF.md`).
-A **compiled-Effect-specific** limitation is one
-the renderer supports elsewhere but this draw route cannot preserve; it is a debt of the
+same pixel oracle. A **compiled-Effect-specific** limitation is one the renderer supports
+elsewhere but this draw route cannot preserve; it is a debt of the
 compiled-effect work, and its refusal must say so rather than imply the renderer cannot do it.
 Neither kind is ever a silent fallback, a substituted texture, an ignored state or an ignored pass.
-§11 lists the refusals a supported backend still makes. Cube and volume sampling are no longer
-among them: FNA3D, SDLGPU and WebGPU pass the shared cube/volume contract, and EasyGL's GLSL ES
-profiles accept a volume sampler since FX-143.
+§11 lists the refusals a supported backend still makes. Cube and volume sampling are not among
+them: FNA3D, SDLGPU and WebGPU pass the shared cube/volume contract, and EasyGL's GLSL ES profiles
+accept a volume sampler (FX-143).
 
-Running EasyGL's Shader Model 1-3 sections on the MojoShader SPIR-V route (Apple M4
-AM4-144) found silent wrong-pixel defects shared by every SPIR-V backend, all fixed for `SDLGPU`
-and `WEBGPU`: a predicated `TEXKILL` that killed unconditionally
-(libcna/mojoshader `spirv-predicated-texkill`), `vPos` at the pixel centre rather than
-Direct3D 9's integer pixel (`spirv-vpos-pixel-corner`), and `TEXBEM`/
-`TEXBEML` with zero bump matrices (`MojoShaderEffect::PackSpirvUniformBlock` fills the two float4s
-per sampler MojoShader appends to the uniform block). Three more are the pipeline's, and
-`MojoShaderEffect`'s SPIR-V adaptations (`SpirvPipelineAdaptation.hpp`) fit the module to it: `vFace`
-is mirrored because both renderers keep counter-clockwise as the native front face; a colour output
-with no attachment becomes a private variable, which Vulkan's validation layer otherwise reports;
-and on WebGPU, whose viewport cannot leave its attachment, the vertex stage's clip position moves
-by XNA's pixel-centre correction (SDLGPU moves the viewport, as FNA3D's SDLGPU driver does).
-The repaired MojoShader pin `6f1e91b65c8dfe493ec1ace818b294b7181fa1b6`, recorded by FNA3D
-`0bfbe7fe4958243058775408cd1cf8b017bbf4b0` (pinned now through its successor `76a76cf`), was published on 2026-11-09 (the opcode work below
-on 2026-11-08; 6f1e91b only refuses truncated effect object headers). It implements
-ps_1_4 `BEM` using the destination-numbered texture-stage bump matrix and `TEXDEPTH` using
-guarded r5.r/r5.g fragment depth. It also admits `TEXREG2AR`, `TEXREG2GB`, `TEXREG2RGB`,
-`TEXDP3`, `TEXDP3TEX` and `TEXM3X2DEPTH`. No opcode in this eight-instruction SPIR-V
-envelope retains a missing-emitter refusal. OFF builds retain the named
-`GraphicsCapability::CompiledEffects` refusal for all eight opcode fixtures before translation.
-Each accepted renderer route still requires its shared pixel and lifetime qualification.
+**SPIR-V route (SDLGPU, WEBGPU).** Shader Model 1-3 programs run through MojoShader's SPIR-V
+emitter, fitted to each pipeline by `MojoShaderEffect`'s adaptations
+(`SpirvPipelineAdaptation.hpp`): `vFace` is mirrored because both renderers keep counter-clockwise
+as the native front face; a colour output with no attachment becomes a private variable, which
+Vulkan's validation layer otherwise reports; on WebGPU, whose viewport cannot leave its attachment,
+the vertex stage's clip position moves by XNA's pixel-centre correction (SDLGPU moves the
+viewport, as FNA3D's SDLGPU driver does); and `MojoShaderEffect::PackSpirvUniformBlock` fills the
+two float4s per sampler MojoShader appends for `TEXBEM`/`TEXBEML` bump matrices. The pinned fork
+gives predicated `TEXKILL` per-lane semantics, `vPos` at Direct3D 9's integer pixel, and emitters
+for ps_1_4 `BEM` (destination-numbered texture-stage bump matrix), `TEXDEPTH` (guarded r5.r/r5.g
+fragment depth), `TEXREG2AR`, `TEXREG2GB`, `TEXREG2RGB`, `TEXDP3`, `TEXDP3TEX` and `TEXM3X2DEPTH`,
+so no opcode in this eight-instruction envelope keeps a missing-emitter refusal. OFF builds still
+refuse all eight fixture types by the `GraphicsCapability::CompiledEffects` capability before
+translation. The fork repairs and their remaining limits are in
+[`fna3d-dependency-defects.md`](fna3d-dependency-defects.md#fixed-on-the-forks).
 
-The unchanged 44-case shared corpus now exercises all five newly admitted instructions through
-public `Effect` construction from compiled bytes and real `Texture2D` sampling. Its new 8x8
-full-image checks use the fork tasks' literal source RGBA `(32,96,160,224)` and 4x4 lookup grid
-`(40(x+1),40(y+1),7(4x+y+1),255)`, with point/clamp sampling. D3D9 instruction arithmetic,
-shown beside the assertions, independently yields AR `(3,0)`, GB `(1,2)`, 2D RGB `(0,1)` and
-signed RGB `(0,0)`. The dot row `(2.25,1,-.5,9)` gives `88/255` without the fourth component:
-`TEXDP3` broadcasts it to all four lanes, and `TEXDP3TEX` samples `(dot,0)` at texel `(1,0)`.
-The signed source gives a negative dot, hence RGBA-zero or lookup `(0,0)`. A nonzero clear in
-all channels detects discarded output. Distinct source channels and lookup axes discriminate
-wrong channels, coordinates, samplers and dot4. Every pixel is checked exactly; the original
-coordinate, implicit-LOD, volume and depth assertions are retained with their existing tolerances.
+The shared drawing corpus (44 cases) exercises all eight instructions through public `Effect`
+construction from compiled bytes and real `Texture2D` sampling, with exact full-image 8x8 checks;
+the D3D9 arithmetic behind each expected value is written beside the assertion in
+`CompiledEffectConformance.hpp`. A nonzero clear in every channel detects discarded output, and
+distinct source channels and lookup axes discriminate wrong channels, coordinates, samplers and
+dot4. The matrix-depth contract adds depth-tested full-image probes for plain, `_bx2`, mixed and
+zero-denominator `TEXM3X2DEPTH` (a zero denominator writes one), and
+`Gap13CompiledEffectCorpusTest.LegacyRegisterDepthOutput` checks register `TEXDEPTH` independently;
+`CompiledEffectLegacyMatrixDepthTest` also reaches the FNA3D drivers.
 
-The matrix-depth contract retains its original checks and adds full 8x8 depth-tested draws
-using the literal fork fixture. Source `(32,96,160,224)/255`, numerator row `(1,0,0,9)`
-and denominator row `(0,4,0,9)` give `1/12` plain and `191/252` with both sources `_bx2`.
-Mixed modifiers use numerator `(-1,0,0,9)`, giving `191/384` (PAD signed) or `8/63`
-(DEPTH signed). Each fraction fails LESS against a known lower depth clear and passes LESS
-against an upper clear. A zero denominator writes one, failing LESS and passing GREATER
-against `15/16`. Raster depth `.9` cannot produce the passing observations. Exact magenta
-or distinct nonzero clear is required at every pixel. A standalone
-`CompiledEffectLegacyMatrixDepthTest` also reaches the FNA3D drivers; the corpus stays 44 cases.
-The fork includes the ES3 float depth-API repair described in
-[`fna3d-dependency-defects.md`](fna3d-dependency-defects.md).
+MojoShader infers legacy sampler dimensions from the effect's typed Texture parameters, following
+sampler-state Texture object/name links before compiling each shader. CTAB associates sampler names
+with registers; explicit pass `Sampler[n]` bindings also work without CTAB. Caller-provided sampler
+maps keep priority; CNA's SDLGPU/WEBGPU callbacks forward the maps, and their CTAB-only fallback
+remains for dependency source overrides. `CompiledEffectSamplerInferenceTest` uses ordinary Effect
+parameters and `GraphicsDevice.Textures`, with generic sampler CTAB/state types and typed
+Texture2D/TextureCube/Texture3D parameters, and compares all 64 pixels of the six unsigned/`_bx2`
+forms to hand-derived literals. Generic declarations without a typed parameter/register association
+still default to 2D; incompatible typed bindings across passes sharing one shader and inferred
+sampler arrays refuse by name; inference does not widen TEXREG2AR/GB or TEXDP3TEX beyond 2D.
 
-MojoShader now infers legacy sampler dimensions from the effect's typed Texture parameters,
-following sampler-state Texture object/name links before compiling each shader. CTAB associates
-sampler names with registers; explicit pass `Sampler[n]` bindings also work without CTAB.
-Caller-provided sampler maps retain priority. CNA's SDLGPU/WEBGPU callbacks forward the maps;
-their older CTAB-only fallback remains for dependency source overrides.
-`CompiledEffectSamplerInferenceTest` uses ordinary Effect parameters and GraphicsDevice.Textures,
-with generic sampler CTAB/state types and typed Texture2D/TextureCube/Texture3D parameters.
-All six unsigned/_bx2 forms compare all 64 pixels to hand-derived lookup-grid literals.
-Direct MojoShader tests with explicit maps remain independent controls. Public GPU qualification
-of the new CNA depth and inference witnesses is an integration gate; their presence alone
-does not establish a renderer pass.
-
-Generic texture declarations without a typed parameter/register association still default to 2D.
-Incompatible typed bindings across passes sharing one shader and inferred sampler arrays refuse
-by name. Inference does not widen TEXREG2AR/GB or TEXDP3TEX beyond their supported 2D forms.
-
-Predicated SPIR-V destination writes preserve inactive lanes with a typed select after the
-write mask, shift and saturation operations. Predicated TEXKILL uses select-based component
-masking compatible with the pinned Naga translator. Both original 44-case GPU corpora passed
-at the task-14 pin. Task 15 adds ps_1.x scale-before-saturation, with 456 numeric/module cases
-and fork qualification. Later fork evidence includes 204 TEXREG2 IR variants, 96 dot variants,
-72 mapped native MojoShader draws and 144 FNA3D native full-image draws across OpenGL, ES3 and
-SDLGPU. Those are fork results, not a current-CNA GPU pass: after publication and integration
-of TQ-SWEEP12-10..15 into `next`, the first private multi run passed BEM but exposed the old
-five-opcode refusal expectations and the remap fixture's missing TEXCOORD1 output. This task
-aligns the envelope and fixture; the updated CNA policy/corpus runs remain an integrator gate.
+Predicated SPIR-V destination writes preserve inactive lanes with a typed select after the write
+mask, shift and saturation; predicated TEXKILL uses select-based component masking compatible with
+the pinned Naga; ps_1.x results are scaled before saturation. Fork numeric/IR evidence is not a CNA
+GPU pass; CNA's own evidence is the `Gap13_*` policy and corpus tests (§15, §16).
 
 ### What "passes the shared contract" means
 
 `tests/support/CNA/TestSupport/CompiledEffectConformance.hpp` is the whole gate. A backend adds one
-test file that builds its device and calls the contract sections; shared assertions are parameterized by route/profile options, and the backend tests select the
-sections they exercise. The following describes major sections, not the full current call list:
+test file that builds its device and calls the contract sections; shared assertions are
+parameterized by route/profile options, and the backend tests select the sections they exercise. The
+following describes major sections, not the full current call list:
+
 
 | Section | What it proves |
 |---|---|
@@ -436,7 +409,7 @@ gl_Position.z = gl_Position.z * 2.0 - gl_Position.w;
 ```
 
 because OpenGL's clip volume is `z ∈ [-w, w]` where Direct3D's is `[0, w]`. **EasyGL's own
-stock shaders now apply the same conversion** (`SOFTWARE-336`). Both paths therefore consume
+stock shaders apply the same conversion** (`SOFTWARE-336`). Both paths therefore consume
 XNA's Direct3D-style clip depth and use the viewport's complete `[min,max]` window-depth range:
 
 ```text
@@ -444,12 +417,11 @@ stock     d = min + z·(max-min)
 compiled  d = min + z·(max-min)
 ```
 
-The older SAMPLE-028 repair narrowed only compiled-effect draws to the stock path's incorrect
-upper-half scale. That restored relative ordering on `ColorReplacementSample_4_0`, but left stock
-`z=0` at window depth 0.5, admitted stock geometry behind XNA's near plane, and discarded half the
-depth precision. `BackBufferDepthStencilContractTest.StockEffectUsesXnaClipDepthConvention` pins
-both absolute failures; `EasyGLCompiledEffectDrawTest.IsDepthTestedOnTheSameScaleAsStockGeometry`
-retains the mixed-path ordering proof after the workaround's removal.
+Mapping stock geometry to an upper-half window-depth range instead would put stock `z=0` at 0.5,
+admit geometry behind XNA's near plane and discard half the depth precision.
+`BackBufferDepthStencilContractTest.StockEffectUsesXnaClipDepthConvention` pins the absolute
+convention, and `EasyGLCompiledEffectDrawTest.IsDepthTestedOnTheSameScaleAsStockGeometry` the
+mixed-path ordering (`ColorReplacementSample_4_0`, SAMPLE-028).
 
 This is EasyGL-specific: `FNA3D` runs MojoShader's own OpenGL device end to end, and
 `SDLGPU` has its own convention.
@@ -486,8 +458,8 @@ up as an uploaded texture and need no correction on either route.
 ### 10.3 Fragment-shader precision on the GL ES profiles
 
 A Direct3D 9 shader computes in full 32-bit float unless an instruction opts into partial
-precision. GLSL ES fragment float precision must be declared. The old translator's mediump choice could
-have insufficient range for such expressions; mediump specifies minimum requirements and may
+precision. GLSL ES fragment float precision must be declared, and mediump can have insufficient
+range for such expressions; mediump specifies minimum requirements and may
 use higher precision, rather than universally meaning one fixed fp16 representation.
 See GLSL ES 3.00 §4.5 in the [Khronos specification](https://registry.khronos.org/OpenGL/specs/es/3.0/GLSL_ES_Specification_3.00.pdf).
 
@@ -502,9 +474,9 @@ output.lightDirection = LightPosition - worldSpacePos;   // e.g. ~1000 units lon
 input.lightDirection = normalize(input.lightDirection);
 ```
 
-On the affected limited-range path, that overflow made normalization collapse and terms derived
-from the direction lose their expected lighting contribution. This was a device/path failure,
-not a guaranteed result for every mediump implementation. Nothing errors. The frame still draws the geometry, still tracks the camera, and
+On a limited-range mediump path, that overflow makes normalization collapse and terms derived from
+the direction lose their lighting contribution (not every mediump implementation does). Nothing
+errors. The frame still draws the geometry, still tracks the camera, and
 still honours the terms that do not depend on the direction, so a scene lit by an ambient
 constant and nothing else can look like a working render until the light is moved and not one
 pixel changes.
@@ -524,8 +496,8 @@ exceed 1 at a vertex, and D3D9 therefore interpolates from the clamped value, no
 MojoShader's GLSL ES profiles have no `gl_FrontColor` and fall through to a plain varying, which
 nothing clamps — so the raw value is interpolated and saturated per fragment instead. The desktop
 profiles write `gl_FrontColor`, which a compatibility context is specified to clamp, yet FNA3D's
-OpenGL driver drew BasicEffect's lit colour unclamped on Mesa 25 (2026-10-14), and a core context
-has no such clamp. The two are not the same picture:
+OpenGL driver drew BasicEffect's lit colour unclamped on Mesa 25, and a core context has no such
+clamp. The two are not the same picture:
 
 ```text
 vertex colours 1.24 and 0.40, interpolated across a triangle
@@ -561,7 +533,7 @@ format, native-driver and selected instruction requirements can refuse a particu
 | `Border and MirrorOnce sampler addressing are not representable...` | `std::runtime_error` | Addressing mode outside XNA 4.0 |
 | A backend/profile-specific `Texture3D`/`sampler3D` refusal | `NotSupportedException` | Volume sampling remains renderer/profile-dependent; cube sampling is supported by every compiled-Effect backend (FX-110) |
 | `...samples slot N, but no texture is bound there.` | `NotSupportedException` | The effect's texture parameter was never assigned, and nothing was selected on `GraphicsDevice.Textures` |
-| A vertex-stage texture sampling refusal | `NotSupportedException` | Check the selected renderer's compiled-effect path; this is no longer a universal CNA limitation (FX-109 and the museum B8 repair) |
+| A vertex-stage texture sampling refusal | `NotSupportedException` | Check the selected renderer's compiled-effect path; this is not a universal CNA limitation (FX-109) |
 | `...cannot run after the GL context was recreated...` | `NotSupportedException` | EasyGL only: a compiled draw reached the renderer before it had restored its MojoShader state for a recreated GL context. Recovery rebuilds every live compiled effect from its retained bytecode, values, textures and technique (FX-107), so this is a draw issued between the loss and that recovery |
 | `...cannot sample the RenderTarget2D it is drawing into.` | `NotSupportedException` | EasyGL only: reading and writing one target in a single draw, which is undefined in XNA too |
 | Any of the above while loading an asset | `ContentLoadException` | Same cause, wrapped with the asset name |
@@ -594,190 +566,73 @@ renderer, and removes its SDL standard-library/SDL_GPU edges for supported SDL-f
 See cmake/ThirdPartyFNA3D.cmake; do not assume compiled effects require selecting FNA3D.
 
 - FNA3D: CNA's fork libcna/FNA3D, pinned by `cmake/ThirdPartyFNA3D.cmake`
-  ([`fna3d-renderer.md`](fna3d-renderer.md#the-two-forks) lists the pins and why the forks exist).
-- MojoShader: CNA's fork libcna/mojoshader, FNA3D's submodule: the submodule revision recorded by the current FNA3D pin, zlib licence. The historical
-  6333f74 base has since been merged with newer upstream work; it is not today's whole pin. A MojoShader fix is
-  named here by its former patch name (`effect-parser-robustness` was
+  ([`fna3d-renderer.md`](fna3d-renderer.md#dependency-and-source-pin) lists the pins;
+  [the two forks](fna3d-renderer.md#the-two-forks) explains why they exist).
+- MojoShader: CNA's fork libcna/mojoshader, the submodule revision recorded by the FNA3D pin, zlib
+  licence. A MojoShader fix is named by its former patch name (`effect-parser-robustness` was
   `cmake/patches/mojoshader-6333f74-effect-parser-robustness.patch`); each is one commit on the
   fork's `cna` branch with that name in its `CNA-Patch:` trailer
-  (`git log --grep=effect-parser-robustness`).
-- The effect-parser-robustness commit contains historical parser fixes. Retained counts describe
-  that campaign and do not count every later hardening change; see
-  [`fx-bytecode-fuzzing.md`](fx-bytecode-fuzzing.md) for the list and for the exposure that
-  remains. It is part of the fork's source, so a fetched checkout and an explicit
-  `FETCHCONTENT_SOURCE_DIR_FNA3D` checkout of the pin both have it.
-- That directory contains six redistributed Microsoft XNA stock effects under LICENSE.StockEffects
-  and six CNA-specific compiled effects on 2026-11-01. Its README/hash checks describe their
+  (`git log --grep=effect-parser-robustness`). It is part of the fork's source, so a fetched
+  checkout and an explicit `FETCHCONTENT_SOURCE_DIR_FNA3D` checkout of the pin both have it.
+- The effect-parser-robustness commit holds the original campaign's parser fixes, not every later
+  hardening change. The crash artifacts that pin them are listed in
+  [`tests/fixtures/compiled-effects/crash-corpus/README.md`](../tests/fixtures/compiled-effects/crash-corpus/README.md);
+  the exposure that remains is in [`fx-bytecode-fuzzing.md`](fx-bytecode-fuzzing.md).
+- `modules/renderers/fna3d/effects/` contains six redistributed Microsoft XNA stock effects under
+  LICENSE.StockEffects and CNA-specific compiled effects. Its README/hash checks describe their
   separate provenance; do not apply the stock-effect attribution to every .fxb in the directory.
 
 See [`../THIRD_PARTY_NOTICES.md`](../THIRD_PARTY_NOTICES.md) for the full notice set.
 
-## 14. Performance baseline (FX-053)
+## 14. Performance (FX-053)
 
-Measured with `cna_compiled_effect_benchmark` on an FNA3D/SDLGPU (Vulkan, Intel Iris Xe) Debug
-build, `SDL_VIDEODRIVER=offscreen`, while a sanitizer build was competing for the same machine. These are historical observations,
-not a current baseline, controlled before/after comparison or upper bound on present latency.
+`cna_compiled_effect_benchmark` measures construction, clone, apply and draw costs. A historical
+FNA3D/SDLGPU Debug run (not a controlled baseline) showed what drives the design:
 
-| Operation | Iterations | Median | Mean |
-|---|---:|---:|---:|
-| construct `SpriteEffect.fxb` (1 KiB) | 200 | 105.8 us | 98.6 us |
-| construct `BasicEffect.fxb` (28 KiB) | 100 | 1964.9 us | 1972.8 us |
-| construct `SkinnedEffect.fxb` (54 KiB) | 50 | 1636.8 us | 1641.4 us |
-| clone `BasicEffect` | 200 | 261.8 us | 264.6 us |
-| apply pass, nothing dirty | 2000 | 2.9 us | 3.0 us |
-| set one `float4` + apply pass | 2000 | 3.3 us | 3.3 us |
-| set matrix + `float4` + int + apply pass | 2000 | 5.1 us | 5.2 us |
-| compiled effect: apply + draw 2 triangles | 500 | 10.9 us | 13.5 us |
-| stock `BasicEffect`: apply + draw 2 triangles | 500 | 11.5 us | 12.3 us |
+- **Construction cost tracks shader work, not file size** (the 54 KiB `SkinnedEffect` constructed
+  faster than the 28 KiB `BasicEffect`); construct at load time, not in a frame.
+- **`Clone()` was about 7.5x cheaper than constructing the same effect**, because the native clone
+  reuses the already-translated shader artifacts and copies only mutable state.
+- **Dirty tracking works**: an Apply with nothing changed cost about 3 us, and unchanged parameters
+  are not re-uploaded.
 
-What that historical fixture/run illustrated:
+**Decision: no immutable-artifact cache.** The expensive step is native shader translation during
+construction, and `Clone()` already reuses it without sharing any mutable value, texture, selected
+technique or pass state. A bytecode-keyed cache would add cross-instance sharing risk for a case
+the API already covers; revisit only if a real port constructs identical bytecode in a hot path.
 
-- **Construction cost tracks shader work, not file size.** The 54 KiB `SkinnedEffect` constructs
-  faster than the 28 KiB `BasicEffect`; the byte count is not the predictor, the embedded programs
-  are. Construction belongs at load time, not in a frame.
-- **`Clone()` is roughly 7.5x cheaper than constructing the same effect**, because the native clone
-  reuses the already-translated shader artifacts and copies only mutable state. A game that needs
-  many instances of one effect should clone.
-- **Dirty tracking works.** A pass applied with nothing changed costs about 2.9 us; one changed
-  `float4` adds ~0.4 us and a matrix plus two scalars ~2.2 us. Unchanged parameters are not
-  re-uploaded.
-- The recorded compiled/stock point estimates were close (10.9 versus 11.5 us). Without retained
-  distributions and a controlled workload they establish neither equivalence nor zero per-draw
-  cost for a port; deferred submission and CPU/GPU timing boundaries also matter.
+## 15. Qualification gates
 
-**Historical decision on the immutable artifact cache:** no cache was added on that evidence. The expensive step is native shader
-translation during construction, and `Clone()` already reuses it without sharing any mutable value,
-texture, selected technique or pass state. A bytecode-keyed cache would add cross-instance sharing
-risk for a case the existing API already covers. FX-053 records this as decided, to be
-revisited only if a real port shows repeated construction of identical bytecode in a hot path.
+- `Gap13_CompiledPolicy_<IDENTITY>` checks the configured option, the detailed capability and two
+  compiler-produced shader parameter colours (policy: two cases, three on SPIR-V/native-refusal
+  routes). `Gap13_CompiledCorpus_<IDENTITY>` runs the shared 44-case drawing corpus
+  (`cmake/Tests/CompiledEffectsQualification.cmake`). Both check a fresh Google Test XML inventory:
+  missing, empty, partial, skipped or failed cases fail even when the process exits zero. The
+  backends' non-drawing and lifecycle assertions, including the three TQ-073 compiled
+  teardown/recovery cases, remain required.
+- `CnaCompiledEffectsDefaults` evaluates the real option declarations, the released default policy
+  (§10) and explicit OFF opt-outs; a default changes only together with its expectation there.
+- The native installed-SDK checker accepts `--compiled-effects --compiled-renderer <identity>`: it
+  copies the compiler-produced fixture into a source-independent consumer and checks the producer's
+  capability plus shader pixels, or a capability-named refusal for an OFF producer.
+  `--prepare-only` builds and relocates the consumers without running them and records
+  `passed=false`; it is preparation, not installed-package qualification.
 
-## 15. 2026-11-01 verification
+## 16. Qualification status
 
-The existing multi-tree Renderer/Graphics targets and replay/benchmark tools build. Privately,
-106 common Effect/parameter/pass/technique tests pass. FNA3D's OpenGL and SDL_GPU drivers each
-pass 66/67 selected compiled/oracle tests, with the same volume case skipped under Reach.
-CNA SDLGPU passes 61/62 (ShaderCross integration not linked); native WEBGPU passes all 64.
-Both FNA3D drivers replay all twelve current effect binaries plus fourteen crash artifacts.
-
-EasyGL and SOFTWARE compiled-effect options are OFF in that tree, DIRECTX9 is absent, and no
-browser build is executed here. This is current focused functional/replay evidence, not a new
-ASan/UBSan/LSan campaign, all-backend promotion, historical performance reproduction or proof of
-every untrusted input. Documentation changes no implementation or ABI.
-
-
-## 16. GAP-13 native qualification handoff (2026-11-06)
-
-OPENGL33-only EasyGL selections default to compiled effects ON after the owner's AMD and
-software-GL corpus passes. The shared option stays default OFF if OPENGLES3 or WEBGL2 is also
-compiled; the other four optional-family defaults remain OFF. The
-owner configured the existing `cmake-build-opengl33` and `cmake-build-mingw` trees with their
-EasyGL/DirectX9 compiled-effect options ON. An ON cache entry and a successful build do not
-establish a corpus pass. `Gap13_CompiledPolicy_OPENGL33` / `_DIRECTX9` independently check the
-configured policy, detailed capability, and two compiler-produced shader parameter colors;
-`Gap13_CompiledCorpus_OPENGL33` / `_DIRECTX9` run the shared drawing corpus, now 44 cases
-(the previous 43 plus independent register-only `TEXDEPTH` coverage). Existing backend non-drawing and lifecycle
-assertions remain required, including the three TQ-073 compiled teardown/recovery cases.
-The native gates check a fresh Google Test XML inventory: missing, empty, partial, skipped or
-failed cases cannot pass merely because a process exits successfully.
-
-The default declaration gate is `CnaCompiledEffectsDefaults`; it evaluates the real option
-declarations and verifies explicit OFF opt-outs. Promotion changes its independent released-policy
-expectation alongside the source defaults only after the owner retains the public corpus results.
-The SOFTWARE/SDLGPU/WEBGPU and browser allocations remain a separate qualification stage; their
-defaults have not changed. FNA3D stays always enabled and HEADLESS/STUB stay unsupported.
-
-The native installed-SDK checker accepts `--compiled-effects --compiled-renderer <identity>`.
-It copies the compiler-produced fixture into a source-independent consumer and checks the
-producer's expected capability plus shader pixels, or a capability-named refusal for an OFF
-producer. `--prepare-only` builds and relocates the native consumers without running them; its
-audit explicitly records `passed=false` and pending runtime tests. It is preparation evidence,
-not installed-package qualification. Browser package qualification remains in the later stage.
-
-
-### Phase 3 corpus corrections and qualification boundary (2026-11-06)
-
-The OPENGL33 gate passes all 43 drawing cases plus both policy cases under window-free
-llvmpipe, Mesa 25.0.7. Its previously failing vertex-texture fixture used fixed coverage counts
-on a 64x64 caller backbuffer; it now renders to a fixed 256x256 target with the same thresholds.
-The six desktop compiled centroid cases now put their triangle edge at D3D9 pixel coordinate
-x=1.1 so pixel 1 is partially covered; the old edge at x=1.6 left that pixel clear. Both complete
-GL module binaries pass in that software configuration. These are desktop GL measurements,
-not an ES/WebGL or installed-package qualification claim. The released default selector confines
-promotion to builds with OPENGL33 and no OPENGLES3/WEBGL2 identity; explicit ON/OFF still wins.
-
-Shared legacy fixtures now initialize source texture registers explicitly, use bounded
-ps_1_x TEXCOORD data, and enable a real mip chain when testing implicit LOD. Their original
-pixel assertions remain. The DirectX9 owner run exposed additional native vertex-sampler,
-legacy sampler-dimension and bump-stage plumbing gaps. Their repair and a precise native
-predicate-profile refusal envelope are review patches awaiting a reserved MinGW build and
-runtime verification; DirectX9 has no new corpus pass or default promotion. At the old dependency pin this phase retained eight
-SPIR-V opcode refusals. The 2026-11-06 fork pin now accepts BEM and TEXDEPTH and retains the
-other six named refusals; that changes the current corpus and requires a fresh integration run.
-
-
-### Phase 4 native build status (2026-11-06)
-
-The owner has now repeated the corrected OPENGL33 gates on AMD radeonsi: policy2/corpus43,
-centroid6 and both complete module binaries pass. OPENGLES3/WEBGL2 remain separately
-unqualified. One shared EASYGL option means an unconditional default ON would enable all
-three identities; the desktop-scoped default therefore keeps fresh ES/browser and
-mixed EasyGL selections OFF while retaining explicit ON/OFF choices. The default is scoped to fresh OPENGL33 selections; desktop installed ON/OFF acceptance remains open.
-
-The DirectX9 repair patch is now applied and both MinGW test binaries compile after fixing
-the native refusal test's namespace qualifications. Four repaired-path mutants have been built
-and preserved for owner execution. Earlier DX9 runs after the failed compile used old binaries;
-they cannot establish that these repairs pass. Current native policy3/corpus43, full binaries,
-installed/OFF routes and meaningful mutation failures still need owner runtime results.
-
-
-### Fork-pin corpus update (2026-11-08)
-
-The enabled SPIR-V policy case executes the pixel/depth contracts for all eight legacy
-instructions, including TEXM3X2DEPTH's literal plain/signed/mixed/zero depth witnesses.
-OFF builds still refuse all eight fixture types by the CompiledEffects capability before
-translation. The combined matrix/register depth contract retains its original assertions and
-adds those full-image matrix probes; `LegacyRegisterDepthOutput` independently checks TEXDEPTH.
-No SPIR-V missing-emitter catch remains in the corpus. Current strict native/browser corpus denominator:
-**44**, with policy counts unchanged (two, or three for SPIR-V/native-refusal routes).
-
-The historical 43-case results above remain measurements of that earlier inventory. They do not
-establish a 44-case pass. The pinned fork's IR/native qualification does not establish CNA
-uniform packing, resource lifetime, shadercross or browser WGSL pixels; rerun enabled native and
-browser corpus/whole-module gates and installed-package acceptance before promotion.
-
-
-### Phase 5 DirectX9 qualification blocker (2026-11-06)
-
-The owner ran the newly built native controls on Wine/DXVK 3.1.1: policy3 passes, the shared
-corpus is42/43, the focused DirectX9 gate and full Renderer binary pass, and Graphics has one
-failing case, LegacyBumpEnvironment. The four preserved native mutants fail their witnesses.
-That case has four failing assertions: both TEXBEM off-diagonal lookups and the red/green
-channels of ps_1_4 BEM arithmetic. The diagonal, zero-matrix/LOD, luminance and retained-state
-checks in the same case pass. This is not a native family qualification pass.
-
-The independent TEXBEM equation is u'=u+m00*du+m10*dv and v'=v+m01*du+m11*dv. CNA retains
-native00/01/10/11 state IDs and passes FLOAT bit patterns with std::bit_cast<DWORD>; a numeric
-cast or compensating matrix transpose would violate that contract. The current host's results
-match swapped off-diagonals, but the exact translator/driver fault has not been isolated by
-native API readback or real Windows hardware. Keep the existing pixel assertions strict and
-DIRECTX9 default OFF. TEXBEM is a real D3D9 instruction (ps_1_1 through1_3); do not invent a
-native opcode refusal or count an environment skip as a corpus pass. BEM is the separate ps_1_4
-arithmetic instruction. A corrected host or independent conforming native run is needed before
-this remaining case can qualify the family.
-
-
-### Desktop-scoped EasyGL default policy
-+
-+`CNA_EASYGL_COMPILED_EFFECTS` is a single shared cache option and compile definition. A fresh
-+selection containing OPENGL33 and no OPENGLES3/WEBGL2 defaults ON. A fresh OPENGLES3, WEBGL2 or
-+mixed EasyGL selection defaults OFF, including OPENGL33+OPENGLES3, because a single flag cannot
-+default just one profile ON in that binary. Other renderer identities in the set do not alter the
-+EasyGL default. Explicit OFF remains an opt-out, and explicit ON can enable the unqualified
-+profiles for qualification. Existing cache values are preserved, including across renderer changes.
-+
-+The owner retained real AMD policy2/corpus43, centroid6 and complete GL module passes. This
-+qualifies the desktop corpus, not GLES3's GLSLES3 driver behavior or WebGL2's browser translation,
-+exception ABI, texture/MSAA restrictions and installed browser package. Those profiles need their
-+own ON/OFF policy, full shared corpus, lifetime/mutation and installed-consumer results before a
-+family-wide unconditional default may be adopted. Installed desktop ON/OFF qualification remains
-+a separate release acceptance step; the default patch itself does not make an installed pass claim.
+- **`OPENGL33`**: policy, corpus, the six desktop centroid cases (triangle edge at D3D9 pixel
+  x=1.1, partially covering pixel 1) and both complete GL module binaries pass on AMD radeonsi and
+  on window-free llvmpipe (Mesa 25.0.7) (GAP-13), and the installed C++ package checker with
+  `--compiled-effects --compiled-renderer OPENGL33` passes, including the relocated consumer's
+  pixel oracle (GAP-13-PKG). This is the basis of the §10 default.
+- **`SDLGPU`, `WEBGPU`, `FNA3D`**: the `Gap13_*` policy and corpus tests pass in the multi-renderer
+  tree on SDLGPU, WEBGPU and FNA3D's OpenGL, ES3 and SDLGPU drivers (TQ-FORK-PIN-02). SDLGPU and
+  WEBGPU stay default OFF: browser WGSL pixels, ShaderCross routes and installed-package acceptance
+  are separate qualification steps. `FNA3D` is always enabled.
+- **`OPENGLES3`, `WEBGL2`**: not qualified — GLSL ES 3 driver behaviour, WebGL 2 browser
+  translation, exception ABI, texture/MSAA restrictions and the installed browser package each
+  need their own policy, full corpus, lifetime/mutation and installed-consumer results before a
+  family-wide default.
+- **`DIRECTX9`**: default OFF; its remaining corpus failure is in
+  [KNOWN_ISSUES.md](../KNOWN_ISSUES.md).
+- **`SOFTWARE`**: default OFF, a separate qualification stage. HEADLESS/STUB are unsupported.

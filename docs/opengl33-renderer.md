@@ -1,9 +1,5 @@
 # OPENGL33 renderer
 
-Status: current profile contract, reconciled with the renderer registry, live capability queries,
-EasyGL implementation and platform qualification on **2026-10-31**, with runtime multisample-state
-selection verified on **2026-11-02**.
-
 `OPENGL33` is CNA's production-class desktop OpenGL identity. It requests an OpenGL 3.3 core
 context and is implemented by the shared EasyGL family in `modules/renderers/easygl/`. The same
 family also serves `OPENGLES3` and `WEBGL2`; they are separate public renderer identities, not
@@ -33,18 +29,18 @@ tools/platform/run_gpu_tests_private.sh cmake-build-opengl33 \
   -R '^EasyGL_' --output-on-failure -j6
 ```
 
-The registered suite keeps the `EasyGL_` prefix because it tests the shared implementation. There
-is no separate `OPENGL33` CTest label: the build's default renderer identity determines whether the
+The registered suite keeps the `EasyGL_` prefix because it tests the shared implementation. There is
+no separate `OPENGL33` CTest label: the build's default renderer identity determines whether the
 native EasyGL suite uses the desktop or ES profile. On Linux, the multisample state and pixel
 contracts also register explicit runtime legs for compiled nondefault native GL profiles. In a
-multi-renderer build, `OPENGL33` can be
-selected before device creation through `GraphicsRendererSelection` or the
-`CNA_GRAPHICS_RENDERER=OPENGL33` environment variable; see
+multi-renderer build, `OPENGL33` can be selected before device creation through
+`GraphicsRendererSelection` or the `CNA_GRAPHICS_RENDERER=OPENGL33` environment variable; see
 [`runtime-renderer-selection.md`](runtime-renderer-selection.md).
+
 
 ## EasyGL cache and recovery checks
 
-These shared-family fixes apply to native GL profiles; run them in a configured EasyGL test
+These shared-family contracts apply to native GL profiles; run them in a configured EasyGL test
 build with the sibling easy-gl/meta-gl dependencies and private display prerequisites above.
 Compiled-effect cases additionally require `-DCNA_EASYGL_COMPILED_EFFECTS=ON` and the pinned
 FNA3D/MojoShader dependency ([effect options](shader-effect-vs-fx-bytecode.md)).
@@ -55,12 +51,12 @@ tools/platform/run_gpu_tests_private.sh --exec cmake-build-opengl33/CnaRendererT
   '--gtest_filter=EasyGLShaderEffectLifecycleTest.*:EasyGLRedundantStateTest.TextureBindings*:EasyGLRedundantStateTest.VertexLayouts*:EasyGLCompiledEffectPartialValueTest.*'
 ```
 
-| Symptom | Contract / diagnostic |
-|---|---|
-| Uniform arrays change after context recovery; a failed recompile destroys the working effect | `2e3afe309` replays overlapping writes in order and publishes a recompiled program only after success. Lifecycle tests cover shorter/zero-length writes, aliases and failed compile/link recovery. |
-| Wrong texture after uploads, readback, deletion or effect switches | `da94d0d0f` tracks bindings per unit/target and invalidates resource lifetimes. External native GL binding changes must call the internal renderer's `InvalidateTextureBindingsEXT()` before CNA draws again. |
-| Wrong attributes after switching buffers, streams or programs | `de9691c25` retains one bounded resolved layout; offsets, strides, semantics, divisors and buffer lifetimes affect reuse. External VAO changes require the affected native vertex buffer's `InvalidateVertexLayoutEXT()`; SetData and context recovery invalidate CNA's own records. |
-| A short compiled-parameter write loses its untouched suffix after clone/recovery | `df322488d` preserves the full prior value while replacing its prefix. The partial-value tests use the native runtime directly so a full public-parameter synchronization cannot hide the defect. |
+| Symptom | Contract | Tests |
+|---|---|---|
+| Uniform arrays change after context recovery; a failed recompile destroys the working effect | Overlapping writes replay in order; a recompiled program is published only after success. | `EasyGLShaderEffectLifecycleTest.*`: shorter/zero-length writes, aliases, failed compile/link recovery |
+| Wrong texture after uploads, readback, deletion or effect switches | Bindings are tracked per unit/target and invalidated with resource lifetimes. External native GL binding changes must call the internal renderer's `InvalidateTextureBindingsEXT()` before CNA draws again. | `EasyGLRedundantStateTest.TextureBindings*` |
+| Wrong attributes after switching buffers, streams or programs | One bounded resolved layout is retained; offsets, strides, semantics, divisors and buffer lifetimes affect reuse. External VAO changes require the affected native vertex buffer's `InvalidateVertexLayoutEXT()`; SetData and context recovery invalidate CNA's own records. | `EasyGLRedundantStateTest.VertexLayouts*` |
+| A short compiled-parameter write loses its untouched suffix after clone/recovery | The full prior value is preserved while its prefix is replaced. | `EasyGLCompiledEffectPartialValueTest.*`, which uses the native runtime directly so a full public-parameter synchronization cannot hide the defect |
 
 Rebuild the current renderer and rerun the matching witnesses before diagnosing a driver issue.
 These caches are in-memory context state; deleting shader files or rebuilding SDL is not a cache
@@ -73,7 +69,7 @@ repair. A skipped compiled-effect test means the capability/dependency was unava
 | Context | SDL platform service requests OpenGL 3.3 core | `OPENGLES3` requests ES 3.0; `WEBGL2` uses the browser context |
 | Stock shaders | One GLSL ES 3.00 corpus is rewritten to `#version 330 core`; the ES precision declaration is removed | ES/Web use the stored source directly |
 | CNAEXT `ShaderEffect` | Reports desktop GLSL and accepts desktop-GLSL vertex/fragment packages | ES/Web report and accept GLSL ES; see [`shader-effect-vs-fx-bytecode.md`](shader-effect-vs-fx-bytecode.md) |
-| Compiled XNA effects | Optional `CNA_EASYGL_COMPILED_EFFECTS`; MojoShader uses its `glsl120` adapter profile | ES/Web use `glsles3`; the option is off by default |
+| Compiled XNA effects | `CNA_EASYGL_COMPILED_EFFECTS`, default ON when the selection has no ES/WebGL identity ([§10](fx-compiled-effects.md#10-renderer-support-matrix)); MojoShader uses its `glsl120` adapter profile | ES/Web use `glsles3`; any selection containing them defaults the shared option OFF |
 | Base-vertex indexed draws | Uses desktop `glDrawElementsBaseVertex` | ES 3.0/WebGL use the EasyGL rebase fallback |
 | Texture channel swizzle | Available in core GL 3.3 | WebGL forbids it; native ES 3 exposes it |
 | Point sprites | Enables `GL_PROGRAM_POINT_SIZE`, so shader `gl_PointSize` drives rasterization | ES/Web honor shader point size without that desktop switch |
@@ -118,12 +114,12 @@ therefore use CNA's back-buffer image rather than relying on transient window-su
 
 ## Qualification and current boundaries
 
-- Linux x86_64 is the routine qualification environment. Current tests run against a real Mesa
-  core context through the private Weston/Xwayland runner.
-- macOS arm64 was qualified on the Mac mini M4 campaign, including the full tree, samples and the
-  optional compiled-effect path. Apple's depth storage and anisotropy behavior have the exact
-  qualifications recorded in [`apple-platforms.md`](apple-platforms.md).
-- No current real-Windows `OPENGL33` qualification is recorded. Configuration support is not a
+- Linux x86_64 is the routine qualification environment: a real Mesa core context through the
+  private Weston/Xwayland runner.
+- macOS arm64: qualified on Apple hardware (`AM4-*`), including the optional compiled-effect path;
+  Apple's depth storage and anisotropy qualifications are in
+  [`apple-platforms.md`](apple-platforms.md).
+- No real-Windows `OPENGL33` qualification is recorded. Configuration support is not a
   substitute for observed pixels on Windows drivers.
 - `OPENGL33` is native-only. Use `WEBGL2` for an Emscripten/browser build.
 - MSAA availability, render-target formats, native wireframe and numeric limits are properties of
@@ -135,5 +131,4 @@ Active evidence includes the stock-effect golden/contract tests, profile-aware
 `EasyGLMultiSampleState` unit test and the nondefault-profile `EasyGL_RuntimeMultiSampleState_*` /
 `EasyGL_RuntimeMsaaFragmentContract_*` registrations,
 rasterizer and wireframe contracts, render-target/MSAA/MRT/cube/volume tests, exact desktop
-occlusion queries, presentation/reset tests and the optional compiled-effect suite. Historical
-campaign counts and closed failures belong in Git history, not in this current contract.
+occlusion queries, presentation/reset tests and the optional compiled-effect suite.

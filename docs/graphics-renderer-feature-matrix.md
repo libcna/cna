@@ -47,10 +47,9 @@ format-specific: use the live per-format profile before selecting a non-`Color`,
 floating-point or filterable resource. FNA3D's compressed readback additionally depends on its
 selected internal driver.
 
-Stock-effect support does not establish every combined state. CNA-FIX-D01's shared 41-pixel fog
-contract verifies the corrected SDLGPU alpha composition against EasyGL and Software controls;
-see [the renderer boundary](sdl-gpu-renderer.md#parity-with-easygl) for the tested combinations and
-platform qualification.
+Stock-effect support does not establish every combined state. The fog-alpha contract
+(CNA-FIX-D01), its tested combinations and its platform boundary are in
+[`sdl-gpu-renderer.md`](sdl-gpu-renderer.md#stock-effect-fog-alpha-cna-fix-d01).
 
 ## Rasterizing families: conditional and differentiating features
 
@@ -65,8 +64,9 @@ platform qualification.
 | CNAEXT `ShaderEffect` execution | ✅ GLSL / GLSL ES | ✅ WGSL | ✅ SPIR-V package; ⚙ GLSL text | ❌ | ✅ HLSL | ❌ |
 | Compiled XNA Effect bytecode | ⚙ opt-in | ⚙ opt-in | ⚙ opt-in | ⚙ opt-in | ⚙ opt-in | ✅ always on |
 
-Compiled-effect support is controlled independently for each opt-in family and is off by default:
-`CNA_EASYGL_COMPILED_EFFECTS`, `CNA_WEBGPU_COMPILED_EFFECTS`,
+Compiled-effect support is controlled independently for each family and is off by default, except
+`CNA_EASYGL_COMPILED_EFFECTS`, which defaults ON when OPENGL33 is selected without OPENGLES3 or
+WEBGL2 (`cmake/RendererSelection.cmake`): `CNA_EASYGL_COMPILED_EFFECTS`, `CNA_WEBGPU_COMPILED_EFFECTS`,
 `CNA_SDLGPU_COMPILED_EFFECTS`, `CNA_SOFTWARE_COMPILED_EFFECTS` and
 `CNA_DIRECTX9_COMPILED_EFFECTS`. [`fx-compiled-effects.md`](fx-compiled-effects.md) defines the
 shared bytecode, reflection, pass, state and draw contract.
@@ -174,8 +174,8 @@ backbuffer readback alone does not qualify the actual presented destination or s
 - **DirectX9** — its stricter goal is exact XNA 4.0 behavior. The active 40-scene corpus matches
   under Wine+DXVK, not verified real Windows hardware. Float/half-float targets require native
   support for the specific 2D or cube format; `HdrBlendable` also requires post-pixel-shader
-  blending support. The float-target changes are cross-built; their private Wine/DXVK pixel
-  qualification is pending. Cube MSAA and multiple vertex streams are unsupported, and depth bias lacks a discriminating differential
+  blending support. The float targets are qualified under Wine/DXVK 3.1.1 through the private runner
+  (GAP-10); no real Windows hardware run exists. Cube MSAA and multiple vertex streams are unsupported, and depth bias lacks a discriminating differential
   result. See [`directx9-renderer.md`](directx9-renderer.md) and
   [`d3d9-divergence-report.md`](d3d9-divergence-report.md).
 - **FNA3D** — compiled effects are the native shader route. MSAA, stencil, queries and instancing

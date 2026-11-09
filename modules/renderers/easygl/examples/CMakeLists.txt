@@ -1136,7 +1136,7 @@ if(CNA_BUILD_EXAMPLES AND CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
         cna_register_renderer_test(NAME EasyGL_Model_HierarchyChildMesh COMMAND cna_test_easygl_model_hierarchy_child_mesh
             TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
-        # Task 145: MRT — SetRenderTargets({rt0,rt1}), draw green to attachment0, verify left=green right=blue
+        # DX-224: the public multiple-render-target contract with distinct ShaderEffect outputs 0..3
         cna_easygl_test(cna_test_easygl_mrt
                         easygl_mrt_test.cpp)
         cna_register_renderer_test(NAME EasyGL_MRT_TwoAttachments COMMAND cna_test_easygl_mrt
@@ -2070,7 +2070,7 @@ if(CNA_BUILD_EXAMPLES AND CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
             COMMAND cna_test_easygl_alpha_test_effect_contract
             TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
-        # Task 954 culling conformance (docs/rasterizerstate-support.md, section 3): extends the
+        # Task 954 culling conformance (docs/rasterizerstate-support.md, "Culling and winding"): extends the
         # identity-only CullMode test above with a real Matrix::CreateLookAt camera and
         # perspective/orthographic projection. The shared source is registered here for EasyGL
         # and through parity/CrossFamilyPrograms.cmake for SDLGPU.

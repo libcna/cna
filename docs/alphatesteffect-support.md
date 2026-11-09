@@ -1,10 +1,7 @@
 # `AlphaTestEffect` current contract
 
-Current-state reconciliation: 2026-11-01.
-
 `AlphaTestEffect` is XNA's textured stock effect for rejecting fragments by their fully composed
-alpha. This page describes the behavior that callers and renderer implementations may rely on now.
-It is not a chronology of the implementation campaign that established the behavior.
+alpha. This page describes the behavior that callers and renderer implementations may rely on.
 
 ## Sources of truth
 
@@ -17,8 +14,7 @@ It is not a chronology of the implementation campaign that established the behav
 | Renderer capability boundary | [`graphics-renderer-feature-matrix.md`](graphics-renderer-feature-matrix.md) and each renderer's own page |
 | Current defects and limitations | [KNOWN_ISSUES.md](../KNOWN_ISSUES.md) |
 
-The generated XNA runtime-member report owns API presence. This page owns the behavioral contract
-and deliberately avoids fixed test totals, which drift whenever coverage grows.
+The generated XNA runtime-member report owns API presence. This page owns the behavioral contract.
 
 ## XNA public state
 
@@ -114,11 +110,8 @@ Fog uses FNA's view-space dot-product `FogVector`, with the world-view transform
 vector. When fog is disabled, the effect resets that vector and selects a no-fog shader variant.
 When enabled, `FogStart == FogEnd` produces full fog instead of a division-by-zero artifact. Fog is
 applied after the alpha test, blends RGB toward `FogColor * composedAlpha`, and preserves alpha; it
-cannot change the keep/discard decision.
-
-CNA-FIX-D01 corrects SDLGPU's fog-color alpha multiplication. The shared pixel contract now
-checks accepted fragments with combined effect and texture alpha on SDLGPU, EasyGL and Software;
-see [sdl-gpu-renderer.md](sdl-gpu-renderer.md#parity-with-easygl) for the evidence boundary.
+cannot change the keep/discard decision. The shared fog pixel contract and its SDLGPU caveat
+(CNA-FIX-D01) are in [sdl-gpu-renderer.md](sdl-gpu-renderer.md#stock-effect-fog-alpha-cna-fix-d01).
 
 ## Renderer boundary
 
@@ -157,11 +150,3 @@ Stable fixture names are the maintained evidence:
 - focused renderer tests cover fog, shader dispatch, vertex color, null binding and real discard.
 
 Use the private GPU runner described in the repository instructions for every rendered test.
-
-## Historical task map
-
-Tasks 371-379 established the original property, comparison, material-source, fog and null-texture
-coverage. Task 1111 corrected the shared view-space fog formula; SOFTWARE-303 replaced the invented
-white null sample with measured opaque black; WEBGPU-174 established the shared rendered parity
-fixtures. All of that work is closed. Git history is the detailed narrative; this page and the
-executable evidence above are the maintained contract.

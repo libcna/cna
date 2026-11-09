@@ -1,8 +1,5 @@
 # WEBGL2 renderer
 
-Status: current profile contract, reconciled with the renderer registry, live capability queries,
-EasyGL implementation and browser qualification on **2026-10-31**.
-
 `WEBGL2` is CNA's supported-class browser WebGL 2 identity. It is Emscripten-only and is the
 default renderer under that toolchain. The implementation is the shared EasyGL family in
 `modules/renderers/easygl/`, which also serves the native `OPENGLES3` and `OPENGL33` identities;
@@ -90,7 +87,7 @@ browser `WEBGPU` route is in [`webgpu-renderer.md`](webgpu-renderer.md).
 
 ## Qualification and current boundaries
 
-- The current reproducible browser gate uses headless Chrome. The C ABI probe fetches and instantiates
+- The reproducible browser gate uses headless Chrome. The C ABI probe fetches and instantiates
   the module over HTTP, verifies the `WEBGL2` identity and a real `WebGL2RenderingContext`, drives
   the shared Game tick through animation frames, clears/presents, exercises a stock-effect MRT
   draw with readback, and checks clean lifecycle and teardown.
@@ -107,14 +104,10 @@ browser `WEBGPU` route is in [`webgpu-renderer.md`](webgpu-renderer.md).
   Logical resize requests preserve the browser-owned fullscreen canvas size. The default
   standard-resolution canvas, other-browser and pthread qualifications are described in
   [the web canvas contract](web-emscripten-graphics-limitations.md#canvas-and-display-model).
-- `Texture3D` now joins the shared EasyGL recovery registry and restores every mip from its CPU
-  shadow. The new [volume recovery regressions](texture3d-texturecube-support.md#easygl-context-recovery)
-  run on native OpenGLES3/OpenGL33; a volume-specific asynchronous browser recovery run remains
+- `Texture3D` joins the shared EasyGL recovery registry and restores every mip from its CPU
+  shadow. The [volume recovery regressions](texture3d-texturecube-support.md#easygl-context-recovery)
+  run on native OpenGLES3/OpenGL33; a volume-specific asynchronous browser recovery run is
   unqualified.
-
-The shared EasyGL One/Zero blend shortcut now retains independent colour/alpha equations
-(CNA-FIX-D24). Its ordinary-RGBA witness is checked on native OpenGLES3/OpenGL33 against measured
-XNA; this repair did not rerun the browser harness.
-
-Historical campaign IDs, fixed exception/link failures and one-off suite counts belong in Git
-history. This page describes the current renderer contract.
+- The shared EasyGL One/Zero blend path keeps independent colour/alpha equations (CNA-FIX-D24).
+  Its ordinary-RGBA witness against measured XNA runs on native OpenGLES3/OpenGL33, not in the
+  browser harness.

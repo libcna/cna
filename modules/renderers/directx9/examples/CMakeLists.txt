@@ -370,7 +370,7 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "DIRECTX9")
     # cna_directx9_ctest_command() like every other D3D9 test here -- it is NOT a device-free binary
     # that can skip the wrapper. Critically, it must run against ~/.wine-cna-d3d9-spike
     # specifically: the default CNA_D3D9_WINEPREFIX (~/.wine-cna-d3d11) only has Wine's OWN builtin
-    # d3dcompiler_47.dll, which cannot compile SM2/SM3 shaders at all (docs/directx9-renderer.md) -- the
+    # d3dcompiler_47.dll, which cannot compile SM2/SM3 shaders at all -- the
     # real Microsoft compiler this test's whole premise depends on only lives in the spike prefix.
     cna_directx9_test(cna_test_directx9_constanttable directx9_constanttable_test.cpp)
     target_link_libraries(cna_test_directx9_constanttable PRIVATE d3dcompiler)

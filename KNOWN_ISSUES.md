@@ -56,6 +56,18 @@ page under `docs/` (index: `docs/README.md`), deliberate divergences from FNA an
   (fork 4ff109a), and the SDL GPU driver clears the swapchain outside a partial destination
   (fork 76a76cf). CNA still refuses a non-default Present on FNA3D.
 
+- **`DIRECTX9` compiled effects: `LegacyBumpEnvironment` fails under Wine/DXVK 3.1.1, unattributed**
+  (`CNA_DIRECTX9_COMPILED_EFFECTS=ON`; the option stays default OFF). Four assertions fail: both TEXBEM
+  off-diagonal lookups and the red/green channels of ps_1_4 BEM arithmetic. The diagonal, zero-matrix/LOD,
+  luminance and retained-state checks in the same case pass, as do the policy gate, the rest of the shared
+  corpus, the focused DirectX9 gate and the full renderer binary. The TEXBEM equation is
+  u' = u + m00·du + m10·dv, v' = v + m01·du + m11·dv; CNA passes the native bump-matrix 00/01/10/11 states as
+  FLOAT bit patterns (`std::bit_cast<DWORD>`). The native state readback returns what CNA set, yet the host's
+  pixels match swapped off-diagonals; the translator/driver fault has not been isolated and no real Windows
+  hardware run exists. Keep the pixel assertions strict: no matrix transpose, no native opcode refusal (TEXBEM
+  is a real ps_1_1-1_3 instruction), and no environment skip counted as a corpus pass. The compiled-effect
+  qualification per family is `docs/fx-compiled-effects.md` §16.
+
 ### Divergences from XNA found on 2026-11-09, not fixed
 
 - XACT: effect families 4/6 and loop-region waves unmeasured (banks authored in

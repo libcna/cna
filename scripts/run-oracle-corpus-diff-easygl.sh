@@ -9,18 +9,17 @@
 # Deliberately does NOT go through scripts/run-wine-dxvk9.sh at all: this binary is a native Linux
 # ELF executable (EasyGL/OpenGL, no Wine/DXVK/D3D9 involved), unlike the D3D9-branch's own
 # cna_oracle_render.exe. It needs a real X11 display to create its window (same requirement every
-# other EasyGL CTest in CMakeLists.txt already has -- see CNA_TEST_DISPLAY), so SDL_VIDEODRIVER=x11
-# and DISPLAY are set for every invocation below, defaulting to :0 (this project's own CNA_TEST_DISPLAY
-# default) unless the caller already exported DISPLAY.
+# other EasyGL CTest has), so SDL_VIDEODRIVER=x11 and DISPLAY are set for every invocation below;
+# DISPLAY falls back to :0 only when the caller exported none. Run it through
+# tools/platform/run_gpu_tests_private.sh, never against the live desktop.
 #
-# Unlike D3D9's own D3D9_XNA_Diff CTest (scripts/run-oracle-corpus-diff.sh, wired into CMakeLists.txt
-# as a real add_test()), this script is NOT registered as a CTest -- D9-A6's own task description is a
-# one-time cross-renderer measurement ("record the deltas"), not a new permanently-enforced pixel-exact
-# gate; EasyGL is not expected to be pixel-identical to real XNA the way D3D9/DXVK is (see
-# docs/d3d9-divergence-report.md's "Cross-renderer measurement (D9-A6)" section for the actual
-# per-scene results and root-cause guesses). Never widen --tolerance below to turn a red comparison
-# green without a documented, per-scene reason -- same discipline xna-diff.py's own header already
-# states.
+# Unlike D3D9's own D3D9_XNA_Diff CTest (scripts/run-oracle-corpus-diff.sh), the whole-corpus run is
+# a cross-renderer measurement, not a pixel-exact gate: EasyGL is not expected to be pixel-identical
+# to real XNA the way D3D9/DXVK is. Only the scene subset named by EasyGL_XnaLineCoverage
+# (SOFTWARE-344's two aliased-line scenes) is registered as a CTest. See
+# docs/d3d9-divergence-report.md's "Cross-renderer measurement (D9-A6)" section for what the
+# measurement found. Never widen --tolerance below to turn a red comparison green without a
+# documented, per-scene reason -- same discipline xna-diff.py's own header already states.
 #
 # Usage: scripts/run-oracle-corpus-diff-easygl.sh <path-to-cna_oracle_render_easygl> [scene ...]
 
