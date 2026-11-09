@@ -118,14 +118,14 @@ namespace
     // for XA-2, a leak in that branch) -- give it a distinct bankName so it doesn't collide with
     // "TestWaveBank" in AudioEngine::RegisterWaveBank's name-keyed registry.
     std::vector<uint8_t> BuildXwbFixtureBytes(const std::string& bankName = kWaveBankName,
-                                               bool eightBitPcm = false)
+                                               bool eightBitPcm = false,
+                                               uint32_t waveDataLength = 200)
     {
         constexpr uint32_t headerSize       = 48;
         constexpr uint32_t bankDataSize     = 96;
         constexpr uint32_t entryCount       = 1;
         constexpr uint32_t entryMetaDataSize = 4;
         constexpr uint32_t entryMetaSegSize = entryCount * entryMetaDataSize;
-        constexpr uint32_t waveDataLength   = 200;
         constexpr uint32_t alignment        = 4;
 
         const uint32_t segOffset[5] = {
@@ -412,6 +412,28 @@ namespace
         static const std::string path = WriteFixture(
             "cna_wavebank_test", "fixture8bit.xsb",
             BuildXsbFixtureBytes(kWaveBank8BitName, kCue8BitName));
+        return path;
+    }
+
+    // Four seconds of 16-bit mono silence. The default entry is 100 frames, which the dummy
+    // driver's first callback can consume between Play and Pause; a naturally finished cue is then
+    // (correctly) not paused.
+    constexpr const char* kLongWaveBankName = "TestWaveBankLong";
+    constexpr const char* kLongCueName      = "Hold";
+
+    const std::string& LongXwbFixturePath()
+    {
+        static const std::string path = WriteFixture(
+            "cna_wavebank_test", "fixturelong.xwb",
+            BuildXwbFixtureBytes(kLongWaveBankName, /*eightBitPcm=*/false, 4u * 44100u * 2u));
+        return path;
+    }
+
+    const std::string& LongXsbFixturePath()
+    {
+        static const std::string path = WriteFixture(
+            "cna_wavebank_test", "fixturelong.xsb",
+            BuildXsbFixtureBytes(kLongWaveBankName, kLongCueName));
         return path;
     }
 
@@ -1354,11 +1376,11 @@ TEST(WaveBankTest, IsInUseTrueWhilePausedNotJustWhilePlaying)
     try
     {
         AudioEngine& engine = SharedEngine();
-        WaveBank wb(&engine, XwbFixturePath());
+        WaveBank wb(&engine, LongXwbFixturePath());
         ASSERT_TRUE(wb.getIsPreparedProperty());
-        SoundBank sb(&engine, XsbFixturePath());
+        SoundBank sb(&engine, LongXsbFixturePath());
 
-        std::unique_ptr<Cue> cue(sb.GetCue("Boom"));
+        std::unique_ptr<Cue> cue(sb.GetCue(kLongCueName));
         cue->Play();
 
         if (!wb.getIsInUseProperty())
