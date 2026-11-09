@@ -12,7 +12,7 @@ or renamed module stops this gate rather than inheriting a default. Paths whose 
 are `Internal` or `Detail` in any capitalization are excluded as implementation detail.
 No symbol counts as implemented merely because a related C operation exists.
 
-Snapshot: **467 headers**, **8153 symbols**, **7510 implemented**, **17 partial**, **5 planned**, **621 not applicable**. Explicitly excluded headers: **424**.
+Snapshot: **467 headers**, **8153 symbols**, **7510 implemented**, **17 partial**, **5 planned**, **621 not applicable**. Explicitly excluded headers: **425**.
 
 ## Planned coverage work
 
@@ -42,7 +42,7 @@ not counted above, and their declarations are not missing C bindings.
 | `modules/renderers/**` | 67 | renderer implementations are hidden behind `IGraphicsRenderer` by project policy; a C caller selects a renderer by identity (`CNA_GraphicsRendererType`) and never names an implementation |
 | `modules/audio` internal/detail paths | 13 | implementation detail: a path segment is `Internal` or `Detail` |
 | `modules/content` internal/detail paths | 50 | implementation detail: a path segment is `Internal` or `Detail` |
-| `modules/core` internal/detail paths | 11 | implementation detail: a path segment is `Internal` or `Detail` |
+| `modules/core` internal/detail paths | 12 | implementation detail: a path segment is `Internal` or `Detail` |
 | `modules/devices` internal/detail paths | 14 | implementation detail: a path segment is `Internal` or `Detail` |
 | `modules/devices-ext` internal/detail paths | 1 | implementation detail: a path segment is `Internal` or `Detail` |
 | `modules/gamer-services` internal/detail paths | 16 | implementation detail: a path segment is `Internal` or `Detail` |
@@ -55,7 +55,7 @@ not counted above, and their declarations are not missing C bindings.
 | `modules/content/CNA/Content/Import` | 1 | CBIND-117, owner decision 2026-09-18: build-time asset importers |
 | `modules/content/CNA/Content/Pipeline` | 14 | CBIND-117, owner decision 2026-09-18: build-time content compilers and build configuration |
 
-Full inventory SHA-256: `77091406a0f7df7398f22c4d8ca2c8c41017e73856670e250852e61a36c6e332`.
+Full inventory SHA-256: `e7ca7aa62e92b35ebcba7e068a091d2cc1b999ebe964cf5fd4a7e0eaf834babb`.
 
 The complete per-symbol Markdown is generated on demand into the ignored build tree so
 that a multi-megabyte derived file is not recommitted whenever one public declaration moves:
