@@ -9,6 +9,7 @@
 #include <algorithm>
 #include <chrono>
 #include <cmath>
+#include <utility>
 #include <vector>
 
 namespace
@@ -61,6 +62,38 @@ namespace
     GestureState state                = GestureState::NONE;
     TimePoint   updateTimestamp       = {};
     Vector2     velocity              = Vector2::Zero;
+    // Every held finger's latest location, so a pinch's replacement second finger starts from
+    // where it is rather than where the departed finger was (HND-TQ-10).
+    std::vector<std::pair<int, Vector2>> fingerPositions;
+
+    void RecordFingerPosition(int fingerId, Vector2 position)
+    {
+        for (auto& entry : fingerPositions)
+        {
+            if (entry.first == fingerId)
+            {
+                entry.second = position;
+                return;
+            }
+        }
+        fingerPositions.emplace_back(fingerId, position);
+    }
+
+    void ForgetFingerPosition(int fingerId)
+    {
+        fingerPositions.erase(std::remove_if(fingerPositions.begin(), fingerPositions.end(),
+                                             [fingerId](const auto& entry) { return entry.first == fingerId; }),
+                              fingerPositions.end());
+    }
+
+    Vector2 LatestFingerPosition(int fingerId, Vector2 fallback)
+    {
+        for (const auto& entry : fingerPositions)
+        {
+            if (entry.first == fingerId) return entry.second;
+        }
+        return fallback;
+    }
 
     // --- helpers ---
 
@@ -110,6 +143,10 @@ namespace
             if (id != activeFingerId)
             {
                 secondFingerId = id;
+                // Owner decision 2026-11-09 (HND-TQ-10): the replacement finger's own latest
+                // location, at once. FNA keeps the departed finger's position until the
+                // replacement moves; XNA's shipped touch assembly has no recognizer to settle it.
+                secondFingerPosition = LatestFingerPosition(id, secondFingerPosition);
                 replaced = true;
                 break;
             }
@@ -154,6 +191,7 @@ namespace CNA::Internal::Input
     void GestureDetector::OnPressed(int fingerId, Vector2 touchPosition)
     {
         fingerIds.push_back(fingerId);
+        RecordFingerPosition(fingerId, touchPosition);
 
         if (state == GestureState::PINCHING)
             return;
@@ -205,6 +243,7 @@ namespace CNA::Internal::Input
     void GestureDetector::OnReleased(int fingerId, Vector2 touchPosition)
     {
         fingerIds.erase(std::remove(fingerIds.begin(), fingerIds.end(), fingerId), fingerIds.end());
+        ForgetFingerPosition(fingerId);
 
         if (state == GestureState::PINCHING)
         {
@@ -307,6 +346,7 @@ namespace CNA::Internal::Input
 
     void GestureDetector::OnMoved(int fingerId, Vector2 touchPosition, Vector2 delta)
     {
+        RecordFingerPosition(fingerId, touchPosition);
         if (state == GestureState::PINCHING)
         {
             OnMoved_Pinch(fingerId, touchPosition, delta);
@@ -437,6 +477,7 @@ namespace CNA::Internal::Input
         callBelatedPinchComplete = false;
         eventTimestamp           = TimePoint{};
         fingerIds.clear();
+        fingerPositions.clear();
         justDoubleTapped         = false;
         lastUpdatePosition       = Vector2::Zero;
         pressPosition            = Vector2::Zero;

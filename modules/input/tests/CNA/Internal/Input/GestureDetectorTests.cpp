@@ -990,6 +990,50 @@ TEST_F(GestureDetectorTest, Tq019PinchSecondaryMotionHasIndependentDeltaAndIgnor
     EXPECT_FALSE(TouchPanel::getIsGestureAvailableProperty());
 }
 
+// HND-TQ-10, owner decision 2026-11-09: when the second finger of a pinch leaves while a third is
+// held, the third becomes the second at once with its own latest location -- where it was pressed
+// if it never moved, where it last moved otherwise -- so the next Pinch from the first finger
+// carries that location as Position2. FNA keeps the departed finger's position until the
+// replacement moves; XNA's shipped touch assembly has no recognizer that settles it.
+TEST_F(GestureDetectorTest, AReplacementSecondFingerStartsFromItsOwnLatestLocation)
+{
+    TouchPanel::setEnabledGesturesProperty(GestureType::Pinch | GestureType::PinchComplete);
+    GestureDetector::OnPressed(120, Vector2(100, 200));
+    GestureDetector::OnPressed(121, Vector2(300, 400));
+    GestureDetector::OnPressed(122, Vector2(500, 600));
+    GestureDetector::OnMoved(122, Vector2(510, 620), Vector2(10, 20));
+    EXPECT_FALSE(TouchPanel::getIsGestureAvailableProperty());
+    GestureDetector::OnReleased(121, Vector2(300, 400));
+    ASSERT_TRUE(TouchPanel::getIsGestureAvailableProperty());
+    EXPECT_EQ(TouchPanel::ReadGesture().getGestureTypeProperty(), GestureType::PinchComplete);
+    GestureDetector::OnMoved(120, Vector2(110, 205), Vector2(10, 5));
+    ASSERT_TRUE(TouchPanel::getIsGestureAvailableProperty());
+    const auto moved = TouchPanel::ReadGesture();
+    EXPECT_EQ(moved.getGestureTypeProperty(), GestureType::Pinch);
+    EXPECT_EQ(moved.getPositionProperty(), Vector2(110, 205));
+    EXPECT_EQ(moved.getPosition2Property(), Vector2(510, 620));
+    EXPECT_EQ(moved.getDeltaProperty(), Vector2(10, 5));
+    EXPECT_EQ(moved.getDelta2Property(), Vector2::Zero);
+    EXPECT_EQ(moved.getFingerIdEXTProperty(), 120);
+    EXPECT_EQ(moved.getFingerId2EXTProperty(), 122);
+    GestureDetector::OnReleased(122, Vector2(510, 620));
+    GestureDetector::OnReleased(120, Vector2(110, 205));
+    while (TouchPanel::getIsGestureAvailableProperty()) (void)TouchPanel::ReadGesture();
+
+    // A replacement that never moved starts from where it was pressed.
+    GestureDetector::OnPressed(123, Vector2(100, 200));
+    GestureDetector::OnPressed(124, Vector2(300, 400));
+    GestureDetector::OnPressed(125, Vector2(700, 50));
+    GestureDetector::OnReleased(124, Vector2(300, 400));
+    while (TouchPanel::getIsGestureAvailableProperty()) (void)TouchPanel::ReadGesture();
+    GestureDetector::OnMoved(123, Vector2(101, 201), Vector2(1, 1));
+    ASSERT_TRUE(TouchPanel::getIsGestureAvailableProperty());
+    const auto still = TouchPanel::ReadGesture();
+    EXPECT_EQ(still.getGestureTypeProperty(), GestureType::Pinch);
+    EXPECT_EQ(still.getPosition2Property(), Vector2(700, 50));
+    EXPECT_EQ(still.getFingerId2EXTProperty(), 125);
+}
+
 TEST_F(GestureDetectorTest, Tq019DisablingPinchDefersCompleteUntilAllThreeFingersLeave)
 {
     // FNA GestureDetector.cs:27-34,194-198,303-316,457-472; source documents measured XNA intent.

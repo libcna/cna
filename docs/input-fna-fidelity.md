@@ -363,7 +363,12 @@ from the fake-backend unit tests above.
 
 ## Gestures
 
-`GestureDetector` reproduces FNA's tap / double-tap / hold / drag / flick / pinch state machine.
+`GestureDetector` reproduces FNA's tap / double-tap / hold / drag / flick / pinch state machine,
+with one owner-chosen difference (HND-TQ-10, 2026-11-09): when a pinch's second finger leaves while
+another finger is held, that finger becomes the second at once with its own latest location, so the
+next `Pinch` reports it as `Position2`; FNA keeps the departed finger's position until the replacement
+moves. XNA's shipped touch assembly contains no recognizer that settles this
+(`GestureDetectorTest.AReplacementSecondFingerStartsFromItsOwnLatestLocation`).
 Covered by `GestureDetectorTests` and the end-to-end `PlatformInputBridgeTouchGestureTest` suite (including the
 new `FINGER_CANCELED` release path). Broader parameterized regression coverage across every gesture
 type + interruption is partial (task 906).
