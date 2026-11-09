@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 #include <gtest/gtest.h>
+#include "Microsoft/Xna/Framework/Color.hpp"
 #include <optional>
 #include <string>
 #include <algorithm>
@@ -37,14 +38,20 @@ TEST(Gap08PresentDispatch, DefaultOverloadDispatchesOrdinaryPresentExactlyOnce)
     auto& renderer = dynamic_cast<HeadlessRenderer&>(device.GetRenderer());
     renderer.SetMode(HeadlessMode::Trace);
     const auto count = renderer.GetStatistics().presentCount;
-    const auto traceSize = renderer.TraceLog().size();
+    // HND-TQ-47 R1: Present IL_003e-0047 first performs a pending lazy clear (a native Clear) and
+    // IL_009e-00a5 arm it again, so clear the frame before each measured Present to leave nothing
+    // pending and see the one native present the call itself dispatches.
+    device.Clear(Microsoft::Xna::Framework::Color::Black);
+    auto traceSize = renderer.TraceLog().size();
     // Refresh GraphicsDevice.Present() IL_0000-0009 passes three nulls to the same core.
     device.Present(std::nullopt, std::nullopt, 0);
     ASSERT_EQ(renderer.TraceLog().size(), traceSize + 1);
     EXPECT_EQ(renderer.TraceLog().back().method, "Present");
     EXPECT_EQ(renderer.GetStatistics().presentCount, count + 1);
+    device.Clear(Microsoft::Xna::Framework::Color::Black);
+    traceSize = renderer.TraceLog().size();
     device.Present();
-    ASSERT_EQ(renderer.TraceLog().size(), traceSize + 2);
+    ASSERT_EQ(renderer.TraceLog().size(), traceSize + 1);
     EXPECT_EQ(renderer.TraceLog().back().method, "Present");
     EXPECT_EQ(renderer.GetStatistics().presentCount, count + 2);
 }

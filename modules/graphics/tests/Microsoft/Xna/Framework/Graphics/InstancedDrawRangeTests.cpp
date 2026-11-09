@@ -76,6 +76,7 @@ using namespace CNA::Testing::Renderers;
 #include "Microsoft/Xna/Framework/Graphics/PrimitiveType.hpp"
 #include "Microsoft/Xna/Framework/Graphics/RasterizerState.hpp"
 #include "Microsoft/Xna/Framework/Graphics/RenderTarget2D.hpp"
+#include "Microsoft/Xna/Framework/Graphics/PresentationParameters.hpp"
 #include "Microsoft/Xna/Framework/Graphics/RenderTargetUsage.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SamplerState.hpp"
 #include "Microsoft/Xna/Framework/Graphics/ShaderEffect.hpp"
@@ -1575,6 +1576,17 @@ TEST_F(InstancedDrawRangeTest, RequiredInstancedCountsAndNativeRangesRemainDisti
 TEST_F(InstancedDrawRangeTest, InstancedDrawIntoRenderTargetKeepsItsRangeAndInstances)
 {
     RequireInstancedRendering();
+    // HND-TQ-47 R1: this test reads the back buffer after a render-target round trip. XNA discards
+    // a DiscardContents back buffer on return from a target (SetRenderTargets IL_0260-027d) and
+    // after each successful read (GetBackBufferData IL_01da-01ee); preserving it keeps the probe
+    // of what the target-only draw left behind meaningful.
+    {
+        Microsoft::Xna::Framework::Graphics::PresentationParameters preserving =
+            device.getPresentationParametersProperty().Clone();
+        preserving.setRenderTargetUsageProperty(
+            Microsoft::Xna::Framework::Graphics::RenderTargetUsage::PreserveContents);
+        device.Reset(preserving);
+    }
 
     const GridLayout layout = BackbufferLayout();
     const InstancedFixture fixture = BuildFixture(layout);

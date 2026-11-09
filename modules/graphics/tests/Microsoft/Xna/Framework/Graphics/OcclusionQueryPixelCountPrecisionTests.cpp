@@ -28,6 +28,7 @@
 #include "Microsoft/Xna/Framework/Graphics/GraphicsProfile.hpp"
 #include "Microsoft/Xna/Framework/Graphics/OcclusionQuery.hpp"
 #include "Microsoft/Xna/Framework/Graphics/PresentationParameters.hpp"
+#include "Microsoft/Xna/Framework/Graphics/RenderTargetUsage.hpp"
 #include "Microsoft/Xna/Framework/Graphics/PrimitiveType.hpp"
 #include "Microsoft/Xna/Framework/Graphics/RasterizerState.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexPositionColor.hpp"
@@ -107,11 +108,22 @@ namespace
             "XNA Framework Reach profile does not support OcclusionQuery.");
     }
 
+    PresentationParameters PreservingBackBuffer()
+    {
+        PresentationParameters parameters = PresentationParameters::CreateWindowedEXT(800, 480);
+        // HND-TQ-47 R1: these probes read the back buffer more than once. XNA discards a DiscardContents
+        // back buffer after each successful read (GetBackBufferData IL_01da-01ee) and on return from a
+        // render target (SetRenderTargets IL_0260-027d); preserving it keeps every probe meaningful.
+        parameters.setRenderTargetUsageProperty(
+            Microsoft::Xna::Framework::Graphics::RenderTargetUsage::PreserveContents);
+        return parameters;
+    }
+
     class OcclusionQueryPixelCountPrecisionTest : public ::testing::Test
     {
     protected:
         GraphicsDevice device{GraphicsAdapter::getDefaultAdapterProperty(), GraphicsProfile::HiDef,
-                              PresentationParameters::CreateWindowedEXT(800, 480)};
+                              PreservingBackBuffer()};
 
         void SetUp() override
         {

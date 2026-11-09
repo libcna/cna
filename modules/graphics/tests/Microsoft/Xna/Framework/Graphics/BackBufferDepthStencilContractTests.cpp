@@ -55,6 +55,10 @@ namespace
         parameters.setBackBufferHeightProperty(16);
         parameters.setDepthStencilFormatProperty(depthFormat);
         parameters.setMultiSampleCountProperty(samples);
+        // HND-TQ-47 R1: these probes read the back buffer more than once. XNA discards a DiscardContents
+        // back buffer after each successful read (GetBackBufferData IL_01da-01ee) and on return from a
+        // render target (SetRenderTargets IL_0260-027d); preserving it keeps every probe meaningful.
+        parameters.setRenderTargetUsageProperty(RenderTargetUsage::PreserveContents);
         return parameters;
     }
 

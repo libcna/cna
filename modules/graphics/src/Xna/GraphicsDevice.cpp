@@ -529,6 +529,9 @@ namespace Microsoft::Xna::Framework::Graphics
                 depthStencilState_ = DepthStencilState::Default;
             }
             setRasterizerStateProperty(RasterizerState::CullCounterClockwise);
+            // Refresh InitializeDeviceState IL_0097-009e: a new back buffer is pending its
+            // discard clear until the first draw, Clear, read or Present.
+            backBufferLazyClearFlags_ = GetDefaultClearOptions();
             restoreCallerGlBinding();
         }
         catch (...)
@@ -737,6 +740,9 @@ namespace Microsoft::Xna::Framework::Graphics
             // The CNAEXT float overload is a target clear like Clear(Color); it ends the bound
             // targets' lost state the way XNA's Clear IL_01e4-020f does.
             ClearBoundRenderTargetsContentLostInternal();
+            // ... and, on the back buffer, its pending Target clear (Clear IL_020f-0219).
+            if (!renderTargetBound_)
+                backBufferLazyClearFlags_ = backBufferLazyClearFlags_ & ~ClearOptions::Target;
         }
     }
 
@@ -753,7 +759,27 @@ namespace Microsoft::Xna::Framework::Graphics
         // state ends -- whichever planes were cleared. A refused clear (missing depth/stencil,
         // IL_01d1-01db in XNA) throws before that and leaves it set.
         if (ClearSurfacesInternal(options, color, depth, stencil))
+        {
             ClearBoundRenderTargetsContentLostInternal();
+            // Clear IL_020f-0219: lazyClearFlags &= ~options. Clear itself never performs the
+            // pending clear first; whatever it did not clear stays pending on the back buffer.
+            if (!renderTargetBound_)
+                backBufferLazyClearFlags_ = backBufferLazyClearFlags_ & ~options;
+        }
+    }
+
+    void GraphicsDevice::ApplyPendingBackBufferClearInternal()
+    {
+        if (renderTargetBound_ || backBufferLazyClearFlags_ == static_cast<ClearOptions>(0))
+            return;
+        // The word is armed from DefaultClearOptions; mask it again so a later change of the
+        // back buffer's depth/stencil availability cannot turn the discard into a refused Clear.
+        const ClearOptions pending = backBufferLazyClearFlags_ & GetDefaultClearOptions();
+        // Refresh ClearDirtyBuffers IL_0000-0036: the shipped discard colour, through the public
+        // Clear (which also removes the cleared aspects); IL_0119-011b then zero the word.
+        if (pending != static_cast<ClearOptions>(0))
+            Clear(pending, Color(68, 34, 136, 255), 1.0f, 0);
+        backBufferLazyClearFlags_ = static_cast<ClearOptions>(0);
     }
 
     bool GraphicsDevice::ClearSurfacesInternal(
@@ -839,7 +865,12 @@ namespace Microsoft::Xna::Framework::Graphics
         if (renderer_ != nullptr)
         {
             auto contextLease = AcquireRendererThreadContextLease();
+            // Refresh Present IL_003e-0047: a frame nothing cleared or drew into presents the
+            // discard clear.
+            ApplyPendingBackBufferClearInternal();
             renderer_->Present();
+            // IL_009e-00a5: once presented, the back buffer is discarded again.
+            backBufferLazyClearFlags_ = GetDefaultClearOptions();
             UpdateViewportFromWindow();
         }
     }
@@ -1029,6 +1060,8 @@ namespace Microsoft::Xna::Framework::Graphics
         }
 
         auto contextLease = AcquireRendererThreadContextLease();
+        // The same Present core (IL_003e-0047) as the ordinary overload.
+        ApplyPendingBackBufferClearInternal();
         if (!renderer_->PresentRegionEXT(region))
         {
             // Refusing rather than presenting the whole frame: a caller that asked for part of it,
@@ -1053,6 +1086,8 @@ namespace Microsoft::Xna::Framework::Graphics
                 ". Present() with no arguments presents the whole backbuffer to the device's own "
                 "window, which every renderer supports.");
         }
+        // IL_009e-00a5, after a region present that happened.
+        backBufferLazyClearFlags_ = GetDefaultClearOptions();
         UpdateViewportFromWindow();
     }
 
@@ -1201,6 +1236,8 @@ namespace Microsoft::Xna::Framework::Graphics
         blendStateDirty_ = true;
         depthStencilStateDirty_ = true;
         rasterizerStateDirty_ = true;
+        // Refresh Reset IL_00e5-00ee then InitializeDeviceState (IL_028d): pending again.
+        backBufferLazyClearFlags_ = GetDefaultClearOptions();
         DeviceReset.Raise(this, System::EventArgs::Empty);
     }
 
@@ -2156,6 +2193,7 @@ namespace Microsoft::Xna::Framework::Graphics
         // XNA DrawPrimitives IL_0050 calls VerifyCanDraw right after its argument checks, and
         // VerifyCanDraw IL_0011-003e ends the lost state of the bound targets before its own
         // state checks (no effect, no vertex buffer) can refuse the draw.
+        ApplyPendingBackBufferClearInternal();   // VerifyCanDraw IL_0000-0009
         ClearBoundRenderTargetsContentLostInternal();
 
         const int consumedVertexCount =
@@ -2249,6 +2287,7 @@ namespace Microsoft::Xna::Framework::Graphics
             throw System::ArgumentOutOfRangeException("primitiveCount", "When drawing, at least one primitive must be drawn.");
         ValidateProfilePrimitiveCount(graphicsProfile_, primitiveCount);
         // XNA DrawIndexedPrimitives IL_0067: VerifyCanDraw, which clears ContentLost first.
+        ApplyPendingBackBufferClearInternal();   // VerifyCanDraw IL_0000-0009
         ClearBoundRenderTargetsContentLostInternal();
 
         const int consumedIndexCount =
@@ -2389,6 +2428,7 @@ namespace Microsoft::Xna::Framework::Graphics
             throw System::ArgumentOutOfRangeException("instanceCount", "When drawing, at least one primitive must be drawn.");
         ValidateProfilePrimitiveCount(graphicsProfile_, instanceCount);
         // XNA DrawInstancedPrimitives IL_00ab: VerifyCanDraw, which clears ContentLost first.
+        ApplyPendingBackBufferClearInternal();   // VerifyCanDraw IL_0000-0009
         ClearBoundRenderTargetsContentLostInternal();
 
         const int consumedIndexCount =
@@ -2531,6 +2571,7 @@ namespace Microsoft::Xna::Framework::Graphics
             vertexData, vertexOffset, primitiveType, primitiveCount,
             static_cast<std::int64_t>(sizeof(VertexPositionColor)), graphicsProfile_);
         BeginUserPrimitiveBindings(currentVertexBuffers_, currentVertexBuffer_);
+        ApplyPendingBackBufferClearInternal();   // VerifyCanDraw IL_0000-0009
         ClearBoundRenderTargetsContentLostInternal();
         if (currentEffect_ == nullptr)
             throw System::InvalidOperationException(
@@ -2593,6 +2634,7 @@ namespace Microsoft::Xna::Framework::Graphics
             primitiveCount, static_cast<std::int64_t>(sizeof(VertexPositionColor)),
             static_cast<std::int64_t>(sizeof(std::uint16_t)), graphicsProfile_);
         BeginUserPrimitiveBindings(currentVertexBuffers_, currentVertexBuffer_);
+        ApplyPendingBackBufferClearInternal();   // VerifyCanDraw IL_0000-0009
         ClearBoundRenderTargetsContentLostInternal();
         if (currentEffect_ == nullptr)
             throw System::InvalidOperationException(
@@ -2904,6 +2946,7 @@ namespace Microsoft::Xna::Framework::Graphics
             data, offset, type, count, static_cast<std::int64_t>(sizeof(VertexPositionColor)),
             graphicsProfile_);
         BeginUserPrimitiveBindings(currentVertexBuffers_, currentVertexBuffer_);
+        ApplyPendingBackBufferClearInternal();   // VerifyCanDraw IL_0000-0009
         ClearBoundRenderTargetsContentLostInternal();
         if (!currentEffect_)
             throw System::InvalidOperationException(
@@ -2941,6 +2984,7 @@ namespace Microsoft::Xna::Framework::Graphics
             data, offset, type, count, static_cast<std::int64_t>(sizeof(VertexPositionTexture)),
             graphicsProfile_);
         BeginUserPrimitiveBindings(currentVertexBuffers_, currentVertexBuffer_);
+        ApplyPendingBackBufferClearInternal();   // VerifyCanDraw IL_0000-0009
         ClearBoundRenderTargetsContentLostInternal();
         if (!currentEffect_)
             throw System::InvalidOperationException(
@@ -2978,6 +3022,7 @@ namespace Microsoft::Xna::Framework::Graphics
             data, offset, type, count,
             static_cast<std::int64_t>(sizeof(VertexPositionColorTexture)), graphicsProfile_);
         BeginUserPrimitiveBindings(currentVertexBuffers_, currentVertexBuffer_);
+        ApplyPendingBackBufferClearInternal();   // VerifyCanDraw IL_0000-0009
         ClearBoundRenderTargetsContentLostInternal();
         if (!currentEffect_)
             throw System::InvalidOperationException(
@@ -3015,6 +3060,7 @@ namespace Microsoft::Xna::Framework::Graphics
             data, offset, type, count,
             static_cast<std::int64_t>(sizeof(VertexPositionNormalTexture)), graphicsProfile_);
         BeginUserPrimitiveBindings(currentVertexBuffers_, currentVertexBuffer_);
+        ApplyPendingBackBufferClearInternal();   // VerifyCanDraw IL_0000-0009
         ClearBoundRenderTargetsContentLostInternal();
         if (!currentEffect_)
             throw System::InvalidOperationException(
@@ -3060,6 +3106,7 @@ namespace Microsoft::Xna::Framework::Graphics
         const int n      = ValidateUserPrimitiveArguments(
             vertexData, vertexOffset, type, primitiveCount, stride, graphicsProfile_);
         BeginUserPrimitiveBindings(currentVertexBuffers_, currentVertexBuffer_);
+        ApplyPendingBackBufferClearInternal();   // VerifyCanDraw IL_0000-0009
         ClearBoundRenderTargetsContentLostInternal();
         if (!currentEffect_)
             throw System::InvalidOperationException(
@@ -3109,6 +3156,7 @@ namespace Microsoft::Xna::Framework::Graphics
             vertexData, vertexOffset, type, primitiveCount,
             static_cast<std::int64_t>(sizeof(VertexT)), graphicsProfile_);
         BeginUserPrimitiveBindings(currentVertexBuffers_, currentVertexBuffer_);
+        ApplyPendingBackBufferClearInternal();   // VerifyCanDraw IL_0000-0009
         ClearBoundRenderTargetsContentLostInternal();
         if (!currentEffect_)
             throw System::InvalidOperationException(
@@ -3178,6 +3226,7 @@ namespace Microsoft::Xna::Framework::Graphics
             static_cast<std::int64_t>(sizeof(VertexPositionColor)),
             static_cast<std::int64_t>(sizeof(std::uint16_t)), graphicsProfile_);
         BeginUserPrimitiveBindings(currentVertexBuffers_, currentVertexBuffer_);
+        ApplyPendingBackBufferClearInternal();   // VerifyCanDraw IL_0000-0009
         ClearBoundRenderTargetsContentLostInternal();
         if (!currentEffect_)
             throw System::InvalidOperationException(
@@ -3221,6 +3270,7 @@ namespace Microsoft::Xna::Framework::Graphics
             static_cast<std::int64_t>(sizeof(VertexPositionTexture)),
             static_cast<std::int64_t>(sizeof(std::uint16_t)), graphicsProfile_);
         BeginUserPrimitiveBindings(currentVertexBuffers_, currentVertexBuffer_);
+        ApplyPendingBackBufferClearInternal();   // VerifyCanDraw IL_0000-0009
         ClearBoundRenderTargetsContentLostInternal();
         if (!currentEffect_)
             throw System::InvalidOperationException(
@@ -3264,6 +3314,7 @@ namespace Microsoft::Xna::Framework::Graphics
             static_cast<std::int64_t>(sizeof(VertexPositionColorTexture)),
             static_cast<std::int64_t>(sizeof(std::uint16_t)), graphicsProfile_);
         BeginUserPrimitiveBindings(currentVertexBuffers_, currentVertexBuffer_);
+        ApplyPendingBackBufferClearInternal();   // VerifyCanDraw IL_0000-0009
         ClearBoundRenderTargetsContentLostInternal();
         if (!currentEffect_)
             throw System::InvalidOperationException(
@@ -3307,6 +3358,7 @@ namespace Microsoft::Xna::Framework::Graphics
             static_cast<std::int64_t>(sizeof(VertexPositionNormalTexture)),
             static_cast<std::int64_t>(sizeof(std::uint16_t)), graphicsProfile_);
         BeginUserPrimitiveBindings(currentVertexBuffers_, currentVertexBuffer_);
+        ApplyPendingBackBufferClearInternal();   // VerifyCanDraw IL_0000-0009
         ClearBoundRenderTargetsContentLostInternal();
         if (!currentEffect_)
             throw System::InvalidOperationException(
@@ -3352,6 +3404,7 @@ namespace Microsoft::Xna::Framework::Graphics
             static_cast<std::int64_t>(sizeof(VertexPositionColor)),
             static_cast<std::int64_t>(sizeof(std::uint32_t)), graphicsProfile_);
         BeginUserPrimitiveBindings(currentVertexBuffers_, currentVertexBuffer_);
+        ApplyPendingBackBufferClearInternal();   // VerifyCanDraw IL_0000-0009
         ClearBoundRenderTargetsContentLostInternal();
         if (!currentEffect_)
             throw System::InvalidOperationException(
@@ -3395,6 +3448,7 @@ namespace Microsoft::Xna::Framework::Graphics
             static_cast<std::int64_t>(sizeof(VertexPositionTexture)),
             static_cast<std::int64_t>(sizeof(std::uint32_t)), graphicsProfile_);
         BeginUserPrimitiveBindings(currentVertexBuffers_, currentVertexBuffer_);
+        ApplyPendingBackBufferClearInternal();   // VerifyCanDraw IL_0000-0009
         ClearBoundRenderTargetsContentLostInternal();
         if (!currentEffect_)
             throw System::InvalidOperationException(
@@ -3438,6 +3492,7 @@ namespace Microsoft::Xna::Framework::Graphics
             static_cast<std::int64_t>(sizeof(VertexPositionColorTexture)),
             static_cast<std::int64_t>(sizeof(std::uint32_t)), graphicsProfile_);
         BeginUserPrimitiveBindings(currentVertexBuffers_, currentVertexBuffer_);
+        ApplyPendingBackBufferClearInternal();   // VerifyCanDraw IL_0000-0009
         ClearBoundRenderTargetsContentLostInternal();
         if (!currentEffect_)
             throw System::InvalidOperationException(
@@ -3481,6 +3536,7 @@ namespace Microsoft::Xna::Framework::Graphics
             static_cast<std::int64_t>(sizeof(VertexPositionNormalTexture)),
             static_cast<std::int64_t>(sizeof(std::uint32_t)), graphicsProfile_);
         BeginUserPrimitiveBindings(currentVertexBuffers_, currentVertexBuffer_);
+        ApplyPendingBackBufferClearInternal();   // VerifyCanDraw IL_0000-0009
         ClearBoundRenderTargetsContentLostInternal();
         if (!currentEffect_)
             throw System::InvalidOperationException(
@@ -3531,6 +3587,7 @@ namespace Microsoft::Xna::Framework::Graphics
             vertexData, vOffset, numVerts, indexData, iOffset, type, primCount, stride,
             static_cast<std::int64_t>(sizeof(std::uint16_t)), graphicsProfile_);
         BeginUserPrimitiveBindings(currentVertexBuffers_, currentVertexBuffer_);
+        ApplyPendingBackBufferClearInternal();   // VerifyCanDraw IL_0000-0009
         ClearBoundRenderTargetsContentLostInternal();
         if (!currentEffect_)
             throw System::InvalidOperationException(
@@ -3573,6 +3630,7 @@ namespace Microsoft::Xna::Framework::Graphics
             vertexData, vOffset, numVerts, indexData, iOffset, type, primCount, stride,
             static_cast<std::int64_t>(sizeof(std::uint32_t)), graphicsProfile_);
         BeginUserPrimitiveBindings(currentVertexBuffers_, currentVertexBuffer_);
+        ApplyPendingBackBufferClearInternal();   // VerifyCanDraw IL_0000-0009
         ClearBoundRenderTargetsContentLostInternal();
         if (!currentEffect_)
             throw System::InvalidOperationException(
@@ -3629,6 +3687,7 @@ namespace Microsoft::Xna::Framework::Graphics
             static_cast<std::int64_t>(sizeof(VertexT)),
             static_cast<std::int64_t>(sizeof(IndexT)), graphicsProfile_);
         BeginUserPrimitiveBindings(currentVertexBuffers_, currentVertexBuffer_);
+        ApplyPendingBackBufferClearInternal();   // VerifyCanDraw IL_0000-0009
         ClearBoundRenderTargetsContentLostInternal();
         if (!currentEffect_)
             throw System::InvalidOperationException(
@@ -4759,6 +4818,8 @@ namespace Microsoft::Xna::Framework::Graphics
                     // raised: a caller-initiated Reset on a renderer that never loses anything must
                     // not fire it, or the event becomes noise on unaffected renderer families.
                     NotifyContentLostResourcesEXT();
+                    // The native reset that completes a lost-device Reset (IL_028d).
+                    backBufferLazyClearFlags_ = GetDefaultClearOptions();
                     DeviceReset.Raise(this, System::EventArgs::Empty);
                     break;
                 case CNA::Internal::Renderers::RendererDeviceEvent::StateInvalidated:
@@ -5596,6 +5657,9 @@ namespace Microsoft::Xna::Framework::Graphics
             throw System::InvalidOperationException(
                 "Cannot use GetBackBufferData when a render target is active.");
         }
+        // Refresh GetBackBufferData IL_0066-006f: the pending discard clear happens here, before
+        // the element-size and rectangle checks (IL_00b7-00da), so even a refused read performs it.
+        ApplyPendingBackBufferClearInternal();
 
         // The read region is derived from the AUTHORITATIVE backbuffer description --
         // PresentationParameters -- never from the renderer's live viewport. A rectangle-less call
@@ -5683,6 +5747,11 @@ namespace Microsoft::Xna::Framework::Graphics
             ReadBackBufferThroughPresentation(*renderer_, platformWindow_.get(), x, y, w, h,
                                               buf.data());
         }
+        // IL_01da-01ee: a successful read discards a DiscardContents back buffer again, so a
+        // second read without drawing returns the discard colour.
+        if (presentationParameters_.getRenderTargetUsageProperty() ==
+            RenderTargetUsage::DiscardContents)
+            backBufferLazyClearFlags_ = GetDefaultClearOptions();
         if (!colorObjects)
         {
             auto* destination = static_cast<std::uint8_t*>(data) +
@@ -5817,6 +5886,14 @@ namespace Microsoft::Xna::Framework::Graphics
             currentRenderTargets_.clear();
             renderTargetBound_ = false;
             boundRenderTargetDestroyed_ = false;
+            // Refresh SetRenderTargets IL_0260-027d, masked by IL_0539-0547: a DiscardContents
+            // back buffer comes back wholly discarded; otherwise the word saved when it was left
+            // (IL_017c-0183, kept in backBufferLazyClearFlags_ meanwhile) is pending again.
+            backBufferLazyClearFlags_ =
+                presentationParameters_.getRenderTargetUsageProperty() ==
+                        RenderTargetUsage::DiscardContents
+                    ? GetDefaultClearOptions()
+                    : backBufferLazyClearFlags_ & GetDefaultClearOptions();
             ResetViewportAndScissorForRenderTarget(presentationParameters_.getBackBufferWidthProperty(),
                                                     presentationParameters_.getBackBufferHeightProperty());
             return;

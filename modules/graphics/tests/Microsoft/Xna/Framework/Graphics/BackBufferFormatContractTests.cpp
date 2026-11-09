@@ -16,6 +16,7 @@ using namespace CNA::Testing::Renderers;
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsProfile.hpp"
 #include "Microsoft/Xna/Framework/Graphics/PresentationParameters.hpp"
+#include "Microsoft/Xna/Framework/Graphics/RenderTargetUsage.hpp"
 #include "Microsoft/Xna/Framework/Graphics/RenderTarget2D.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SurfaceFormat.hpp"
 #include "System/ArgumentException.hpp"
@@ -50,6 +51,11 @@ namespace
         parameters.setBackBufferWidthProperty(8);
         parameters.setBackBufferHeightProperty(8);
         parameters.setBackBufferFormatProperty(format);
+        // HND-TQ-47 R1: these probes read the back buffer more than once. XNA discards a DiscardContents
+        // back buffer after each successful read (GetBackBufferData IL_01da-01ee) and on return from a
+        // render target (SetRenderTargets IL_0260-027d); preserving it keeps every probe meaningful.
+        parameters.setRenderTargetUsageProperty(
+            Microsoft::Xna::Framework::Graphics::RenderTargetUsage::PreserveContents);
         return parameters;
     }
 

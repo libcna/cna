@@ -1994,6 +1994,9 @@ namespace Microsoft::Xna::Framework::Graphics
 
         std::vector<RenderTargetBinding> currentRenderTargets_;
         bool renderTargetBound_ = false;
+        // XNA's lazyClearFlags while the back buffer is current, and savedBackBufferClearFlags
+        // while a render target is (render-target discards are applied eagerly at binding).
+        ClearOptions backBufferLazyClearFlags_ = static_cast<ClearOptions>(0);
         // DX12-0023: a bound target was destroyed. Its binding is gone
         // (no dangling pointer to compare or dereference) but the device stays bound until the next
         // SetRenderTargets, which is therefore never skipped as unchanged.
@@ -2301,6 +2304,10 @@ namespace Microsoft::Xna::Framework::Graphics
          * a target never does (TQ-035).
          */
         void ClearBoundRenderTargetsContentLostInternal() const noexcept;
+        // Refresh ClearDirtyBuffers for the back buffer (IL_001d-0036): performs the pending
+        // lazy clear -- the public Clear with backBufferLazyClearFlags_, RGBA 68,34,136,255, depth
+        // 1, stencil 0 -- and empties the word. A no-op while a render target is bound.
+        void ApplyPendingBackBufferClearInternal();
         /**
          * @brief The native part of Clear(ClearOptions, Color, float, int), without ending the
          *        bound targets' lost state; also the DiscardContents clear a binding performs.

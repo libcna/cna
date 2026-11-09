@@ -12,6 +12,7 @@
 #include "Microsoft/Xna/Framework/Graphics/GraphicsAdapter.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsProfile.hpp"
 #include "Microsoft/Xna/Framework/Graphics/PresentationParameters.hpp"
+#include "Microsoft/Xna/Framework/Graphics/RenderTargetUsage.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SamplerState.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SamplerStateCollection.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SpriteBatch.hpp"
@@ -32,6 +33,11 @@ protected:
         PresentationParameters parameters = PresentationParameters::CreateWindowedEXT(800, 480);
         parameters.setBackBufferWidthProperty(256);
         parameters.setBackBufferHeightProperty(256);
+        // HND-TQ-47 R1: these probes read the back buffer more than once. XNA discards a DiscardContents
+        // back buffer after each successful read (GetBackBufferData IL_01da-01ee) and on return from a
+        // render target (SetRenderTargets IL_0260-027d); preserving it keeps every probe meaningful.
+        parameters.setRenderTargetUsageProperty(
+            Microsoft::Xna::Framework::Graphics::RenderTargetUsage::PreserveContents);
         return GraphicsDevice(GraphicsAdapter::getDefaultAdapterProperty(),
                               GraphicsProfile::HiDef, parameters);
     }

@@ -124,6 +124,13 @@ subregion, SpriteBatch target and deferred-viewport regressions distinguish this
 full-target hardcoding. `SOFTWARE-222` later pinned the complementary XNA rule: rebinding the
 identical target set is a no-op and therefore does not reset a custom viewport or scissor.
 
+What the back buffer holds on return follows XNA's lazy clear (HND-TQ-47 R1): a back buffer whose
+`PresentationParameters.RenderTargetUsage` is `DiscardContents` (the default) comes back discarded,
+and the next draw, read or `Present` first clears it to RGBA(68,34,136,255) with depth 1 and stencil 0
+(`SetRenderTargets` IL_0260-027d, `ClearDirtyBuffers`); `PreserveContents`/`PlatformContents` keep
+it, including a clear that was still pending when it was left (IL_017c-0183). A test that probes the
+back buffer after a target round trip must therefore request `PreserveContents`.
+
 ## 7. Multiple render targets and compatibility validation (Task 339)
 
 The phase's FNA-only conclusion that target compatibility had no public validation was superseded

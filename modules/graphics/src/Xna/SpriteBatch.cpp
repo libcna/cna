@@ -616,6 +616,7 @@ namespace Microsoft::Xna::Framework::Graphics
             // XNA draws every sprite batch through GraphicsDevice.DrawIndexedPrimitives
             // (SpriteBatch.PlatformRenderBatch IL_02eb-02fb), whose VerifyCanDraw IL_0011-003e
             // ends the bound targets' lost state.
+            graphicsDevice_->ApplyPendingBackBufferClearInternal();   // VerifyCanDraw IL_0000-0009
             graphicsDevice_->ClearBoundRenderTargetsContentLostInternal();
             graphicsDevice_->validateDrawState(&params);
             if (sortMode_ == SpriteSortMode::Immediate)
@@ -713,6 +714,7 @@ namespace Microsoft::Xna::Framework::Graphics
         GpuDrawParams params;
         params.texture0 = &texture;
         // As flushSingle: XNA's per-batch DrawIndexedPrimitives -> VerifyCanDraw IL_0011-003e.
+        graphicsDevice_->ApplyPendingBackBufferClearInternal();   // VerifyCanDraw IL_0000-0009
         graphicsDevice_->ClearBoundRenderTargetsContentLostInternal();
         graphicsDevice_->validateDrawState(&params);
 

@@ -29,6 +29,10 @@ std::unique_ptr<GraphicsDevice> MakeDevice()
     parameters.setBackBufferHeightProperty(64);
     parameters.setDepthStencilFormatProperty(DepthFormat::None);
     parameters.setPresentationIntervalProperty(PresentInterval::Immediate);
+    // HND-TQ-47 R1: these probes read the back buffer more than once. XNA discards a DiscardContents
+    // back buffer after each successful read (GetBackBufferData IL_01da-01ee) and on return from a
+    // render target (SetRenderTargets IL_0260-027d); preserving it keeps every probe meaningful.
+    parameters.setRenderTargetUsageProperty(RenderTargetUsage::PreserveContents);
     return std::make_unique<GraphicsDevice>(GraphicsAdapter::getDefaultAdapterProperty(),
                                            GraphicsProfile::HiDef, parameters);
 }

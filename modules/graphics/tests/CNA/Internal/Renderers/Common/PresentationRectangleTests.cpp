@@ -35,6 +35,8 @@
 #include "CNA/Internal/Renderers/Common/IGraphicsRenderer.hpp"
 #include "Microsoft/Xna/Framework/Graphics/BlendState.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
+#include "Microsoft/Xna/Framework/Graphics/RenderTargetUsage.hpp"
+#include "Microsoft/Xna/Framework/Graphics/PresentationParameters.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsProfile.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SamplerState.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SpriteBatch.hpp"
@@ -358,6 +360,16 @@ TEST(PresentationRectangleTest, ALetterboxedDefaultViewportIsNotACustomSubViewpo
 
     GraphicsDevice device;
     device.SetGraphicsProfileEXT(GraphicsProfile::HiDef);
+    // HND-TQ-47 R1: the probes below read the back buffer twice. XNA discards a DiscardContents
+    // back buffer after each successful read (GetBackBufferData IL_01da-01ee); preserving it keeps
+    // the second probe meaningful.
+    {
+        Microsoft::Xna::Framework::Graphics::PresentationParameters preserving =
+            device.getPresentationParametersProperty().Clone();
+        preserving.setRenderTargetUsageProperty(
+            Microsoft::Xna::Framework::Graphics::RenderTargetUsage::PreserveContents);
+        device.Reset(preserving);
+    }
     IGraphicsRenderer& renderer = device.GetRenderer();
 
     // Measure the drawable first, exactly as the tests above do, so the expectation cannot disagree
