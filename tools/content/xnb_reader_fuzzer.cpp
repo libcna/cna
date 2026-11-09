@@ -11,8 +11,9 @@
 // leaves a stage escapes on purpose and ends the process, which is how the campaign records it:
 //
 //   1. CNA::Internal::Xnb::DecodeXnbContainerBody(): only ContentLoadException (its contract in
-//      XnbContainerBody.hpp). A decompressor that lets a System::ArgumentOutOfRangeException or a
-//      std:: exception out fails here, before stage 3 could mistake it for an XNA refusal.
+//      XnbContainerBody.hpp; an LZX decoding failure is deferred to the body stream as Refresh's
+//      InvalidOperationException). A decompressor that lets a System::ArgumentOutOfRangeException
+//      or a std:: exception out fails here, before stage 3 could mistake it for an XNA refusal.
 //   2. ParseXnbTypeReaderTable() on a raw BinaryReader over the decoded body: ContentLoadException,
 //      System::FormatException (an over-long 7-bit integer, .NET BinaryReader.Read7BitEncodedInt)
 //      and System::IO::IOException (a raw reader has no ContentReader to wrap I/O; XNA's
@@ -23,7 +24,9 @@
 //      only, so a FormatException escapes XNA's Load too); the System::ArgumentException family
 //      (XNA's own graphics constructors and SetData refuse inconsistent content that way, e.g.
 //      IndexBufferReader.Read IL_002a-0033 -> IndexBuffer..ctor);
-//      System::NotSupportedException only for the graphics-profile refusal; and
+//      System::NotSupportedException only for the graphics-profile refusal;
+//      System::NullReferenceException for a shared-resource reference without a table and
+//      System::InvalidOperationException for DecompressionError (HND-TQ-16); and
 //      System::InvalidOperationException for rejected Effect code (Refresh Effect::.ctor
 //      IL_0009 -> CreateEffectFromCode IL_0208-020d / IL_0128-012d, Helpers.GetExceptionFromResult
 //      default IL_0252-025c; EffectReader.Read IL_0016 has no catch). Every other
@@ -79,6 +82,7 @@
 #include "CNA/Internal/Xnb/XnbTypeReaderTable.hpp"
 #include "Microsoft/Xna/Framework/Audio/SoundEffect.hpp"
 #include "Microsoft/Xna/Framework/Content/ContentLoadException.hpp"
+#include "System/NullReferenceException.hpp"
 #include "Microsoft/Xna/Framework/Content/ContentManager.hpp"
 #include "Microsoft/Xna/Framework/Content/ContentTypeReaderManager.hpp"
 #include "Microsoft/Xna/Framework/Curve.hpp"
@@ -419,22 +423,37 @@ namespace
         catch (const System::NotSupportedException& refusal)
         {
             // The graphics profile refusing a declaration or texture it cannot express, as XNA's
-            // own profile validation does; any other NotSupportedException is a finding.
-            if (loaded || refusal.getMessageProperty().find("active graphics profile") == std::string::npos)
+            // own profile validation does -- including a texture reader's SurfaceFormat outside
+            // the profile's list (HND-TQ-16); any other NotSupportedException is a finding.
+            const std::string& message = refusal.getMessageProperty();
+            const bool formatRefusal = message.find(": SurfaceFormat ") != std::string::npos &&
+                                       message.find(" is not supported.") != std::string::npos;
+            if (loaded || (message.find("active graphics profile") == std::string::npos && !formatRefusal))
             {
                 throw;
             }
             ++stats.refusedProfile;
         }
-        catch (const System::InvalidOperationException&)
+        catch (const System::InvalidOperationException& refusal)
         {
-            // EffectReader.Read IL_0016 passes the Effect constructor's invalid-code
-            // refusal through Load; Model can reach it through a shared effect too.
-            // Other root types and post-load walking still treat this as a finding.
-            if (loaded || (!std::is_same_v<T, std::shared_ptr<Effect>> &&
+            // HND-TQ-16: Refresh DecompressStream's DecompressionError (DecompressNextBuffer
+            // IL_0089-00ad) reaches Load for any root type. Otherwise EffectReader.Read IL_0016
+            // passes the Effect constructor's invalid-code refusal through Load; Model can reach
+            // it through a shared effect too. Other root types and post-load walking still treat
+            // this as a finding.
+            const bool decompression =
+                refusal.getMessageProperty() == "Error decompressing content data.";
+            if (loaded || (!decompression && !std::is_same_v<T, std::shared_ptr<Effect>> &&
                            !std::is_same_v<T, Model>))
                 throw;
             ++stats.refusedEffect;
+        }
+        catch (const System::NullReferenceException&)
+        {
+            // HND-TQ-16: a shared-resource reference in a file that declares none (Refresh
+            // ReadSharedResource<T> IL_0039).
+            if (loaded) { throw; }
+            ++stats.refusedContent;
         }
         manager.Unload();
     }

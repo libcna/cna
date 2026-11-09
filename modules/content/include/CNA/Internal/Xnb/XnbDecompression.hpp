@@ -2,6 +2,7 @@
 #pragma once
 
 #include <cstdint>
+#include <exception>
 #include <string>
 #include <vector>
 
@@ -9,6 +10,54 @@
 
 namespace CNA::Internal::Xnb
 {
+    /**
+     * @brief What @ref DecodeXnbLzxPayload produced: the decoded prefix and the failure, if any,
+     *        that a read past that prefix raises.
+     */
+    struct XnbLzxDecodeResult
+    {
+        /** @brief Every byte decoded before decoding stopped. */
+        std::vector<uint8_t> bytes;
+
+        /**
+         * @brief The failure a read past @ref bytes raises; null when the decoded bytes end
+         *        where the container's declared size says they end.
+         */
+        std::exception_ptr failure;
+    };
+
+    /**
+     * @brief Decodes a `.xnb` LZX payload the way Refresh's `DecompressStream` serves it to the
+     *        content reader, frame by frame instead of 64 KiB buffer by buffer.
+     *
+     * Refresh decompresses lazily: `DecompressNextBuffer` (IL_0000-000a) stops once
+     * `decompressedTodo` is spent, so a declared size of zero or less is an empty body and the
+     * buffer that crosses the declared size is still served whole; a native decoder failure
+     * (IL_0089-0095), a call that neither consumes input nor produces output (IL_009c-00ad) and a
+     * short read of the compressed bytes (`ReadBufferFromDisk` IL_0023-0030) each throw
+     * `InvalidOperationException`, and only when the reader reaches that point. CNA decodes
+     * eagerly, so it keeps the decoded prefix and records the failure for the read that would
+     * have reached it. One bound of CNA's own also stops decoding, with
+     * Microsoft::Xna::Framework::Content::ContentLoadException rather than an XNA type because
+     * Refresh has no such bound: more output than `limits.maxDecompressedSize` (Refresh streams
+     * through fixed 64 KiB buffers and never holds the whole body, CNA does).
+     *
+     * @param compressedData Pointer to the compressed payload bytes (immediately following the
+     *                       10-byte container header and the 4-byte decompressed-size field).
+     * @param compressedSize Number of compressed bytes the container declares; a negative value
+     *                       is no input (`ReadNextBufferFromDisk` IL_0000-0009).
+     * @param declaredSize   The container's decompressed-size field.
+     * @param path           File path, used only to build exception messages.
+     * @param limits         Bounds applied to the decoded output.
+     * @return The decoded prefix and the failure a read past it raises.
+     */
+    [[nodiscard]] XnbLzxDecodeResult DecodeXnbLzxPayload(
+        const uint8_t* compressedData,
+        int32_t compressedSize,
+        int32_t declaredSize,
+        const std::string& path,
+        const XnbReadLimits& limits = DefaultXnbReadLimits());
+
     /**
      * @brief Decompresses a `.xnb` file's LZX-compressed payload (XNB-29), matching
      *        FNA's own block-framing loop in `ContentManager.GetContentReaderFromXnb`
@@ -28,9 +77,15 @@ namespace CNA::Internal::Xnb
      * @param decompressedSize Expected decompressed size, as recorded in the `.xnb` header.
      * @param path           File path, used only to build exception messages.
      * @param limits         Bounds applied to @p compressedSize/@p decompressedSize (XNB-10A).
+     * This strict form refuses everything @ref DecodeXnbLzxPayload would defer: it is for
+     * callers that need the whole payload at once (tools, round-trip tests), not the content
+     * route.
+     *
      * @return The decompressed bytes, exactly @p decompressedSize long.
-     * @throws Microsoft::Xna::Framework::Content::ContentLoadException if decompression fails,
-     *         produces the wrong number of bytes, or either size exceeds @p limits.
+     * @throws Microsoft::Xna::Framework::Content::ContentLoadException if either size is negative
+     *         or exceeds @p limits, or the frames decode to more than @p decompressedSize bytes.
+     * @throws System::InvalidOperationException if decompression fails or produces fewer bytes
+     *         than @p decompressedSize (Refresh `DecompressNextBuffer`'s DecompressionError).
      */
     std::vector<uint8_t> DecompressXnbPayload(
         const uint8_t* compressedData,

@@ -12,6 +12,7 @@
 #include "CNA/Internal/Xnb/Texture2DContentTypeReader.hpp"
 #include "CNA/RendererTestGate.hpp"
 #include "Microsoft/Xna/Framework/Content/ContentLoadException.hpp"
+#include "System/NotSupportedException.hpp"
 #include "Microsoft/Xna/Framework/Content/ContentManager.hpp"
 #include "Microsoft/Xna/Framework/Content/ContentReader.hpp"
 #include "Microsoft/Xna/Framework/Content/ContentTypeReaderManager.hpp"
@@ -108,7 +109,10 @@ TEST_F(Texture2DContentTypeReaderTest, BaseTextureReaderReturnsItsExistingInstan
     EXPECT_EQ(std::any_cast<Texture*>(typeReader->ReadUntyped(reader, std::any{})), nullptr);
 }
 
-TEST_F(Texture2DContentTypeReaderTest, UnsupportedSurfaceFormatThrowsContentLoadException)
+// HND-TQ-16: Refresh's Texture2DReader hands the format to the Texture2D constructor, whose
+// ValidateCreationParameters (IL_0034-005d) refuses it with NotSupportedException
+// (ProfileCapabilities.ThrowNotSupportedException), which ReadAsset does not wrap.
+TEST_F(Texture2DContentTypeReaderTest, UnsupportedSurfaceFormatThrowsNotSupportedException)
 {
     ContentManager cm; // no root directory access needed for this direct-reader test
     cm.setGraphicsDevice(gd);
@@ -128,7 +132,7 @@ TEST_F(Texture2DContentTypeReaderTest, UnsupportedSurfaceFormatThrowsContentLoad
     auto typeReader = ContentTypeReaderManager::CreateReader("Microsoft.Xna.Framework.Content.Texture2DReader");
     ASSERT_NE(typeReader, nullptr);
 
-    EXPECT_THROW(typeReader->ReadUntyped(reader, std::any{}), ContentLoadException);
+    EXPECT_THROW(typeReader->ReadUntyped(reader, std::any{}), System::NotSupportedException);
 }
 
 TEST_F(Texture2DContentTypeReaderTest, CnaExtensionFormatInAVersion5ContainerIsRefusedLikeAnyNonXnaFormat)
@@ -145,7 +149,7 @@ TEST_F(Texture2DContentTypeReaderTest, CnaExtensionFormatInAVersion5ContainerIsR
         SCOPED_TRACE(ordinal);
         EXPECT_THROW((void)ReadHandConstructedTexture2D(
                          gd, static_cast<SurfaceFormat>(ordinal), 1, 1, {{0x10, 0x20, 0x30, 0x40}}),
-                     ContentLoadException);
+                     System::NotSupportedException);
     }
 }
 

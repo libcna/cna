@@ -7,10 +7,119 @@
 #include "CNA/Internal/Xnb/LzxDecoder.hpp"
 #include "Microsoft/Xna/Framework/Content/ContentLoadException.hpp"
 #include "System/IO/MemoryStream.hpp"
+#include "System/InvalidOperationException.hpp"
 
 namespace CNA::Internal::Xnb
 {
     using Microsoft::Xna::Framework::Content::ContentLoadException;
+
+    namespace
+    {
+        // Refresh DecompressStream raises one message for every decoder failure:
+        // FrameworkResources.DecompressionError, which names neither the asset nor the cause.
+        [[nodiscard]] std::exception_ptr DecompressionError()
+        {
+            return std::make_exception_ptr(
+                System::InvalidOperationException("Error decompressing content data."));
+        }
+    }
+
+    XnbLzxDecodeResult DecodeXnbLzxPayload(
+        const uint8_t* compressedData,
+        int32_t compressedSize,
+        int32_t declaredSize,
+        const std::string& path,
+        const XnbReadLimits& limits)
+    {
+        XnbLzxDecodeResult result;
+        // ReadNextBufferFromDisk IL_0000-0009: a compressedTodo of zero or less reads nothing.
+        const int32_t available = compressedSize > 0 ? compressedSize : 0;
+
+        System::IO::MemoryStream compressedStream(compressedData, available, false);
+        System::IO::MemoryStream decompressedStream;
+
+        // Default window size for XNB-encoded files is 64KB (window exponent 16).
+        LzxDecoder dec(16);
+        int64_t pos = 0;
+
+        // DecompressNextBuffer IL_0000-000a decodes while decompressedTodo is positive -- so a
+        // declared size of zero or less is an empty body, not a failure -- and serves whatever the
+        // call that spends it produced; CNA does the same one frame at a time.
+        while (decompressedStream.getPositionProperty() < declaredSize)
+        {
+            const int64_t produced = decompressedStream.getPositionProperty();
+            /* The compressed stream is separated into blocks that will decompress into 32KB or
+             * some other size if specified. Normal, 32KB output blocks will have a short
+             * indicating the size of the block before the block starts. Blocks that have a
+             * defined output will be preceded by a byte of value 0xFF (255), then a short
+             * indicating the output size and another for the block size. All shorts for these
+             * cases are encoded in big-endian order. */
+            if (available - pos < 2)
+            {
+                // IL_009c-00ad: no input left to consume, so no output -- DecompressionError.
+                result.failure = DecompressionError();
+                break;
+            }
+            int hi = compressedStream.ReadByte();
+            int lo = compressedStream.ReadByte();
+            int block_size = (hi << 8) | lo;
+            int frame_size = 0x8000; // Frame size is 32KB by default.
+            if (hi == 0xFF)
+            {
+                if (available - pos < 5)
+                {
+                    result.failure = DecompressionError();
+                    break;
+                }
+                hi = lo;
+                lo = static_cast<uint8_t>(compressedStream.ReadByte());
+                frame_size = (hi << 8) | lo;
+                hi = static_cast<uint8_t>(compressedStream.ReadByte());
+                lo = static_cast<uint8_t>(compressedStream.ReadByte());
+                block_size = (hi << 8) | lo;
+                pos += 5;
+            }
+            else
+            {
+                pos += 2;
+            }
+
+            if (block_size == 0 || frame_size == 0)
+            {
+                // The payload's end marker: a read past what was decoded finds nothing more.
+                result.failure = DecompressionError();
+                break;
+            }
+            if (block_size > available - pos)
+            {
+                result.failure = DecompressionError();
+                break;
+            }
+            // CNA's own bound: Refresh never holds the whole body, CNA does (see the header).
+            if (frame_size > limits.maxDecompressedSize - produced)
+            {
+                result.failure = std::make_exception_ptr(ContentLoadException(
+                    "'" + path + "' decompresses beyond the maximum of " +
+                    std::to_string(limits.maxDecompressedSize) + " bytes."));
+                break;
+            }
+            if (dec.Decompress(compressedStream, block_size, decompressedStream, frame_size) != 0)
+            {
+                // IL_0089-0095: the native decoder's failure; the failing call's output is lost.
+                decompressedStream.SetLength(static_cast<int32_t>(produced));
+                decompressedStream.setPositionProperty(static_cast<int32_t>(produced));
+                result.failure = DecompressionError();
+                break;
+            }
+            pos += block_size;
+
+            // Reset the position of the input just in case the bit buffer read in some unused bytes.
+            compressedStream.setPositionProperty(static_cast<int32_t>(pos));
+        }
+
+        result.bytes = decompressedStream.ToArray();
+        return result;
+    }
 
     std::vector<uint8_t> DecompressXnbPayload(
         const uint8_t* compressedData,
@@ -32,76 +141,18 @@ namespace CNA::Internal::Xnb
                 std::to_string(decompressedSize) + ").");
         }
 
-        System::IO::MemoryStream compressedStream(compressedData, compressedSize);
-        System::IO::MemoryStream decompressedStream;
-
-        // Default window size for XNB-encoded files is 64KB (window exponent 16).
-        LzxDecoder dec(16);
-        int64_t pos = 0;
-
-        while (pos < compressedSize)
+        XnbLzxDecodeResult decoded =
+            DecodeXnbLzxPayload(compressedData, compressedSize, decompressedSize, path, limits);
+        if (decoded.failure)
         {
-            /* The compressed stream is separated into blocks that will decompress into 32KB or
-             * some other size if specified. Normal, 32KB output blocks will have a short
-             * indicating the size of the block before the block starts. Blocks that have a
-             * defined output will be preceded by a byte of value 0xFF (255), then a short
-             * indicating the output size and another for the block size. All shorts for these
-             * cases are encoded in big-endian order. */
-            if (compressedSize - pos < 2)
-            {
-                throw ContentLoadException("LZX frame of '" + path + "' has a truncated header.");
-            }
-            int hi = compressedStream.ReadByte();
-            int lo = compressedStream.ReadByte();
-            int block_size = (hi << 8) | lo;
-            int frame_size = 0x8000; // Frame size is 32KB by default.
-            if (hi == 0xFF)
-            {
-                if (compressedSize - pos < 5)
-                {
-                    throw ContentLoadException("LZX frame of '" + path + "' has a truncated header.");
-                }
-                hi = lo;
-                lo = static_cast<uint8_t>(compressedStream.ReadByte());
-                frame_size = (hi << 8) | lo;
-                hi = static_cast<uint8_t>(compressedStream.ReadByte());
-                lo = static_cast<uint8_t>(compressedStream.ReadByte());
-                block_size = (hi << 8) | lo;
-                pos += 5;
-            }
-            else
-            {
-                pos += 2;
-            }
-
-            if (block_size == 0 || frame_size == 0)
-            {
-                break;
-            }
-
-            // Bound each frame before the decoder writes; a final size comparison is too late
-            // to prevent output growth beyond the container's declared decompressed size.
-            if (block_size > compressedSize - pos ||
-                frame_size > decompressedSize - decompressedStream.getPositionProperty())
-            {
-                throw ContentLoadException("LZX frame of '" + path + "' exceeds its declared range.");
-            }
-            if (dec.Decompress(compressedStream, block_size, decompressedStream, frame_size) != 0)
-            {
-                throw ContentLoadException("Decompression of '" + path + "' failed.");
-            }
-            pos += block_size;
-
-            // Reset the position of the input just in case the bit buffer read in some unused bytes.
-            compressedStream.setPositionProperty(static_cast<int32_t>(pos));
+            std::rethrow_exception(decoded.failure);
         }
-
-        if (decompressedStream.getPositionProperty() != decompressedSize)
+        if (decoded.bytes.size() != static_cast<std::size_t>(decompressedSize))
         {
-            throw ContentLoadException("Decompression of '" + path + "' failed.");
+            throw ContentLoadException(
+                "LZX frame of '" + path + "' exceeds its declared range.");
         }
-
-        return decompressedStream.ToArray();
+        return std::move(decoded.bytes);
     }
 
     std::vector<uint8_t> DecompressXnbLz4Payload(

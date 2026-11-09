@@ -8,8 +8,9 @@
 //
 // Oracles: FNA src/Content/LzxDecoder.cs, whose window is a bounds-checked C# array; libmspack's
 // lzxd.c (lzxd_decompress), which FNA's port follows and which refuses a match that runs over the
-// window end; and XnbDecompression.hpp, which documents ContentLoadException as the only refusal
-// of DecompressXnbPayload() and XnbContainerBody.hpp as the only refusal of the container.
+// window end; and Refresh DecompressStream.DecompressNextBuffer IL_0089-0095, whose decoder
+// failure is InvalidOperationException (HND-TQ-16): DecompressXnbPayload() throws it, and the
+// container keeps it for the read that reaches the failing frame (XnbContainerBody.hpp).
 
 #include <algorithm>
 #include <cstdint>
@@ -20,9 +21,8 @@
 
 #include "CNA/Internal/Xnb/XnbContainerBody.hpp"
 #include "CNA/Internal/Xnb/XnbDecompression.hpp"
-#include "Microsoft/Xna/Framework/Content/ContentLoadException.hpp"
-
-using Microsoft::Xna::Framework::Content::ContentLoadException;
+#include "System/IO/Stream.hpp"
+#include "System/InvalidOperationException.hpp"
 
 namespace
 {
@@ -210,9 +210,13 @@ TEST(LzxDecoderMalformedStreamTest, MatchRunningPastTheWindowEndIsRefused)
     // FNA's array store throws there and libmspack refuses the match; before the fix the decoder
     // wrote 255 bytes past its window (ASan: heap-buffer-overflow WRITE) and returned success.
     const Bytes payload = ExplicitFrame(0xFFFF, VerbatimRunBlock(255, true));
-    EXPECT_THROW((void)Decompress(payload, 0xFFFF), ContentLoadException);
-    EXPECT_THROW((void)CNA::Internal::Xnb::DecodeXnbContainerBody(LzxXnb(payload, 0xFFFF), "malformed.xnb"),
-                 ContentLoadException);
+    EXPECT_THROW((void)Decompress(payload, 0xFFFF), System::InvalidOperationException);
+    // The container decodes nothing before the failing frame, so the first read meets it.
+    const auto container =
+        CNA::Internal::Xnb::DecodeXnbContainerBody(LzxXnb(payload, 0xFFFF), "malformed.xnb");
+    EXPECT_TRUE(container.Bytes().empty());
+    std::uint8_t byte = 0;
+    EXPECT_THROW((void)container.OpenBodyStream()->Read(&byte, 0, 1), System::InvalidOperationException);
 }
 
 TEST(LzxDecoderMalformedStreamTest, HandBuiltLengthDeltaBlockDecodesToItsHandDerivedBytes)
@@ -227,7 +231,8 @@ TEST(LzxDecoderMalformedStreamTest, CodeLengthDeltaOutsideZeroToSixteenIsRefused
     // Delta symbol 19: (0 - 19) + 17 = -2, which no encoder writes (code lengths are 0..16).
     // Stored as uint8_t it became 254, and decoding then shifted the 32-bit bit buffer by 254
     // (UBSan: shift exponent too large) instead of refusing the block.
-    EXPECT_THROW((void)Decompress(ExplicitFrame(16, LengthDeltaBlock(19)), 16), ContentLoadException);
+    EXPECT_THROW((void)Decompress(ExplicitFrame(16, LengthDeltaBlock(19)), 16),
+                 System::InvalidOperationException);
 }
 
 TEST(LzxDecoderMalformedStreamTest, HandBuiltUncompressedFramesDecodeToTheirBytes)
@@ -241,7 +246,7 @@ TEST(LzxDecoderMalformedStreamTest, HandBuiltUncompressedFramesDecodeToTheirByte
     EXPECT_EQ(std::count(decoded.begin() + 0x8000, decoded.end(), std::uint8_t{0x22}), 0x8000);
 }
 
-TEST(LzxDecoderMalformedStreamTest, FrameWhoseRunsWrapTheWindowIsRefusedAsContentLoadException)
+TEST(LzxDecoderMalformedStreamTest, FrameWhoseRunsWrapTheWindowIsRefusedAsInvalidOperation)
 {
     // Frame 1 (0xFF00 bytes) leaves 0x100 bytes of block A; frame 2 (0x8000 bytes) takes them
     // (window 0xFF00..0x10000), then block B wraps to window 0 and ends at 0x7F00, so the frame
@@ -251,5 +256,5 @@ TEST(LzxDecoderMalformedStreamTest, FrameWhoseRunsWrapTheWindowIsRefusedAsConten
     const Bytes second =
         Concat({Repeat(0x22, 0x100), UncompressedBlockHeader(0x7F00, false), Repeat(0x33, 0x7F00)});
     const Bytes payload = Concat({ExplicitFrame(0xFF00, first), DefaultFrame(second)});
-    EXPECT_THROW((void)Decompress(payload, 0xFF00 + 0x8000), ContentLoadException);
+    EXPECT_THROW((void)Decompress(payload, 0xFF00 + 0x8000), System::InvalidOperationException);
 }

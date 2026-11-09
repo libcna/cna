@@ -29,6 +29,7 @@
 #include "Microsoft/Xna/Framework/CurveKey.hpp"
 #include "System/IO/BinaryReader.hpp"
 #include "System/IO/MemoryStream.hpp"
+#include "System/NotSupportedException.hpp"
 
 namespace CNA::Internal::Xnb
 {
@@ -135,9 +136,13 @@ namespace CNA::Internal::Xnb
             {
                 return;
             }
-            throw ContentLoadException(
+            // Refresh's texture readers hand the format to the texture constructor, whose
+            // ValidateCreationParameters (Texture2D IL_0034-005d) refuses a format outside the
+            // profile's ValidTextureFormats through ProfileCapabilities.ThrowNotSupportedException
+            // (IL_0021): NotSupportedException, which ContentReader.ReadAsset does not wrap.
+            throw System::NotSupportedException(
                 std::string(readerName) +
-                ": SurfaceFormat is not supported by CNA's .xnb reader.");
+                ": SurfaceFormat " + std::to_string(ordinal) + " is not supported.");
         }
 
         [[nodiscard]] std::uint32_t PositiveDimension(
@@ -244,8 +249,10 @@ namespace CNA::Internal::Xnb
         // profile's list. Refuse it like every other ordinal no XNA format has (TQ-018).
         if (input.getVersionProperty() >= 5 && data.surfaceFormat == SurfaceFormat::ColorBgraEXT)
         {
-            throw ContentLoadException(
-                "Texture2DReader: SurfaceFormat is not supported by CNA's .xnb reader.");
+            // NotSupportedException, as RequireTextureFormat below (HND-TQ-16).
+            throw System::NotSupportedException(
+                "Texture2DReader: SurfaceFormat " + std::to_string(static_cast<int>(data.surfaceFormat)) +
+                " is not supported.");
         }
         RequireTextureFormat("Texture2DReader", data.surfaceFormat, XnbTextureKind::Texture2D);
         data.width = PositiveDimension(input.ReadInt32(), "Texture2DReader", "width");

@@ -2,6 +2,7 @@
 
 #include <cstdint>
 #include <cstring>
+#include <exception>
 #include <limits>
 #include <fstream>
 #include <iterator>
@@ -13,6 +14,8 @@
 
 #include "CNA/Internal/Xnb/XnbContainerBody.hpp"
 #include "Microsoft/Xna/Framework/Content/ContentLoadException.hpp"
+#include "System/IO/Stream.hpp"
+#include "System/InvalidOperationException.hpp"
 
 using CNA::Internal::Xnb::DecodeXnbContainerBody;
 using CNA::Internal::Xnb::XnbCompression;
@@ -38,8 +41,10 @@ namespace
     }
 }
 
-TEST(XnbContainerBodyTest, UncompressedBodyUsesDeclaredRangeAndIgnoresTrailingBytes)
+TEST(XnbContainerBodyTest, UncompressedBodyRunsToTheEndOfTheInputWhateverTheDeclaredLength)
 {
+    // HND-TQ-16, Refresh ContentReader.PrepareStream IL_00ed: an uncompressed reader reads the
+    // input stream itself, so the bytes after a smaller declared totalLength are body too.
     const std::vector<std::uint8_t> file{
         'X', 'N', 'B', 'w', 5, 0, 12, 0, 0, 0, 0xA5, 0x5A, 0xEE};
 
@@ -48,9 +53,11 @@ TEST(XnbContainerBodyTest, UncompressedBodyUsesDeclaredRangeAndIgnoresTrailingBy
     const auto body = container.Bytes();
 
     EXPECT_EQ(container.header.compression, XnbCompression::None);
-    ASSERT_EQ(body.size(), 2u);
+    ASSERT_EQ(body.size(), 3u);
     EXPECT_EQ(body[0], 0xA5u);
     EXPECT_EQ(body[1], 0x5Au);
+    EXPECT_EQ(body[2], 0xEEu);
+    EXPECT_FALSE(container.deferredReadFailure);
 }
 
 TEST(XnbContainerBodyTest, FileLimitIsEnforcedBeforeContainerParsing)
@@ -85,12 +92,14 @@ TEST(XnbContainerBodyTest, Safe002CompressedSizesAndFrameBoundariesRefuseAndReco
                              "tests/assets/xnb/monogame/windows/lz4/white-1.xnb"})
     {
         SCOPED_TRACE(path);
+        const bool lzx = std::string(path).find("/lzx/") != std::string::npos;
         const auto seed = ReadBytes(path);
         ASSERT_GE(seed.size(), 14u);
         int32_t outputSize = 0;
         std::memcpy(&outputSize, seed.data() + 10, sizeof(outputSize));
         const auto control = DecodeXnbContainerBody(seed, path);
         const std::vector<std::uint8_t> expected(control.Bytes().begin(), control.Bytes().end());
+        EXPECT_FALSE(control.deferredReadFailure);
         const auto recover = [&] {
             const auto decoded = DecodeXnbContainerBody(seed, path);
             EXPECT_EQ(expected, (std::vector<std::uint8_t>(decoded.Bytes().begin(), decoded.Bytes().end())));
@@ -99,7 +108,27 @@ TEST(XnbContainerBodyTest, Safe002CompressedSizesAndFrameBoundariesRefuseAndReco
         {
             auto mutant = seed;
             write(mutant, 10, size);
-            EXPECT_THROW((void)DecodeXnbContainerBody(mutant, path), ContentLoadException);
+            if (!lzx)
+            {
+                // MonoGame's LZ4 body has no Refresh counterpart and stays an exact decode.
+                EXPECT_THROW((void)DecodeXnbContainerBody(mutant, path), ContentLoadException);
+            }
+            else if (size < 0)
+            {
+                // HND-TQ-16, DecompressNextBuffer IL_0000-000a: nothing to decompress.
+                const auto empty = DecodeXnbContainerBody(mutant, path);
+                EXPECT_TRUE(empty.Bytes().empty());
+                EXPECT_FALSE(empty.deferredReadFailure);
+            }
+            else
+            {
+                // Every frame decodes; the read past them meets DecompressionError.
+                const auto generous = DecodeXnbContainerBody(mutant, path);
+                EXPECT_EQ(expected, (std::vector<std::uint8_t>(generous.Bytes().begin(), generous.Bytes().end())));
+                ASSERT_TRUE(generous.deferredReadFailure);
+                EXPECT_THROW(std::rethrow_exception(generous.deferredReadFailure),
+                             System::InvalidOperationException);
+            }
             recover();
         }
         for (const std::size_t length : {10u, 11u, 13u})
@@ -112,7 +141,19 @@ TEST(XnbContainerBodyTest, Safe002CompressedSizesAndFrameBoundariesRefuseAndReco
         }
         XnbReadLimits limits;
         limits.maxDecompressedSize = outputSize - 1;
-        EXPECT_THROW((void)DecodeXnbContainerBody(seed, path, limits), ContentLoadException);
+        if (lzx)
+        {
+            // CNA's own bound, kept for allocation safety: decoding stops before the frame that
+            // would exceed it, and the read that needs that frame meets ContentLoadException.
+            const auto bounded = DecodeXnbContainerBody(seed, path, limits);
+            EXPECT_LT(bounded.Bytes().size(), expected.size());
+            ASSERT_TRUE(bounded.deferredReadFailure);
+            EXPECT_THROW(std::rethrow_exception(bounded.deferredReadFailure), ContentLoadException);
+        }
+        else
+        {
+            EXPECT_THROW((void)DecodeXnbContainerBody(seed, path, limits), ContentLoadException);
+        }
         recover();
         limits.maxDecompressedSize = outputSize;
         const auto exact = DecodeXnbContainerBody(seed, path, limits);
@@ -120,43 +161,35 @@ TEST(XnbContainerBodyTest, Safe002CompressedSizesAndFrameBoundariesRefuseAndReco
     }
 }
 
-TEST(XnbContainerBodyTest, Safe002LzxFrameCannotOutgrowTheDeclaredOutput)
+TEST(XnbContainerBodyTest, Safe002LzxFramesDecodeOnlyWhileTheDeclaredSizeIsUnspent)
 {
     const auto seed = ReadBytes("tests/assets/xnb/cna/windows/lzx/texture2d_color_mips.xnb");
     ASSERT_GT(seed.size(), 19u);
-    // The frame has real valid compressed bytes, but its output no longer fits the container.
-    auto shortOutput = seed;
+    // HND-TQ-16, DecompressNextBuffer IL_0000-000a: a declared size of zero decodes nothing.
+    auto noOutput = seed;
     const int32_t zero = 0;
-    std::memcpy(shortOutput.data() + 10, &zero, sizeof(zero));
-    try
-    {
-        (void)DecodeXnbContainerBody(shortOutput, "short-output");
-        ADD_FAILURE() << "frame output exceeded the container's declared size";
-    }
-    catch (const ContentLoadException& error)
-    {
-        EXPECT_NE(std::string::npos, std::string(error.what()).find("LZX frame"));
-    }
+    std::memcpy(noOutput.data() + 10, &zero, sizeof(zero));
+    const auto empty = DecodeXnbContainerBody(noOutput, "no-output");
+    EXPECT_TRUE(empty.Bytes().empty());
+    EXPECT_FALSE(empty.deferredReadFailure);
     EXPECT_FALSE(DecodeXnbContainerBody(seed, "valid").Bytes().empty());
+    // Truncated or oversized frame headers, and a zero block: the decoder has nothing it can
+    // decode, which Refresh reports as DecompressionError when the reader asks for the bytes.
     for (const std::vector<std::uint8_t>& frame : {
              std::vector<std::uint8_t>{0xFF}, {0xFF, 0, 1}, {0xFF, 0, 1, 0},
-             {0xFF, 0, 1, 0xFF, 0xFF}, {0, 1}})
+             {0xFF, 0, 1, 0xFF, 0xFF}, {0, 1}, {0, 0}})
     {
         auto mutant = std::vector<std::uint8_t>(seed.begin(), seed.begin() + 14);
         mutant.insert(mutant.end(), frame.begin(), frame.end());
         const int32_t length = static_cast<int32_t>(mutant.size());
-        const int32_t output = 0;
+        const int32_t output = 1;
         std::memcpy(mutant.data() + 6, &length, sizeof(length));
         std::memcpy(mutant.data() + 10, &output, sizeof(output));
-        try
-        {
-            (void)DecodeXnbContainerBody(mutant, "Safe002 frame");
-            ADD_FAILURE() << "invalid LZX frame accepted";
-        }
-        catch (const ContentLoadException& error)
-        {
-            EXPECT_NE(std::string::npos, std::string(error.what()).find("LZX frame"));
-        }
+        const auto refused = DecodeXnbContainerBody(mutant, "Safe002 frame");
+        EXPECT_TRUE(refused.Bytes().empty());
+        ASSERT_TRUE(refused.deferredReadFailure);
+        std::uint8_t byte = 0;
+        EXPECT_THROW((void)refused.OpenBodyStream()->Read(&byte, 0, 1), System::InvalidOperationException);
         EXPECT_FALSE(DecodeXnbContainerBody(seed, "valid").Bytes().empty());
     }
 }

@@ -24,6 +24,7 @@
 #include "Microsoft/Xna/Framework/Vector4.hpp"
 #include "System/ArgumentNullException.hpp"
 #include "System/IO/EndOfStreamException.hpp"
+#include "System/NullReferenceException.hpp"
 
 namespace Microsoft::Xna::Framework::Content
 {
@@ -211,11 +212,40 @@ namespace Microsoft::Xna::Framework::Content
         std::vector<uint8_t> data = ReadBytes(count);
         if (data.size() != static_cast<std::size_t>(count))
         {
+            // Refresh ReadByteBuffer IL_0011-0031 keeps reading until a Read returns nothing; on
+            // a compressed body that read is where DecompressStream raises its failure
+            // (DecompressNextBuffer IL_0089-00ad). BinaryReader::ReadBytes stops at the known
+            // length instead, so ask the stream once more.
+            uint8_t probe = 0;
+            (void)Read(&probe, 0, 1);
             throw System::IO::EndOfStreamException(
                 "'" + assetName_ + "': " + readerName + " declared " + std::to_string(count) +
                 " bytes but the stream ended after " + std::to_string(data.size()) + ".");
         }
         return data;
+    }
+
+    namespace
+    {
+        // Refresh ReadHeader IL_001b-001d and ReadSharedResources IL_0000-0002: a count of zero
+        // or less means the file has no shared resources, and ReadHeader allocates no fixup
+        // table for it (IL_001f-0026), so the count becomes zero.
+        [[nodiscard]] int32_t ReadSharedResourceCount(
+            System::IO::BinaryReader& input, const CNA::Internal::Xnb::XnbReadLimits& limits,
+            const std::string& assetName)
+        {
+            const int32_t declared = input.Read7BitEncodedInt();
+            const int32_t count = declared > 0 ? declared : 0;
+            // CNA's own bound, kept for allocation safety: Refresh allocates `newarr List[count]`
+            // for any positive count, CNA refuses a count above the limit before allocating.
+            if (count > limits.maxSharedResourceCount)
+            {
+                throw ContentLoadException(
+                    "'" + assetName + "' has an invalid shared-resource count (" +
+                    std::to_string(count) + ").");
+            }
+            return count;
+        }
     }
 
     void ContentReader::InitializeTypeReaders()
@@ -252,13 +282,7 @@ namespace Microsoft::Xna::Framework::Content
             reader->Initialize(managerInstance);
         }
 
-        sharedResourceCount_ = Read7BitEncodedInt();
-        if (sharedResourceCount_ < 0 || sharedResourceCount_ > limits_.maxSharedResourceCount)
-        {
-            throw ContentLoadException(
-                "'" + assetName_ + "' has an invalid shared-resource count (" +
-                std::to_string(sharedResourceCount_) + ").");
-        }
+        sharedResourceCount_ = ReadSharedResourceCount(*this, limits_, assetName_);
         sharedResources_.assign(static_cast<std::size_t>(sharedResourceCount_), std::any{});
         sharedResourceFixups_.assign(static_cast<std::size_t>(sharedResourceCount_), {});
     }
@@ -269,13 +293,7 @@ namespace Microsoft::Xna::Framework::Content
             CNA::Internal::Xnb::ParseXnbTypeReaderTable(*this, assetName_, limits_);
         typeReaders_.clear();
 
-        sharedResourceCount_ = Read7BitEncodedInt();
-        if (sharedResourceCount_ < 0 || sharedResourceCount_ > limits_.maxSharedResourceCount)
-        {
-            throw ContentLoadException(
-                "'" + assetName_ + "' has an invalid shared-resource count (" +
-                std::to_string(sharedResourceCount_) + ").");
-        }
+        sharedResourceCount_ = ReadSharedResourceCount(*this, limits_, assetName_);
         sharedResources_.clear();
         sharedResourceFixups_.clear();
     }
@@ -327,6 +345,15 @@ namespace Microsoft::Xna::Framework::Content
         if (index == 0)
         {
             return nullptr;
+        }
+        // Refresh ReadSharedResource<T> IL_0039: `ldlen` on the fixup table, which ReadHeader
+        // never allocated for a count of zero or less -- NullReferenceException, before the
+        // index is compared with anything.
+        if (sharedResourceFixups_.empty())
+        {
+            throw System::NullReferenceException(
+                "'" + assetName_ + "' references shared resource " + std::to_string(index) +
+                " but declares no shared resources.");
         }
         // Every other index is a reference; XNA compares index - 1 unsigned, so a negative
         // index is out of range rather than "no reference".

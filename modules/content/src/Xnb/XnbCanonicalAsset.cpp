@@ -209,11 +209,9 @@ namespace CNA::Internal::Xnb
                 std::to_string(container.header.totalLength) + ", but the file contains " +
                 std::to_string(file.size()) + " bytes.");
         }
-        const auto body = container.Bytes();
-        System::IO::MemoryStream bodyStream(
-            body.data(), static_cast<std::int32_t>(body.size()));
+        const auto bodyStream = container.OpenBodyStream();
         ContentReader reader(
-            nullptr, &bodyStream, origin, container.header.version,
+            nullptr, bodyStream.get(), origin, container.header.version,
             container.header.platform, nullptr, limits);
         XnbCanonicalReaderAccess::Initialize(reader);
         const XnbTypeReaderTableEntry& root =
@@ -356,7 +354,7 @@ namespace CNA::Internal::Xnb
         }
 
         const std::int32_t remaining =
-            static_cast<std::int32_t>(body.size()) - bodyStream.getPositionProperty();
+            bodyStream->getLengthProperty() - bodyStream->getPositionProperty();
         if (remaining > 0 && remaining <= 3)
         {
             for (std::int32_t index = 0; index < remaining; ++index)
@@ -369,7 +367,7 @@ namespace CNA::Internal::Xnb
                 }
             }
         }
-        if (bodyStream.getPositionProperty() != static_cast<std::int32_t>(body.size()))
+        if (bodyStream->getPositionProperty() != bodyStream->getLengthProperty())
         {
             throw ContentLoadException(
                 "'" + origin + "' has trailing or unconsumed bytes after its supported root "

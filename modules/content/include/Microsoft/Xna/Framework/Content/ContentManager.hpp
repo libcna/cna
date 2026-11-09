@@ -855,11 +855,9 @@ namespace Microsoft::Xna::Framework::Content
             const auto container = CNA::Internal::Xnb::DecodeXnbContainerBody(
                 std::span<const std::uint8_t>(bytes.data(), bytes.size()), assetName);
             (void)xnbPath; // Refresh PrepareStream uses logical assetName for BadXnb.
-            const auto body = container.Bytes();
-            System::IO::MemoryStream bodyStream(
-                body.data(), static_cast<std::int32_t>(body.size()));
+            const auto bodyStream = container.OpenBodyStream();
             ContentReader contentReader(
-                this, &bodyStream, assetName, container.header.version,
+                this, bodyStream.get(), assetName, container.header.version,
                 container.header.platform, recordDisposableObject);
             return contentReader.ReadAsset<T>();
         }

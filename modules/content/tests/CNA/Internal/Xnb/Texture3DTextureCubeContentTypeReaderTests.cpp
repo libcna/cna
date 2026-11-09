@@ -376,6 +376,8 @@ TEST_F(Texture3DTextureCubeContentTypeReaderTest,
     }
 }
 
+// HND-TQ-16: Refresh's TextureCube constructor refuses a format outside the profile's cube list
+// with NotSupportedException (ProfileCapabilities.ThrowNotSupportedException).
 TEST_F(Texture3DTextureCubeContentTypeReaderTest,
        TextureCubeReaderRejectsSignedNormalizedFormats)
 {
@@ -399,7 +401,7 @@ TEST_F(Texture3DTextureCubeContentTypeReaderTest,
         auto typeReader = ContentTypeReaderManager::CreateReader(
             "Microsoft.Xna.Framework.Content.TextureCubeReader");
         ASSERT_NE(typeReader, nullptr);
-        EXPECT_THROW(typeReader->ReadUntyped(reader, std::any{}), ContentLoadException);
+        EXPECT_THROW(typeReader->ReadUntyped(reader, std::any{}), System::NotSupportedException);
     }
 }
 
@@ -750,6 +752,7 @@ TEST_F(Texture3DTextureCubeContentTypeReaderTest, Texture3DReaderRejectsCompress
 {
     // XNA 4.0's exact HiDef volume-format table contains all fifteen uncompressed formats above,
     // but no block-compressed format. CNA used to accept DXT1/3/5 and reject Bgr565 instead.
+    // HND-TQ-16: the Texture3D constructor's refusal is NotSupportedException.
     for (const SurfaceFormat format :
          {SurfaceFormat::Dxt1, SurfaceFormat::Dxt3, SurfaceFormat::Dxt5})
     {
@@ -772,6 +775,6 @@ TEST_F(Texture3DTextureCubeContentTypeReaderTest, Texture3DReaderRejectsCompress
         auto typeReader = ContentTypeReaderManager::CreateReader(
             "Microsoft.Xna.Framework.Content.Texture3DReader");
         ASSERT_NE(typeReader, nullptr);
-        EXPECT_THROW(typeReader->ReadUntyped(reader, std::any{}), ContentLoadException);
+        EXPECT_THROW(typeReader->ReadUntyped(reader, std::any{}), System::NotSupportedException);
     }
 }

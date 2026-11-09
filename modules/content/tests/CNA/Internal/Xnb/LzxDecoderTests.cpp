@@ -16,6 +16,7 @@
 #include "Microsoft/Xna/Framework/Content/ContentLoadException.hpp"
 #include "System/IO/BinaryReader.hpp"
 #include "System/IO/MemoryStream.hpp"
+#include "System/InvalidOperationException.hpp"
 
 using Microsoft::Xna::Framework::Content::ContentLoadException;
 
@@ -155,7 +156,9 @@ TEST(LzxDecoderTest, MultiBlockRealFixtureDecompressesCorrectlyAcrossBlockBounda
     EXPECT_EQ(names, expected);
 }
 
-TEST(LzxDecoderTest, WrongDecompressedSizeThrowsContentLoadException)
+// HND-TQ-16: more declared bytes than the frames hold is Refresh DecompressNextBuffer's
+// DecompressionError (IL_009c-00ad), an InvalidOperationException.
+TEST(LzxDecoderTest, WrongDecompressedSizeThrowsInvalidOperationException)
 {
     const std::string fileBytes = ReadWholeFile("tests/assets/xnb/monogame/windows/lzx/Explosion.xnb");
     ASSERT_FALSE(fileBytes.empty());
@@ -170,7 +173,7 @@ TEST(LzxDecoderTest, WrongDecompressedSizeThrowsContentLoadException)
         CNA::Internal::Xnb::DecompressXnbPayload(
             reinterpret_cast<const uint8_t*>(fileBytes.data()) + 14,
             compressedSize, /*decompressedSize=*/999999, "Explosion.xnb"),
-        ContentLoadException);
+        System::InvalidOperationException);
 }
 
 TEST(LzxDecoderTest, OversizedDecompressedSizeThrowsContentLoadExceptionBeforeAllocating)

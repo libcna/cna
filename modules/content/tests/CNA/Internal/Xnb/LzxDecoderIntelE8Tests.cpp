@@ -17,13 +17,12 @@
 
 #include "CNA/Internal/Xnb/LzxDecoder.hpp"
 #include "CNA/Internal/Xnb/XnbDecompression.hpp"
-#include "Microsoft/Xna/Framework/Content/ContentLoadException.hpp"
 #include "System/IO/MemoryStream.hpp"
+#include "System/InvalidOperationException.hpp"
 
 namespace
 {
     using Bytes = std::vector<std::uint8_t>;
-    using Microsoft::Xna::Framework::Content::ContentLoadException;
 
     // LZX words are little endian on the wire, with bits consumed most significant first.
     class Bits
@@ -375,6 +374,8 @@ TEST(LzxDecoderIntelE8Test, AppendsTranslatedBytesAtCurrentOutputPosition)
     EXPECT_EQ(output.getPositionProperty(), 39);
 }
 
+// HND-TQ-16: every truncation is Refresh DecompressNextBuffer's DecompressionError, an
+// InvalidOperationException (IL_0089-0095, IL_009c-00ad).
 TEST(LzxDecoderIntelE8Test, TruncatedIntelFramesAreRefused)
 {
     Bytes raw(32, 0x90);
@@ -387,14 +388,14 @@ TEST(LzxDecoderIntelE8Test, TruncatedIntelFramesAreRefused)
     {
         SCOPED_TRACE(cut);
         Bytes truncated(payload.begin(), payload.begin() + static_cast<std::ptrdiff_t>(cut));
-        EXPECT_THROW((void)Decode(truncated, 32), ContentLoadException);
+        EXPECT_THROW((void)Decode(truncated, 32), System::InvalidOperationException);
         if (cut >= 5)
         {
             // Also reduce the outer compressed-size field so the inner decoder sees the
             // truncation (Intel header, block header, repeated offsets, or raw operand bytes).
             truncated[3] = static_cast<std::uint8_t>((cut - 5) >> 8);
             truncated[4] = static_cast<std::uint8_t>(cut - 5);
-            EXPECT_THROW((void)Decode(truncated, 32), ContentLoadException);
+            EXPECT_THROW((void)Decode(truncated, 32), System::InvalidOperationException);
         }
     }
 }

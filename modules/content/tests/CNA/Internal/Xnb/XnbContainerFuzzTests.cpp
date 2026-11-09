@@ -32,6 +32,8 @@
 #include "CNA/Internal/Xnb/XnbBuiltInReaders.hpp"
 #include "Microsoft/Xna/Framework/Audio/SoundEffect.hpp"
 #include "Microsoft/Xna/Framework/Content/ContentLoadException.hpp"
+#include "System/InvalidOperationException.hpp"
+#include "System/NullReferenceException.hpp"
 #include "Microsoft/Xna/Framework/Content/ContentManager.hpp"
 #include "Microsoft/Xna/Framework/Content/ContentTypeReaderManager.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
@@ -174,8 +176,28 @@ namespace
                 const bool profileRefusal =
                     (message.rfind("XNA Framework Reach profile ", 0) == 0 ||
                      message.rfind("XNA Framework HiDef profile ", 0) == 0);
-                if (!profileRefusal)
+                // HND-TQ-16: a texture reader's SurfaceFormat outside the profile's list, which
+                // Refresh's texture constructors refuse the same way (Texture2D
+                // ValidateCreationParameters IL_0034-005d).
+                const bool formatRefusal =
+                    message.find(": SurfaceFormat ") != std::string::npos &&
+                    message.find(" is not supported.") != std::string::npos;
+                if (!profileRefusal && !formatRefusal)
                     throw;
+                ++cleanlyRejected;
+            }
+            catch (const System::InvalidOperationException& refusal)
+            {
+                // HND-TQ-16: Refresh DecompressStream's DecompressionError, which ReadAsset does
+                // not wrap (DecompressNextBuffer IL_0089-00ad). Any other one still fails.
+                if (refusal.getMessageProperty() != "Error decompressing content data.")
+                    throw;
+                ++cleanlyRejected;
+            }
+            catch (const System::NullReferenceException&)
+            {
+                // HND-TQ-16: a shared-resource reference in a file that declares none (Refresh
+                // ReadSharedResource<T> IL_0039).
                 ++cleanlyRejected;
             }
             // TQ-018: std::out_of_range, std::length_error and std::invalid_argument used to count as

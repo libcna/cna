@@ -18,6 +18,7 @@
 
 #include "CNA/Internal/Xnb/XnbDecompression.hpp"
 #include "Microsoft/Xna/Framework/Content/ContentLoadException.hpp"
+#include "System/InvalidOperationException.hpp"
 
 namespace
 {
@@ -138,9 +139,15 @@ TEST(LzxDecoderFuzzTest, MutatedRealPayloadsNeverCrashAndOnlyFailCleanly)
         {
             ++cleanlyRejected; // expected: malformed/adversarial input rejected with a clean error
         }
-        // TQ-018: ContentLoadException is DecompressXnbPayload's only documented refusal
-        // (XnbDecompression.hpp); the decoder reads a MemoryStream whose ReadByte answers -1 at
-        // its end, so an EndOfStreamException -- accepted here before -- would itself be a leak.
+        catch (const System::InvalidOperationException&)
+        {
+            ++cleanlyRejected; // HND-TQ-16: Refresh's DecompressionError for an undecodable frame
+        }
+        // TQ-018/HND-TQ-16: ContentLoadException (a size outside CNA's limits) and
+        // InvalidOperationException (Refresh DecompressNextBuffer's DecompressionError) are
+        // DecompressXnbPayload's only documented refusals (XnbDecompression.hpp); the decoder
+        // reads a MemoryStream whose ReadByte answers -1 at its end, so an EndOfStreamException
+        // -- accepted here before -- would itself be a leak.
         // Any other exception type, or a crash/hang, fails this test (uncaught exception aborts
         // it; a crash is caught by the process exit code / a sanitizer run, not by this catch list).
     }

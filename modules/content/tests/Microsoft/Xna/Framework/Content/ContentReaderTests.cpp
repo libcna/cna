@@ -30,6 +30,7 @@
 #include "System/IO/BinaryWriter.hpp"
 #include "System/IO/EndOfStreamException.hpp"
 #include "System/IO/MemoryStream.hpp"
+#include "System/NullReferenceException.hpp"
 
 using Microsoft::Xna::Framework::Content::ContentLoadException;
 using Microsoft::Xna::Framework::Content::ContentReader;
@@ -748,8 +749,17 @@ TEST_F(ContentReaderTest, Safe002SharedResourceDispatchCombinationsRefuseAndReco
     {
         SCOPED_TRACE(::testing::Message() << mutation.count << "/" << mutation.reference
                                         << "/" << mutation.reader << "/" << mutation.truncate);
-        EXPECT_THROW((void)read(make(mutation.count, mutation.reference,
-                                     mutation.reader, mutation.truncate)), ContentLoadException);
+        const auto bytes = make(mutation.count, mutation.reference, mutation.reader, mutation.truncate);
+        if (mutation.count <= 0)
+        {
+            // HND-TQ-16, Refresh ReadHeader IL_001b-001d / ReadSharedResource<T> IL_0039: no
+            // fixup table, so the reference is a NullReferenceException.
+            EXPECT_THROW((void)read(bytes), System::NullReferenceException);
+        }
+        else
+        {
+            EXPECT_THROW((void)read(bytes), ContentLoadException);
+        }
         const auto valid = read(make(2, 2, 2, false));
         ASSERT_NE(nullptr, valid);
         EXPECT_TRUE(valid->fixupRan);
