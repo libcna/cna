@@ -21,7 +21,7 @@ most 3 concurrent). Owner answers given before a ten-hour absence, all binding:
 
 Done tonight (each a focused-gated local commit; `next` pushed through 0cbebb827, the rest pending the next
 push). Fork chain, all published fast-forward with CNA-Patch trailers: MojoShader 6ae750b..56cb082, FNA3D
-5c0b9b8..4ff109a; CNA pin now FNA3D 4ff109a / MojoShader c6397f8 (TQ-FORK-PIN-01..04).
+5c0b9b8..0bfbe7f; CNA pin now FNA3D 0bfbe7f / MojoShader 6f1e91b (TQ-FORK-PIN-01..05).
 - Compiled effects: six TQ-SWEEP12 drafts integrated; TEXREG2*/TEXDP3*/TEXM3X2DEPTH admitted with public
   pixel/depth witnesses; legacy sampler-type inference (TQ-SAMPLER-INFER-01/02); D3D11 glue, FOG/PSIZE lanes,
   trace overlap refusal, SDL GPU sample counts (TQ-FORK-L42/L38/L41/E01); FNA3D OpenGL presentation rectangles
@@ -38,8 +38,9 @@ push). Fork chain, all published fast-forward with CNA-Patch trailers: MojoShade
 Two independent Codex reviews covered 594eb28dc..7ba580307 and the later commits; their findings R1-R4 and
 S1 are fixed. Lane workspaces, reports and integrator logs: `/rv/tmp/cna-hnd-2026-11-08/<lane>/`; archived
 receipts under `cnaplan/evidence/rev002/`. Galaxy Eggbert's upstream_bugs.md has no open CNA item.
-Still open from 8.0: XACT question 4 (lifetimes, capture running at the time of writing) and the finite-loop
-cardinality question below; the full seven-tree sweep on the final source.
+XACT question 4 (lifetimes) was captured and integrated (HND-XACT-04). The full seven-tree sweep ran on
+d335682d0 (section 0.3); its four failures and one CI failure are fixed (HND-SWEEP15-01..03, TQ-FORK-PIN-05).
+Still open from 8.0: the finite-loop cardinality question below and a confirming sweep on the final source.
 
 ### Owner questions recorded during the night (not implemented, owner rule)
 
@@ -230,56 +231,36 @@ if publication is later authorized. No current remote execution is implied by lo
 
 ### 0.3 Stable full sweep and remaining failures
 
-Evidence: `sweep14-restart-b7ab4afa4/receipt.json`, `summary.txt`, seven build logs and seven
-CTest logs/JUnit files. Start and end HEAD are both
-`b7ab4afa46afb2665b87d316e9257c807726e952`, tracked dirty count zero throughout the terminal
-check. All seven whole configurations built successfully. Suites ran sequentially through the
-private GPU runner, generally `ctest -j4`; counts include explicit skips.
+Latest full seven-tree sweep (sweep 15): `cnaplan/evidence/rev002/sweep15-d335682d0/`
+(`receipt.json`, `summary.txt`, identities, seven build and CTest logs, JUnit). Start and end HEAD
+`d335682d07c21552970b9ed1a7ccca44c0c00d22`, tracked dirty zero; FNA3D 4ff109a, MojoShader c6397f8,
+sharp-runtime b6e72bad. All seven builds succeeded (six cores); suites ran through the private runner
+with `ctest -j4 --timeout 1500` and `SDL_ASSERT=abort`; counts include explicit skips.
 
 | Tree | Registered cases | Failed | Explicit skips | CTest exit |
 |---|---:|---:|---:|---:|
-| multi | 15,371 | 4 | 477 | 8 |
-| sdlgpu | 14,718 | 1 | 495 | 8 |
-| webgpu | 14,294 | 2 | 497 | 8 |
-| fna3d | 14,187 | 1 | 618 | 8 |
-| software | 14,235 | 0 | 234 | 0 |
-| headless | 13,162 | 0 | 903 | 0 |
-| opengl33 | 15,312 | 0 | 267 | 0 |
+| multi | 15,449 | 1 | 482 | 8 |
+| sdlgpu | 14,789 | 1 | 498 | 8 |
+| webgpu | 14,366 | 1 | 500 | 8 |
+| fna3d | 14,263 | 2 | 618 | 8 |
+| software | 14,306 | 1 | 237 | 8 |
+| headless | 13,232 | 0 | 907 | 0 |
+| opengl33 | 15,385 | 2 | 267 | 8 |
 
-The four multi failures remain red on the published dependency pair:
-`SdlGpuCompiledEffectDrawTest.SharedLegacyBumpEnvironmentContract`,
-`Gap13_CompiledCorpus_WEBGPU`, `Gap13_CompiledPolicy_SDLGPU`,
-`Gap13_CompiledCorpus_SDLGPU`. Prepared fork/CNA integration fixes exist below; they are not
-merged into `next` and do not make this baseline green.
-
-The SDLGPU failure was
-`GpuPresentPixels.RendererDestructionReleasesOverrideResourcesButNeverTheHost`; WEBGPU also
-failed `GpuPresentPixels.OverrideResizeUsesFreshClientDimensions`. TQ-SWEEP14-01 fixes the
-test observer: all four foreign/resized GPU observation constructors now request Auto
-Composite capture, as owned clients already did. A raised private X11 occluder reproduces the
-old direct-window read failure. After the patch, **all 17 GpuPresentPixels cases pass with no
-skips on each of SDLGPU and WEBGPU under the occluder**; forced `window` capture still fails
-the original lifetime witness on each. CnaTests rebuilt in SDLGPU, WEBGPU and multi.
-Renderer behavior and exact pixel expectations are unchanged. Commit
-`fc8728da7fba06fd30c64c6828794f58ab003782`; evidence `sweep14-occlusion/receipt.json`.
-There was no second full seven-tree run after this focused repair.
-
-The FNA3D failure is `XnaPipelineGenuineRuntimeBuiltFamilies`: all three content fixtures
-(`effect_fx_minimal`, `song_mp3`, `video_wmv`) print PASS/failed=0, then Wine faults executing
-`1EC24A76` on thread `0210` during teardown. The nonzero process result remains a failure.
-`tests/interop/xna40/Program.cs` creates a separate `ContentManager(game.Services, root)`
-without disposing it before the surrounding Game. This is a real ownership gap, **not a
-proven explanation of that native fault**. No cleanup patch, exit suppression or skip was
-introduced. TQ-SWEEP14-02 investigation: `sweep14-fna-genuine-cleanup/receipt.json` and
-`failure.txt`. **Repaired on 2026-11-08 (TQ-SWEEP14-02):** the harness now unloads and disposes the
-fixture ContentManager before the GraphicsDevice and disposes the GraphicsDeviceManager and Game.Content
-before Game, prints three ordered `OWNERSHIP:` witnesses and its process exit code, and the wrapper
-requires all of them. The focused private run passes (exit 0). The native fault did not reproduce in
-three runs of the old harness either, so its cause remains unattributed; evidence
-`sweep14-02-harness-lifetime/receipt.json`.
-
-Fourteen static gates passed at the stable checkpoint; see `static-gates-receipt.json` in
-the same sweep directory. Those results are scoped to their recorded source and commands.
+Every failure is fixed with its own commit after the sweep (no second full sweep yet):
+- `CnaXactFiniteLoopTests` in every SDL3 tree: the native 22050 Hz XACT captures were rendered at
+  44100 Hz, and SDL3_mixer's sinc resampler is not DC-exact. HND-SWEEP15-01 (22feaea09) runs those
+  suites in their own process at 22050 Hz (`CnaXactFiniteLoop*NativeRateTests`).
+- `Fna3d_AllocationFailure` (OpenGL): since the faux back buffer of 4ff109a, a renderer created after
+  another one drew no sprite against uncleared radeonsi depth/HiZ memory. HND-SWEEP15-03 (26e3e7cae)
+  clears depth, as the other draw witnesses do.
+- `CompiledEffectTruncationSweepTest` (opengl33, aborted): a truncated effect reached MojoShader's
+  small-object assertion. Fork fix TQ-FORK-EFFECT-TRUNC-01 (MojoShader 6f1e91b, FNA3D 0bfbe7f,
+  published 2026-11-09), CNA pin TQ-FORK-PIN-05 (fa2b47a34).
+- general-tests-ci on d335682d0 also failed `WaveBankTest.IsInUseTrueWhilePausedNotJustWhilePlaying`:
+  its 100-frame wave could finish before Pause. HND-SWEEP15-02 (28e19c60c) plays a four-second entry.
+Sweep 14 (`sweep14-restart-b7ab4afa4/`) is superseded; its four multi Gap13/SDLGPU failures, the GpuPresentPixels
+observer failures and the genuine-runtime teardown fault were green in sweep 15.
 
 ### 0.4 Unpublished fork repairs and their integration order
 
