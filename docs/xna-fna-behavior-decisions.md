@@ -423,6 +423,15 @@ guarantees for every overload, value or platform.
 
 These are current decisions, not open defects:
 
+- **A managed null has no C++ form where CNA takes a reference** (TQ-074, owner decision
+  2026-11-05). XNA throws `ArgumentNullException` for a null text or font in `SpriteBatch.DrawString`
+  and similar members. CNA keeps its reference-based signatures and does not add the eight CNAEXT
+  pointer overloads that would model the null case; that XNA contract is recorded, not reproduced.
+- **Spatial audio stays a stereo approximation** (cnagaps G06, owner decision 2026-11-06). `Apply3D`
+  pans and attenuates into CNA's stereo mixer, and with several listeners it uses the nearest/loudest
+  one, because the mixer has no XACT-equivalent per-listener output matrix
+  ([`c-api/AUDIO.md`](c-api/AUDIO.md)). The mixer architecture is not changed to reproduce XACT's
+  multichannel positional mix.
 - **BasicEffect's public World, View, Projection and VertexColorEnabled fields count as set only when
   their value changed** (TQ-041). XNA has properties only, and `set_World`/`set_View`/`set_Projection`
   mark their dirty bits even for the current value (IL_0000-0016); CNA's property setters do the same.
