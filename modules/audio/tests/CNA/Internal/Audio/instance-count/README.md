@@ -14,7 +14,7 @@ no markers. Both cues refer to the same sound; their instance counts remain dist
 | unlimited | 255/REPLACE_OLDEST | Per-handle initialization, publication and bank/definition scope |
 | cue_two | 2/FAIL, authored fade-out50ms | Stopping tail and direct destruction |
 | short | 2/FAIL, authored fade-out50ms | Real end-of-wave count publication |
-| cue_fail | 1/FAIL | Native failed-play evidence; CNA admission repair remains open |
+| cue_fail | 1/FAIL | Native failed-play evidence; CNA prepares and rolls back as native since TQ-XACT-30 |
 | cue_oldest | 1/REPLACE_OLDEST | Cue replacement controls and eviction fade regressions |
 | cat_oldest | 255/REPLACE_OLDEST; category maximum1 | Category replacement controls and eviction fade regressions |
 | cat_fail | 255/REPLACE_OLDEST; category maximum1/FAIL | Prepare-time versus Play-time rejection controls; SDK emits a simple cue |
@@ -117,4 +117,4 @@ matrix and exact inputs are identified in TAIL_BANK_PROVENANCE.json. Verify with
 `python3 tools/xna-oracle/check-xact-tail-bank-oracle.py <matrix.json>` from the repo
 root. Four changed-evidence controls reject either lost bank flag, an absent tail
 or different input bytes. These qualify authored-tail ownership independently of
-counts; the separate prepared-cue runtime repair remains open.
+counts; the separate prepared-cue runtime repair landed in TQ-XACT-30.

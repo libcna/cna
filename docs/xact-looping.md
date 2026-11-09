@@ -8,7 +8,7 @@ and FAudio disagree on the event count; CNA follows Microsoft where it was measu
 
 Genuine Refresh-selected XACT3.6 x86 and x64 played SDK-built banks that change one field of
 HND-XACT-02's samebank shape at a time (56 cells, [corpus, oracle and provenance](../modules/audio/tests/CNA/Internal/Audio/finite-cardinality/README.md),
-archive `cnaplan/evidence/rev002/hnd-xact/`, checker `tools/xna-oracle/check-xact-finite-cardinality-oracle.py`):
+checker `tools/xna-oracle/check-xact-finite-cardinality-oracle.py`):
 
 | Shape, raw loop byte n = 0..4 | Native wave lifecycle |
 |---|---|
@@ -58,9 +58,9 @@ distinction follows `FACT_internal.c:272-278,444-452,739-783`,
 
 The probe uses pooled wave records and wraps preparation, playback, state, destruction,
 volume and pitch. It supplies controlled STOPPED states after each activation and calls
-DoWork before promotion, avoiding starvation of the single upcoming slot. All twelve
-cases pass with ASan/UBSan/LSan. Internal reference code is instrumented; public functions
-come from an uninstrumented archive. A real SDL mutex and injected clock are used, with
+DoWork before promotion, avoiding starvation of the single upcoming slot. It runs under
+ASan/UBSan/LSan; internal reference code is instrumented, public functions come from an
+uninstrumented archive. A real SDL mutex and injected clock are used, with
 zeroed audio/master records supplying only the filter sample rate. No assets are parsed,
 no audio device or API thread runs, and no native PCM or Microsoft XACT is measured.
 The plain255 observation proves delegation, not an audible infinite-duration run.
@@ -83,7 +83,9 @@ completion, and PCM8/PCM16/ADPCM resident/streamed output for both the delegated
 NEW_ON_LOOP complete waves. The codec fixtures also check decoded WMAv2 waves, pause/resume,
 stops, fresh cues and through-EOF regions. `HndXactCardinality.*` replays every measured SDK
 bank through both mixers at its native 22050 Hz, and `HndXactPrefetch.SdkRawThreeProducesFourCompleteWaveActivations`
-plays HND-XACT-02's three SDK profiles to their fourth and last wave. Older variation tests
+plays HND-XACT-02's three SDK profiles (raw byte 3, resident and streamed) to their fourth and
+last wave, the count HND-XACT-02's genuine engines played; its prefetch regressions also qualify
+early bank ownership and missing-successor termination. Older variation tests
 retain their original draw/pitch/filter sequences by authoring the required total count. NULL
 tests explicitly arm completed voices; they make no real-EOF claim.
 
@@ -95,14 +97,3 @@ CNA retains owner-approved unbounded255 even for varied events. FAudio's nondele
 is finite, as its probe shows; the intentional source comment preserves this distinction.
 The FAudio probe qualifies serviced activation counts; it does not establish random-draw
 timing, starvation behavior or asynchronous audio parity.
-
-Probe sources, all twelve outcomes and hashes are archived under
-`../cnaplan/evidence/rev002/xact-finite-cardinality/`. Finite-count regression and mutation
-evidence is under `../cnaplan/evidence/rev002/xact-finite-event-budget/`.
-
-
-HND-XACT-02's genuine engines played four waves for the SDK-authored ordered
-PlayWaveTrackVariation/new-on-loop raw byte3, resident and streamed. HND-XACT-05 isolated the
-cause: neither the flags byte nor the event layout, but the count itself (n+1). Its prefetch
-regressions qualify early bank ownership and missing-successor termination; the four-wave
-count is now a regression of its own.

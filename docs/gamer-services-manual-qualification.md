@@ -1,11 +1,10 @@
 # GamerServices manual qualification plan
 
-Written by the GamerServices audit (GS-AUDIT-P4, 2026-10-02) for the cases software tests cannot
-close; [`gamer-services-known-limitations.md`](gamer-services-known-limitations.md) lists them
-(especially 28–31 and 33). Commands and harness behavior were source-reviewed again on
-2026-11-01; that review is not execution of this qualification plan.
+The cases software tests cannot close;
+[`gamer-services-known-limitations.md`](gamer-services-known-limitations.md) lists them (especially
+28–31 and 33).
 
-**NOT EXECUTED / NO PASS CLAIM.** Software audit closes with these device, network and platform limitations. Run only on disposable lab machines/VMs and approved devices, never the owner's live desktop. Linux window-capable runs must use `tools/platform/run_gpu_tests_private.sh`; Windows/macOS use an isolated lab session/VM. Keep raw passwords/tokens and room recordings out of retained evidence. This plan does not authorize destructive system crashes or power cuts.
+**NOT EXECUTED / NO PASS CLAIM.** These device, network and platform limitations stay open until this plan runs. Run only on disposable lab machines/VMs and approved devices, never the owner's live desktop. Linux window-capable runs must use `tools/platform/run_gpu_tests_private.sh`; Windows/macOS use an isolated lab session/VM. Keep raw passwords/tokens and room recordings out of retained evidence. This plan does not authorize destructive system crashes or power cuts.
 
 ## Common setup and evidence
 

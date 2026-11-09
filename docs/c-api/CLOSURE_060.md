@@ -1,9 +1,7 @@
 # ABI 0.60 owner-contract closure
 
-2026-11-03, MTH-CABI-009 / CABI-CLOSE-C. Project owner **Robert Vokac** supplied the
-following decisions on 2026-11-03. They resolve the seven owner-contract rows reserved in
-CONTRACTS.md §§27, 28 and 31. No prior approvals, exclusions or route-coverage budget change.
-This is an additive experimental ABI with three new routes, unchanged layouts and 3,397 exports.
+The project owner's decisions on the seven owner-contract coverage rows of ABI 0.60
+(MTH-CABI-009). ABI 0.60 is additive: three new routes, unchanged layouts.
 
 ## Owner-approved dispositions
 
@@ -13,9 +11,9 @@ This is an additive experimental ABI with three new routes, unchanged layouts an
 | `CPP-921CC48EF0E4`, `CPP-9F69184480D2` | Owner-approved **no-C-form**: guest/private-slot state is managed by the network transport/session. C callers read it through the existing getters. |
 
 The approvals are pinned to those four singleton IDs in tools/c-api/coverage_mappings.json;
-partial approval names owner/date and records the exact subset in its limitation object.
-The two transport-state dispositions follow the 2026-11-02 exact-row no-C-form precedent.
-Existing Add/Insert ownership and guest/private read routes retain their behavior.
+the partial approval records the exact subset in its limitation object. The two transport-state
+dispositions follow the earlier exact-row no-C-form decisions. Existing Add/Insert ownership and
+guest/private read routes retain their behavior.
 
 ## Native shared machines
 
@@ -40,8 +38,8 @@ typed `cna_network_machine_destroy` route.
 `NetworkParentLifetimeSmoke.c::shared_machine_aliases` tests both gamer/alias and sibling alias release orders, two gamers
 sharing a native roster, roster addition observed through both aliases, mutation of a cached gamer,
 reassignment with old cached identity retained, no-session/session boundary refusal, associated
-empty-identity refusal, null/wrong/stale handles and independent session release guards. These
-assertions executed without a display and passed. CNA permits only one active session per process;
+empty-identity refusal, null/wrong/stale handles and independent session release guards, without
+a display. CNA permits only one active session per process;
 the strict-C cross-session-boundary fixture uses an associated session versus a no-session gamer,
 and a no-session-associated empty machine versus a session gamer.
 
@@ -72,23 +70,13 @@ screen-device-change route reports that failure. A declined size is a successful
 previous dimensions, accepted portrait/landscape orientation, false/nonpositive retention,
 callback-time replacement/removal, context retirement, owner thread (also with service enabled),
 recursive driving/destruction refusal, source teardown, explicit failure diagnostics and invalid
-availability. The strict-C suite is built and registered as CApi_ServiceWindowSmoke; **new provider
-execution is pending the integration owner's private runner**. Inventory implementation does not
-claim that runtime qualification has occurred. No GPU/window test was run by this lane.
-
-## Remaining boundary and validation
-
-The generated inventory is **7,512 implemented / 17 partial / 4 planned / 609 not applicable**
-across 8,142 declarations, 466 included headers and 410 excluded headers. Partial rows have ten
-approved disposition groups. The remaining exact planned IDs are `CPP-BEE11E050E22`,
-`CPP-180E79B6B641`, `CPP-7B5289714D25`, `CPP-613C6A070826`; all need Windows UTF-8/native
-filesystem-path qualification. The release verdict remains **Not ready**.
-
-Exact generation/build/check commands and results are retained in the lane REPORT.md. The wasm
-export list is regenerated from public headers; no wasm build or Windows execution is claimed.
-The integration owner commits after review and the pending private provider execution:
+availability. The strict-C suite is registered as CApi_ServiceWindowSmoke and opens a window, so
+run it on the private display:
 
 ```sh
 tools/platform/run_gpu_tests_private.sh cmake-build-sdlgpu \
   -R '^CApi_(ServiceWindowSmoke|RuntimeGameSmoke|RuntimeComponentsSmoke)$' -V -j4
 ```
+
+The current coverage counts, the remaining planned rows and the release verdict are in
+[README.md](README.md), [COVERAGE.md](COVERAGE.md) and [LIMITATIONS.md](LIMITATIONS.md).

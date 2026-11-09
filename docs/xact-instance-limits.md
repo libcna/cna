@@ -1,15 +1,15 @@
 # XACT cue lifecycle and instance limits
 
-CNA's public `Cue.GetVariable("NumCueInstances")` now uses a per-handle snapshot,
+CNA's public `Cue.GetVariable("NumCueInstances")` uses a per-handle snapshot,
 initially zero. A change to the number of Playing cues in one sound-bank object and
 cue definition publishes that number to every retained handle of that definition,
 including Prepared, Paused and Stopped handles. Paused Playing cues and instance-limit
-fade victims count until retirement; authored Stopping tails no longer contribute.
+fade victims count until retirement; authored Stopping tails do not contribute.
 Prepare and nonplaying destruction leave a fresh
 handle at zero when the definition's count has not changed. RPC and interactive
 selection use the same snapshot, rather than a separate authored initial value.
 
-Admission now counts Playing cues, including eviction fades; authored Stopping
+Admission counts Playing cues, including eviction fades; authored Stopping
 tails free capacity. Category counts span the engine. Candidate search preserves
 its incoming-bank fallback except the HND-XACT-03 measured OLDEST case: when no
 local victim exists, exactly one eligible foreign Playing/nonfading victim can be
@@ -18,7 +18,7 @@ Cue-definition limits still search their own bank/definition. A victim already f
 excluded despite its public Playing state. An unplayed Prepared handle can absorb
 one replacement without losing its state or resources. A later successful Play
 restores its eligibility at its original preparation position. Category FAIL is
-checked during noninteractive preparation and rechecked at Play; cue FAIL still
+checked during noninteractive preparation and rechecked at Play; cue FAIL
 waits until Play.
 
 CNA retains sound-bank `IsInUse` while an undisposed cue handle exists, including
@@ -27,7 +27,7 @@ survives cue destruction, including references warmed before a later preparation
 failure. Sound-bank disposal releases those references. These TQ-XACT-32 lifetimes
 follow TQ-XACT-31's Microsoft controls; playback counts remain independent.
 
-## Microsoft XACT 3.6 qualification (TQ-XACT-25, 2026-11-07)
+## Microsoft XACT 3.6 qualification (TQ-XACT-25)
 
 The retained XNA Refresh Xact.dll4.0.30901.0 selects retail XACT3.6, not3.7. Its public
 Cue.GetVariable validates the name at IL_0000–0017, invokes the native bridge at
@@ -40,11 +40,9 @@ The bridge is static IL evidence; the managed wrapper was not executed.
 
 Public native Initialize/Prepare/Play/GetVariable/GetCueProperties/Stop/Destroy and
 DoWork run on the authentic Microsoft3.6 engine under Wine, private display and null
-audio output. Loaded paths and method ownership are checked. Initial measurement
-covers12 admission cells (six profiles, x86/x64,300 snapshots), two cache/scope cells
-and six destruction/tail/EOF cells. The two retained own C++ probes repeat eight
-cache/scope/end cells against the committed SDK banks after removing unused marker
-helpers. Both architectures agree on steady counts and variable values.
+audio output. Loaded paths and method ownership are checked. The measurement covers
+admission (six profiles, x86/x64), cache/scope and destruction/tail/EOF cells; both
+architectures agree on steady counts and variable values.
 
 | Sequence | Measured result |
 |---|---|
@@ -61,69 +59,59 @@ helpers. Both architectures agree on steady counts and variable values.
 | Category FAIL at maximum1 | Prepare can return8ac70008 with no cue handle |
 | Leading Prepared P, OLDEST maximum1, L then I | P remains Prepared; L/I both Playing, settled bank2. Later X/Y each replace one, settled bank2 |
 
-The last sequence originally left victim identity unresolved. TQ-XACT-26's
-controls below distinguish the leading-prepared-handle effect from generally delayed
-limit enforcement. FAudio's measured underflow remains outside Microsoft's contract.
+TQ-XACT-26's controls below explain the last row (preparation-order selection, not
+delayed limit enforcement). FAudio's measured underflow remains outside Microsoft's contract.
 
 The stopping decrement is bounded between the Stop call and the20ms snapshot. It
 can race the native thread; no exact synchronous transition, DoWork ownership or
 callback timing guarantee follows. CNA publishes at its controller state transition
-and tests the settled tail observation. Neither this work nor the earlier FAudio
-probe qualifies native Windows, managed execution, decoded PCM output, all cue
-shapes, variable setters, or Microsoft RPC/interactive playback. One run per
-architecture/scenario does not establish scheduling variance.
+and tests the settled tail observation. This qualifies neither native Windows, managed
+execution, decoded PCM output, all cue shapes, variable setters, nor Microsoft
+RPC/interactive playback. One run per architecture/scenario does not establish
+scheduling variance.
 
 The own [SDK inputs and reproduction instructions](../modules/audio/tests/CNA/Internal/Audio/instance-count/README.md)
 and `tools/xna-oracle/XactInstanceCount{Scope,End}Probe.cpp` preserve the count
-experiment. Full raw logs, initial probes and additional admission projects are in
-`../cnaplan/evidence/rev002/xact-instance-counts/`.
+experiment.
 
 ## Instance-limit controls and fade state (TQ-XACT-26)
 
-The retained `XactInstanceLimitProbe.cpp` runs32 final x86/x64 cells: cue/category
+The retained `XactInstanceLimitProbe.cpp` runs32 x86/x64 cells: cue/category
 OLDEST with no extra handle, an older prepared P, a later prepared P, an older P
 destroyed before overflow, and a paused L; cue/category FAIL with no P, older P,
 and a settled authored stop. The same genuine3.6 engine and untouched SDK banks
 are used; [separate provenance](../modules/audio/tests/CNA/Internal/Audio/instance-count/INSTANCE_LIMIT_PROVENANCE.json)
-records the exact final source/binary/input hashes. Every protocol call succeeds
-except the specifically observed8ac70008 rejections. Earlier16/28-cell matrices
-are retained as intermediate evidence.
+records the exact source/binary/input hashes. Every protocol call succeeds
+except the specifically observed8ac70008 rejections.
 
 Without P, with a later P, or after destroying an older P, I replaces L: after
 settling L is Stopped and I Playing/count1. Only an older retained P produces
 PPrepared/LPlaying/IPlaying/count2. P can still Play afterward: the older-P case
 then leaves P/I Playing/count2; the later-P case leaves only P Playing/count1.
-Together with the earlier continuation, these controls support preparation-order
-selection including unplayed handles; general one-step-late enforcement cannot
-explain the difference. Native internal victim pointers were not inspected.
+These controls support preparation-order selection including unplayed handles;
+general one-step-late enforcement cannot explain the difference. Native internal
+victim pointers were not inspected.
 
 During an ordinary overflow's20ms snapshot, L remains state8 (Playing), or72 if
 previously paused, and counts2 with I. After the fade it is32 and counts1. The
 paused victim retires without Resume; a subsequent Resume leaves it stopped.
 FAudio's BeginFadeOut instead adds its STOPPING bit while preserving PLAYING.
-CNA now retains Microsoft's public Playing/Paused state through the instance-limit
+CNA retains Microsoft's public Playing/Paused state through the instance-limit
 fade. Reconciliation, new waves and category-volume changes still apply the fade,
 its expiry cancels pending events, and candidate selection excludes the existing
 fade marker so another overflow cannot restart that victim's deadline.
 
-FAIL controls also show the remaining admission repair precisely. Category FAIL
-can reject Prepare; an older P prepared while capacity was available still has its
-later Play rejected when full. Cue FAIL rejects at Play. Refresh public Cue.Play
-specially ignores8ac70008 (IL_000c–0012); GetCue instead forwards the failure to its
-error-code translator. These are static bridge facts, not managed execution.
-Neither failed Play clears
-an older handle's published cache. After StopAsAuthored and requested20ms settling,
-L has count0 (state16 or32 across these coarse snapshots), and a new I prepares/plays
-successfully with maximum1 in either scope. TQ-XACT-27 below qualifies a genuine
-category cue tail and repairs that capacity difference. Prepared-victim selection
-and Prepare-time category FAIL were repaired by TQ-XACT-30 below.
+Category FAIL can reject Prepare; an older P prepared while capacity was available
+still has its later Play rejected when full. Cue FAIL rejects at Play. Refresh public
+Cue.Play specially ignores8ac70008 (IL_000c–0012); GetCue instead forwards the failure
+to its error-code translator. These are static bridge facts, not managed execution.
+Neither failed Play clears an older handle's published cache. After StopAsAuthored and
+requested20ms settling, L has count0 (state16 or32 across these coarse snapshots), and
+a new I prepares/plays successfully with maximum1 in either scope (TQ-XACT-27 below).
 
-Three initial regressions (two offline, one NULL-compatible) fail before the fix.
-Additional guards protect repeated evictions and a new wave during a fade; these
-are source-derived guards, not native overlap/gain qualification. Existing volume,
-victim-order and retirement assertions stay in place; their old Stopping expectations
-are replaced by the measured public state. This does not qualify native gain shape,
-exact asynchronous deadlines, other instance modes or all cue shapes.
+The regressions protect repeated evictions and a new wave during a fade; these are
+source-derived guards, not native overlap/gain qualification. This does not qualify
+native gain shape, exact asynchronous deadlines, other instance modes or all cue shapes.
 
 ## Authored-tail admission (TQ-XACT-27)
 
@@ -141,33 +129,25 @@ both architectures), L is still state16/count0 after the requested20ms settling,
 and I.Prepare/Play both succeed before L is retired. This is a public native state/
 capacity observation, not a precise asynchronous decrement-instant guarantee.
 
-CNA's cue/category counts now include Playing only. This retains the instance-limit
-fades repaired in TQ-XACT-26 while releasing capacity during an authored Stop.
-The new shared offline regression checks both scopes, a real admitted voice, retained
-tail state, published counts and later retirement; its clock counterpart also runs
-with NULL audio. Corrected-fixture red runs restore the two original predicates and
-fail in all three target binaries. Reintroducing either predicate separately fails
-on both real offline adapters. An initial test attempted the optimized simple cue;
-its failed tail precondition is preserved in evidence and replaced by the genuinely
-authored-tail fixture, with a fresh causal red run. No oracle or assertion is weakened.
-
-Prepared candidates and category Prepare-time FAIL were left to TQ-XACT-30;
-all-cue-shape native qualification remains open. Native gain/output, managed/native Windows execution and synchronous
-Stop/Play racing semantics are not qualified here. The engine uses its logical
-controller transition; no measured20ms scheduling delay is built into CNA.
+CNA's cue/category counts include Playing only. This retains the instance-limit
+fades of TQ-XACT-26 while releasing capacity during an authored Stop. The shared
+offline regression checks both scopes, a real admitted voice, retained tail state,
+published counts and later retirement; its clock counterpart also runs with NULL audio.
+All-cue-shape native qualification remains open. Native gain/output, managed/native
+Windows execution and synchronous Stop/Play racing semantics are not qualified. The
+engine uses its logical controller transition; no measured20ms scheduling delay is
+built into CNA.
 
 ## Prepared resources and ordering reference (TQ-XACT-28)
 
 A separate retained own probe adds native bank GetState queries to the admission
-sequences. Twenty final x86/x64 cells cover earlier controls, an evicted prepared
+sequences. Twenty x86/x64 cells cover earlier controls, an evicted prepared
 handle after all playing handles are destroyed, reversed Play order at maximum2,
 a later Play of the selected prepared handle, and absence of a wave bank. Exact
 source/binary/input hashes and outcomes are in
 [prepared-cue provenance](../modules/audio/tests/CNA/Internal/Audio/instance-count/PREPARED_CUE_PROVENANCE.json).
-There are18 successful positives and two deliberate missing-wave failures. Those
-return8ac70013 at Prepare and the probe exits2 by design; they are not failed
-positive runs. An earlier probe-mode guard incorrectly omitted wave creation in
-a loaded-wave control; it was corrected before the full final matrix.
+The two deliberate missing-wave cells return8ac70013 at Prepare and the probe exits2
+by design.
 
 Preparing a cue without Play changes SoundBank state0→128 and WaveBank4→132,
 while the cue is Prepared4 and its count0. Both Refresh IsInUse getters test bit0x80
@@ -186,11 +166,9 @@ and cue/category scopes agree.
 
 With no wave bank loaded, native Prepare fails8ac70013 before Play. Refresh's
 GetCue bridge forwards that code; the Framework error-code switch maps it to the
-NoWaveBank InvalidOperationException (static IL only). This identified CNA's former
-lazy handle, unused-bank flags and exclusion of prepared victims; TQ-XACT-30 below
-repairs those measured differences. Weighted/interactive cues, complex track
-variation, streaming, native gain/PCM, managed/native Windows execution and exact
-asynchronous boundaries are outside this reference set.
+NoWaveBank InvalidOperationException (static IL only). Weighted/interactive cues,
+complex track variation, streaming, native gain/PCM, managed/native Windows execution
+and exact asynchronous boundaries are outside this reference set.
 
 ## Authored-tail bank ownership (TQ-XACT-29)
 
@@ -204,28 +182,25 @@ The checked bank snapshots cannot be masked by an additional prepared/playing cu
 The native engine runs under Wine/null output/private display; this adds no native
 Windows, managed-wrapper, gain/PCM or exact asynchronous-boundary qualification.
 
-CNA's bank getters previously tested only Playing/Paused and returned false during
-the authored tail. They now include Stopping. A new regression on both real offline
-mixers checks the sole cue, positive voice state/gain, count0, both bank flags during
-the tail, and retirement at the authored50ms deadline. A second clock regression
-also runs with NULL audio. The deadline uses FAudio's inclusive controller predicate;
-the native20ms snapshots do not qualify an exact Microsoft transition instant.
-Both regressions fail before the fix. Preparation is covered separately below.
+CNA's bank getters include Stopping. The regressions on both real offline mixers
+check the sole cue, positive voice state/gain, count0, both bank flags during the
+tail, and retirement at the authored50ms deadline; a clock regression also runs with
+NULL audio. The deadline uses FAudio's inclusive controller predicate; the native20ms
+snapshots do not qualify an exact Microsoft transition instant.
 
 Validate the four native cells with
 `python3 tools/xna-oracle/check-xact-tail-bank-oracle.py <matrix.json>`.
 Four altered-evidence controls reject a lost SoundBank flag, a lost WaveBank flag,
-an already-stopped cue and changed input bytes. Raw logs and the capture driver are
-retained in `../cnaplan/evidence/rev002/xact-tail-bank-ownership/`.
+an already-stopped cue and changed input bytes.
 
 ## Prepared cue runtime (TQ-XACT-30)
 
-Noninteractive GetCue now resolves its sound, RPC/DSP metadata, owned event schedule,
+Noninteractive GetCue resolves its sound, RPC/DSP metadata, owned event schedule,
 initial candidate/effect choices and selected bank references. It starts no voice
 or event. First dispatch reuses those choices; later event iterations advance them.
 Play resets the scheduler anchor so time spent Prepared does not count as playback.
 Interactive sound selection stays deferred until Play, following the explicit
-interactive exception in FAudio FACTSoundBank_Prepare; that branch is not a new
+interactive exception in FAudio FACTSoundBank_Prepare; that branch is not a
 Microsoft native qualification.
 
 A prepared candidate's eligibility is consumed independently of its public state
@@ -241,50 +216,30 @@ Static Refresh IL also distinguishes SoundBank.PlayCue: both overloads ignore
 8ac70008 (IL_002f–0034 /005f–0064), while other preparation failures use CueNotFound.
 GetCue retains its NoWaveBank diagnostic. Cue.Play sets the played/Apply3D latch only
 after successful deferred preparation or an ignored admission refusal. The C API's
-existing exception barrier already maps both preparation refusals to INVALID_STATE /
-STATE and clears a failed created handle; no shared barrier change is required.
+exception barrier maps both preparation refusals to INVALID_STATE / STATE and clears
+a failed created handle.
 
-The stronger C smoke also exposed a registry defect: destroying a second,
-same-named streaming bank lost the first live bank. The engine now retains every
-bank by identity, resolves the first matching name and disposes them all. This uses
-FAudio's insertion-ordered wbList/forward lookup, including LinkedList_AddEntry,
-not a measured Microsoft duplicate-name policy.
+The engine retains every wave bank by identity, resolves the first matching name and
+disposes them all, so destroying a second, same-named streaming bank keeps the first
+live bank. This uses FAudio's insertion-ordered wbList/forward lookup, including
+LinkedList_AddEntry, not a measured Microsoft duplicate-name policy.
 
 SDK regressions cover the measured preparation, later Play, original position,
 ownership, fail/retry and error paths on both real offline mixers. Initial-variation
-checks additionally verify draws occur before Play and are reused at first dispatch.
-Existing variation test inputs now arrive before GetCue; their literal sequences,
-gain/pitch bounds and draw counts stay intact. Missing fixture wave dependencies
-are loaded explicitly. Two old category tests prepare the refused handle before
-filling capacity to exercise Play rechecks, and no longer turn arbitrary exceptions
-into an audio-device skip. Unknown-payload fallback keeps its existing dispatch
-observer boundary, and invalid DSP-code refusal now occurs at preparation.
+checks verify draws occur before Play and are reused at first dispatch. Invalid
+DSP-code refusal occurs at preparation.
 
 Native reference scope remains TQ-XACT-28's plain single-sound resident PCM controls,
 with static Refresh bridges. Weighted/interactive/complex-track and streaming
-regressions use the normal FNA reference rather than a new Microsoft-native claim.
-The original proposed cross-bank follow-up compared FAudio's active-wave destruction
-on promotion (FACT_internal.c:1537). TQ-XACT-31 below measures a different Microsoft
-ownership boundary; copying FAudio's per-wave release into the bank flags would be
-incorrect. Variation-prefetch timing still needs separate controls. Native gain/PCM, managed execution,
-native Windows and exact asynchronous instants remain outside this qualification.
-
-The final eleven shared preparation regressions, three NULL-compatible clock
-checks and one main-target deferred-played guard pass. Six of the initial seven
-shared regressions failed against the original runtime on both adapters; reverse
-Play order was already correct and remains a guard. Eighteen production mutants
-are detected by35 ordinary assertion failures, with every build successful and
-exact source restoration. Seventeen run on both offline mixers; the played-latch
-mutant runs in the main audio target. Debug and ASan/UBSan/LSan each pass1011 audio
-cases (one existing harness skip),234 SDL-mixer and233 CNA-mixer offline cases.
-NULL clock selection passes25 and the expanded C API smoke passes privately.
-Original native20/4-cell evidence checks, corpus hashes, licence, routes and C API
-consistency checks pass; no new native Microsoft execution is claimed. Evidence:
-`../cnaplan/evidence/rev002/xact-preparation-runtime/`.
+regressions use the normal FNA reference rather than a Microsoft-native claim.
+Copying FAudio's per-wave release on promotion (FACT_internal.c:1537) into the bank
+flags would contradict TQ-XACT-31's measured ownership boundary. Variation-prefetch
+timing still needs separate controls. Native gain/PCM, managed execution, native
+Windows and exact asynchronous instants remain outside this qualification.
 
 ## Bank use outlives playback (TQ-XACT-31)
 
-Twenty-six genuine Microsoft3.6 x86/x64 cells now distinguish cue lifetime from
+Twenty-six genuine Microsoft3.6 x86/x64 cells distinguish cue lifetime from
 sound-bank ownership. Twenty positive cells exit0; six intentional missing-wave
 cases return8ac70013 at Prepare and exit2. The two own SDK projects use A:100ms at0,
 and either B:1000ms at400 on another track, or no B event. Untouched inputs, hashes,
@@ -312,25 +267,21 @@ then retrying Prepare succeeds. Missing A leaves the unreached B unused. Constru
 exception safety must therefore keep cue registrations valid while preserving the
 separate, persistent resource ownership of the sound bank.
 
-The first prototype tried native A.Destroy after its short wave ended, despite A
-still reporting INUSE; that process exited5. The corrected destruction control
-checks the flag and records that early destruction is skipped. It does not qualify
-safe destruction of an in-use bank. The failed prototype and corrected full matrix
-are retained separately; no successful early-destruction claim is made.
+Destroying A natively while it still reports INUSE crashed the probe process (exit5);
+the `destroy-finished` control therefore checks the flag and skips that destruction.
+Safe destruction of an in-use bank is not qualified.
 
 The checker validates exact engine/source/input identities and all26 outcomes;
 eight altered-evidence controls are rejected. Run
 `python3 tools/xna-oracle/check-xact-bank-lifetime-oracle.py <matrix.json>`.
-This was reference qualification only; TQ-XACT-32 below implements its ownership
-boundary. FAudio remains the normal reference for unmeasured behavior, but its
-per-wave/count-based bank flags do not override this measured Microsoft boundary.
+FAudio remains the normal reference for unmeasured behavior, but its per-wave/count-based
+bank flags do not override this measured Microsoft boundary.
 Weighted/interactive/streaming and prefetch timing, native Windows, managed
-execution and native PCM/gain remain outside the matrix. No CNA runtime/sanitizer
-qualification belongs to the tool/data-only TQ-XACT-31 task.
+execution and native PCM/gain remain outside the matrix.
 
 ## Bank ownership runtime (TQ-XACT-32)
 
-SoundBank.IsInUse now follows its undisposed cue registry, including Stopped
+SoundBank.IsInUse follows its undisposed cue registry, including Stopped
 handles. Resolving a wave registers its wave bank with the sound bank independently
 of that cue. The reciprocal registrations are retained through cue disposal and
 natural retirement, then detached when the sound bank is disposed. Missing B after
@@ -338,7 +289,7 @@ A resolves leaves A in use while failed-constructor cue registrations roll back;
 retrying after B loads preserves the same owner. Loaded but unused banks stay unused.
 Deferred interactive playback records its bank during selection, and later loop
 candidates retain newly resolved banks when dispatched. Those shapes follow the
-normal FNA reference and are not newly Microsoft-qualified.
+normal FNA reference and are not Microsoft-qualified.
 
 Fire-and-forget ownership ends when AudioEngine.Update actually sweeps the retired
 cue. An authored Stopping tail must remain retained until its real deadline.
@@ -350,131 +301,40 @@ sound-bank references before object destruction, including when a Cue.Disposing
 callback destroys a wave bank during SoundBank.Dispose. The native in-use
 destruction attempt above does not qualify that CNA safety policy.
 
-Ten new shared regressions run on both real offline mixers. Five initial tests
-failed on both original adapters. A first mutation run revealed that the deferred
-interactive control did not distinguish late wave registration: its selection
-already prepares the wave. The added literal two-bank loop control distinguishes
-initial resolution from a later candidate, without asserting Microsoft prefetch
-parity. Nine final production mutants fail on both adapters (18 ordinary assertion
-failures); source bytes are restored exactly and the final build passes.
+The `XactBankLifetime.*` regressions run on both real offline mixers; a literal
+two-bank loop control distinguishes initial resolution from a later candidate,
+without asserting Microsoft prefetch parity. The private C API smoke checks stopped
+cue ownership, retained wave use after Cue.Destroy and release after SoundBank.Destroy.
 
-Full debug and ASan/UBSan/LSan pass1012 audio cases plus one existing harness skip,
-244 SDL-mixer and243 CNA-mixer offline cases. NULL clock selection passes26, including
-the new SDK partial-failure owner transition. The expanded private C API smoke
-checks stopped cue ownership, retained wave use after Cue.Destroy and release after
-SoundBank.Destroy. Corpus/native26/20/4 checks, licence4164, routes and C API report
-consistency pass. No public API/C ABI, stub or dependency is added. Evidence:
-`../cnaplan/evidence/rev002/xact-bank-ownership/`.
+## CNA regressions
 
-## CNA regressions and verification
+The shared offline `XactInstanceCount.*` tests cover change-only publication,
+fresh/paused/stopped recipients, bank/definition isolation, nonplaying destruction,
+authored tail, real EOF, RPC/interactive readers, variable-domain/disposal validation
+and the instance-limit fade state; two clock/lifetime tests also run under NULL audio
+(`XactInstanceCountClockTests.cpp`). Private consumer controls use the SDK XACT
+Variables Visibility contract, not a Microsoft private-variable run.
 
-Five shared offline tests cover change-only publication, fresh/paused/stopped
-recipients, bank/definition isolation, nonplaying destruction, authored tail, real
-EOF, RPC/interactive readers and variable-domain/disposal validation. Two additional
-clock/lifetime tests also run under NULL audio. The first three offline tests fail
-on both original adapters; the RPC/interactive addition is independently detected
-by consumer-specific production mutations. Validation checks preserve an existing
-boundary and are not claimed to have failed before the fix.
-
-Thirteen production mutations plus three private-consumer mutations are detected
-on both real offline adapters (32
-ordinary assertion failures, all builds successful): constant/live/seeded reads,
-unchanged-count publication, omitted Prepared/Paused/Stopped recipients, counting
-Stopping, mixing definitions, bypassing public lookup validation, either internal
-consumer using initial values, missing natural completion publication, and incorrect
-PUBLIC-bit gates on private content consumers. Private consumer controls use the
-SDK XACT Variables Visibility contract, not a Microsoft private-variable run. Original
-source bytes are restored exactly. Full results and review receipts are in campaign
-evidence. No public API/C ABI, stub or dependency is added; the C API inventory has
-unchanged symbol counts and a regenerated header fingerprint.
-
-## Historical FAudio reference (TQ-XACT-12/15)
+## FAudio reference (TQ-XACT-12/15)
 
 The normal readable reference remains local FAudio
 `6839b88e304a046ae1a609ff14a085371e02a4e0`: `FACTSoundBank_Prepare`,
 `FACTCue_Play`, `FACTCue_Stop` and `FACTCue_Destroy` in `FACT.c`, and
 `handle_instance_limit`, `play_sound` and `FACT_INTERNAL_DestroySound` in
-`FACT_internal.c`. The sections below describe **FAudio**, not Microsoft XACT.
-Its direct stored counter and underflow differ from the Microsoft observations
+`FACT_internal.c`. Its direct stored counter differs from the Microsoft observations
 above; CNA follows the measured Microsoft count/cache contract within that scope.
 
-### FAudio preparation and continued eviction
-
-For a single-sound cue, native Prepare allocates a sound without incrementing either
-counter. Native counters are unsigned bytes. A prepared sound is eligible for OLDEST
-replacement, and destroying it decrements both counters even though it never incremented
-them. Destruction preserves its Prepared bit alongside Stopped. Destroying that stopped
-cue handle later does not decrement again.
-
-The controlled native probe uses one cue definition/category and a limit of1. Here a
-counter value denotes both equal stored counters. Playing includes a fading victim whose
-Playing bit remains set; it excludes a never-played prepared sound.
-
-| Step, with P prepared before playing L | Stored counter | Playing cues |
-|---|---:|---:|
-| L plays | 1 | 1 |
-| I plays and selects unplayed P | 2 | 2 |
-| P's fade expires and its sound is destroyed | 1 | 2 |
-| X plays and selects L | 2 | 3 |
-| L's fade expires | 1 | 2 |
-| Y plays and selects I | 2 | 3 |
-| I's fade expires | 1 | 2 |
-| Both remaining playing cues are destroyed | 255 | 0 |
-
-The reverse preparation order first selects the playing cue; the next eviction then
-selects the remaining prepared cue and reaches the same undercount. Cue-scope victim
-fades use50ms and category-scope fades70ms in these fixtures. In a separate continuation,
-stopping L after P expires leaves counter0 while I still plays. X then starts with no
-victim or fade-in, leaving two playing cues against the limit of1.
-
-### FAudio wrap and failed-play effects
-
-Destroying a lone never-played prepared cue measures0→255 in both counters. With cue
-fade-in40ms and category fade-in60ms, the following sequence is measured:
-
-| Step | Stored counter | Playing cues | Incoming phase |
-|---|---:|---:|---|
-| First play after the wrap | 0 | 1 | Fade-in60ms, with no victim |
-| Second play | 1 | 2 | Playing, no fade-in or victim |
-| Third play | 2 | 3 | Selected scope's fade-in; first cue fades out |
-
-At255 even the other scope's maximum255 limit is met. Both checks run, so category's
-60ms fade-in overrides cue's40ms on the first play in either fixture. On the third play
-only the selected limit1 is met: fade-in40ms/60ms and victim fade-out50ms/70ms remain
-distinct. After the first victim expires the counter is1 with two playing cues.
-
-FAIL also exposes the lifecycle mismatch. After L plays (counter1), a new R is rejected
-with `FACTENGINE_E_INSTANCELIMITFAILTOPLAY`. Native stops R's already prepared sound,
-decrements the counter to0 and leaves R Prepared|Stopped, while L still plays. Destroying
-R changes no counter. The next incoming cue bypasses the limit and coexists with L;
-the following rejection decrements again. Draining both playing cues after those two
-rejections leaves counter254. All these transitions were measured separately for cue
-and category limits.
-
-Controls with two ordinarily played cues and limit2 measure exactly one decrement on
-Stop, no further decrement on repeated Immediate/AsAuthored Stop or Destroy of the
-stopped cue, and final counter0. Destroy during an authored fade also decrements once;
-that public Stop uses the cue's50ms fade even in the category-limit fixture.
-
-### FAudio qualification boundary
-
-TQ-XACT-12 and TQ-XACT-15 use real public Prepare/Play/Stop/Destroy, real SDL mutexes and
-an injected clock. Unmodified `FACT_internal.c` is included for controlled fade-expiration
-UpdateSound/DestroySound calls. The continuation probe checks90 snapshots across14
-fresh fixtures with ASan/UBSan/LSan; that included reference translation unit is
-instrumented, while public functions come from the uninstrumented reference archive.
-The probe avoids reading unused, potentially uninitialized fade fields.
-
-No device, native asset parser, wave playback, PCM or API thread is initialized. Simple
-waves, complex variations, interactive cues and asynchronous lifetime effects remain
-unqualified. These historical FAudio effects explain the earlier discrepancy investigation; they
-are not the Microsoft oracle for a CNA fix. Adding Prepared to the existing victim
-predicate alone would still leave unqualified admission and state behavior.
-
-Evidence: `../cnaplan/evidence/rev002/xact-prepared-cue-lifecycle/` and
-`../cnaplan/evidence/rev002/xact-prepared-continuation/`. Voice gain, pitch and release
-composition are described in [the RPC guide](xact-rpc.md).
-
+FAudio measured with public Prepare/Play/Stop/Destroy, real SDL mutexes and an injected
+clock (no device, asset parser, PCM or API thread): Prepare allocates a sound without
+incrementing the unsigned-byte cue and category counters, yet a prepared sound is an
+OLDEST victim and its destruction decrements both. Destroying a lone never-played
+prepared cue therefore wraps 0→255, at which even a maximum255 limit is met; with
+limit1, eviction sequences end with the counters at255 and no playing cue. A FAIL
+rejection stops the incoming prepared sound and decrements again, so the next incoming
+cue bypasses the limit and coexists with the current one. Ordinary Stop decrements
+exactly once. These effects explain the earlier discrepancy investigation; they are not
+the Microsoft oracle for a CNA fix. Voice gain, pitch and release composition are
+described in [the RPC guide](xact-rpc.md).
 
 ## HND-XACT-03 cross-bank native qualification
 
@@ -484,22 +344,21 @@ Duplicate A names select the first-registered bank, with the second unused.
 Resident/ordered/interactive cloned sound banks share the selected A/B resources
 but retain independent owners: destroying the first bank leaves INUSE132 until
 the second bank is destroyed, then PREPARED4. Ordered clone creation uses fresh
-backing bytes; reuse of the original live buffer had returned INVALIDDATA.
+backing bytes; reuse of the original live buffer returns INVALIDDATA.
 
 Category cap1/REPLACE_OLDEST has a same-bank positive and clone comparison. Both
 play the incoming wave and retire the sole older victim, including across banks.
 This supersedes the FAudio bank-local fallback only for that qualified selection.
 The x64 same-bank victim is Stopping16 at200ms and Stopped32 at400ms; no deterministic
 native fade delay follows. Existing fade/gain regressions retain their source
-arithmetic with stronger cross-bank victim-retirement assertions.
+arithmetic with cross-bank victim-retirement assertions (`HndXactCrossBank.*`).
 
 Inputs/identities: tests/CNA/Internal/Audio/cross-bank/PROVENANCE.json under the
-audio module; checker tools/xna-oracle/check-xact-cross-bank-oracle.py. Evidence:
-cnaplan/evidence/rev002/hnd-xact-03-cross-bank/. The HND02 raw3/native4 cardinality
-gap remains open; ordered tests here qualify prefixes and resource ownership.
-Multiple candidate ordering, other replacement modes, duplicate disposal/reload
-and exact notification/resource quiescence await separate measurements.
-
+audio module; checker tools/xna-oracle/check-xact-cross-bank-oracle.py. The ordered
+sequences' four waves for raw byte3 follow the n+1 rule that CNA implements
+([xact-looping.md](xact-looping.md), HND-XACT-05). Multiple candidate ordering, other
+replacement modes, duplicate disposal/reload and exact notification/resource
+quiescence await separate measurements.
 
 ## HND-XACT-04 sequential resource/notification lifetimes
 
@@ -507,13 +366,12 @@ The74-cell genuine3.6 x86/x64 lifetime group confirms that unplayed noninteracti
 prepared waves can be destroyed without ever playing, while interactive prepared
 handles own no wave. Destroying a playing cue stops/destroys its wave resources;
 resolved bank ownership persists until SoundBank destruction, independently for
-cloned weighted/streaming banks. Three additional device-free regressions qualify
-these resource/state observations without new production fixes.
+cloned weighted/streaming banks. The device-free `HndXactResourceLifetime.*`
+regressions qualify these resource/state observations.
 
 Native unregister controls observe no later callbacks after final unregister in
 these runs, although playback and ownership continue to settle. This is not a
 managed CNA notification API or proof of concurrent callback quiescence. Forced
 INUSE-bank destruction/handle violations were not attempted. Exact callback clocks
-and HND02 native4/CNA3 cardinality remain open. See resource-lifetimes/PROVENANCE.json
-under the audio test corpus, check-xact-resource-lifetimes-oracle.py and the
-hnd-xact-04-lifetimes evidence archive.
+remain open. See resource-lifetimes/PROVENANCE.json under the audio test corpus and
+check-xact-resource-lifetimes-oracle.py.

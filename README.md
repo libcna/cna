@@ -1,68 +1,12 @@
 # CNA
 
-## 1. 🚀 Overview
+## 1. Overview
 
 CNA is a C++ reimplementation of the XNA 4.0 programming model, built on SDL3 and a pluggable graphics renderer layer.
 
 It is a framework/runtime and abstraction layer—not a game—designed to preserve XNA-style APIs (`Microsoft::Xna::Framework`) while using modern C++ internals.
 
-**CNA demonstrates engine-level C++ architecture, graphics abstraction design, and renderer-oriented systems engineering.**
-
-### Quick Start
-
-```bash
-git submodule update --init
-cmake -S . -B build -DCNA_GRAPHICS_RENDERER=OPENGLES3
-cmake --build build
-tools/platform/run_gpu_tests_private.sh build --output-on-failure   # private display, never the desktop
-```
-
-Current state and known bugs: [KNOWN_ISSUES.md](KNOWN_ISSUES.md). Building and testing: section 9 below.
-
-### Version
-
-Current release: **0.2.0** (pre-1.0 — a minor release may still change the public API; see
-[`CHANGELOG.md`](CHANGELOG.md) for what the release contains and
-[`docs/releasing.md`](docs/releasing.md) for how versions are managed). Compiled code reads its
-own version from `CNA::getVersionString()` in `CNA/Version.hpp`.
-
-CNA 0.2.0 requires the sibling checkouts **sharp-runtime 0.2.0**, **easy-gl 0.1.1** and
-**meta-gl 0.4.1** (or a later patch release of each). They are not submodules, so check out
-those tags next to this repository; configuration stops with instructions when a checkout
-declares an incompatible version (`cmake/DependencyVersions.cmake`).
-
-For binary C++ consumers, opt in to `CNA_INSTALL_CXX=ON` and install the configured
-SDK; it exports `CNA::` and `SharpRuntime::` modules for `find_package(CNA CONFIG)`.
-See [the installed SDK guide](docs/installed-cpp-sdk.md) for prerequisites, install
-components, relocation, version semantics and tested platform coverage.
-Native Windows developers should start with the shared Visual Studio/VS Code preset guide:
-[`docs/windows-visual-studio.md`](docs/windows-visual-studio.md).
-
-> **Looking for a specific doc?** See [`docs/README.md`](docs/README.md) for an index of what's
-> current vs. historical. **Current state, known bugs and limitations:** [KNOWN_ISSUES.md](KNOWN_ISSUES.md) (the one
-> authoritative bug list). Every implementation plan has been retired; what a task ID
-> in a comment belonged to is [`docs/task-id-index.md`](docs/task-id-index.md).
-
-### Project Status
-
-- **`Microsoft::Xna::Framework::Graphics`:** every major Graphics class is present, implemented and tested; what each renderer supports is in [`docs/graphics-renderer-feature-matrix.md`](docs/graphics-renderer-feature-matrix.md), and the remaining known defects are in [KNOWN_ISSUES.md](KNOWN_ISSUES.md).
-- **Documented XNA 4.0 runtime API surface:** every public type and every documented member of the Microsoft reference corpus is represented in CNA. The [member audit](docs/xna-4-runtime-member-coverage.md) holds the current counts and classifications; its [JSON report](docs/xna-4-runtime-member-coverage.json) records every reference member. Run `python3 tools/audit_xna_runtime_surface.py --write-reports`. API representation does not establish behavioral compatibility; the Content Pipeline is measured separately.
-- **Compiled XNA effects:** `Effect(GraphicsDevice&, byte[])` and the canonical XNB `EffectReader`
-  execute XNA/FNA Direct3D 9 Effect Framework bytecode on `FNA3D` unconditionally, and behind
-  opt-in `CNA_<RENDERER>_COMPILED_EFFECTS` build options on `SDLGPU`, the EasyGL family,
-  `WEBGPU`, `SOFTWARE` and `DIRECTX9`. The shared
-  public contract covers reflection, parameter mutation, techniques/passes, pass states, cloning,
-  3D draws, and `SpriteBatch`. Unsupported renderers reject the constructor explicitly; MGFX and
-  runtime `.fx` source compilation remain separate formats/projects. See
-  [`docs/shader-effect-vs-fx-bytecode.md`](docs/shader-effect-vs-fx-bytecode.md).
-- **`OPENGLES3`/`OPENGL33`/`WEBGL2` renderers:** the most mature GL-family public renderers overall — one shared internal implementation (`EasyGL`, on top of `easy-gl`) driven by a GL profile choice, not three separate implementations. `OPENGLES3` (desktop/mobile GLES 3.0) and `WEBGL2` (Emscripten, GLES 3.0 → WebGL 2.0) have full 2D+3D pixel-verified coverage — this is what was previously the single `EASYGL` public renderer, split into its real public identities. `OPENGL33` (desktop GL 3.3 core) is the desktop-GL profile of the same implementation; their identity/family mapping is in [`docs/renderer-registry.md`](docs/renderer-registry.md), while capability differences are in [`docs/graphics-renderer-feature-matrix.md`](docs/graphics-renderer-feature-matrix.md).
-- **`SDLGPU` renderer:** CNA's modern native cross-platform path and the default on Windows, macOS and iOS; CNA maps XNA 4.0 onto SDL's `SDL_GPU` API, and SDL owns its Vulkan, Direct3D 12 and Metal backends. Fully exercised on Linux (Vulkan); its Direct3D 12 backend runs under Wine through vkd3d-proton. Open gaps: `ShaderEffect` is compiled out on Windows, Apple and Emscripten, and there are no occlusion queries.
-- **`WEBGPU` renderer:** Supported renderer (`GraphicsRendererMaturity::Supported`, the class `SDLGPU` is in) using native `wgpu-native` (v29.0.1.1) and, since 2026-08-26, Emscripten's emdawnwebgpu port for a real in-browser path. Well past a 2D baseline: device/surface setup, clear/present, `Texture2D`/`TextureCube`/`Texture3D`, vertex/index uploads, a pixel-verified WGSL `SpriteBatch`, full 3D with every stock effect (`BasicEffect` incl. per-pixel/per-vertex lighting, `AlphaTestEffect`, `DualTextureEffect`, `SkinnedEffect` 72-bone palette, `EnvironmentMapEffect` — all with FNA fog parity, `WEBGPU-145`–`148`; plus `PbrEffect`/`SkinnedPbrEffect`), real instancing, `RenderTarget2D`/`RenderTargetCube`, MSAA, GPU occlusion queries, MRT (2-4 targets), custom WGSL `ShaderEffect`s (3D and `SpriteBatch`), full stencil state, and GPU-native block-compressed textures (DXT/BC7). The one open item is `WEBGPU-1`, verification of the Windows, macOS and linux-aarch64 wgpu-native packages — see [`docs/webgpu-renderer.md`](docs/webgpu-renderer.md).
-- **`DIRECTX9` renderer:** Windows-only native Direct3D 9 renderer targeting real **XNA 4.0 pixel authenticity**, not just feature parity — it runs Microsoft's own vendored Stock Effects HLSL bytecode, cross-compiled via MinGW-w64 and verified through Wine+DXVK on a real GPU. A checked-in 40-scene active oracle corpus diffs CNA's render against the **real XNA 4.0 runtime's own render** of the same scene at `--tolerance 0`: **0/40 scenes currently diverge.** The manifest gate also pairs 7 auxiliary scene/reference fixtures exactly. `GraphicsProfile.Reach`/`.HiDef` enforcement is real (the only CNA renderer where it is). Validation on real Windows hardware is still open. See [`docs/directx9-renderer.md`](docs/directx9-renderer.md), and [`docs/d3d9-divergence-report.md`](docs/d3d9-divergence-report.md).
-- **Verification methodology:** differential testing against a real, running `FNA.dll` reference implementation (`tools/fna-reference/`), disputed behavior settled against genuine XNA 4.0 on a Windows 7 VM, and a compile-time `CNAEXT` purity check (a dedicated CMake build option that turns every non-XNA-tagged declaration into a `[[deprecated]]` warning under `-Werror`) — see `CHECKLIST.md`'s "CNAEXT markers" section and `CMakeLists.txt`.
-- **Automatic CI is partial** (see `.github/workflows/`): `general-tests-ci.yml` runs the full unfiltered suite on Linux for one renderer (`OPENGLES3`) under Xvfb and fails if the run left the checkout dirty; other Linux workflows cover narrower subsystems. There is no automatic full GPU pixel matrix across renderers. The Apple workflow builds macOS with `SOFTWARE` and runs the portable platform suites plus a bundle smoke app. `windows-msvc-ci.yml` now defines automatic MSVC headless and SDLGPU/Direct3D 12 baselines (added 2026-10-30; no successful run recorded from this checkout yet), while `DIRECTX9` remains in a manual focused workflow. There is no automatic Android gate.
-
-## 2. 🎯 Goals
+Goals:
 
 - Recreate the XNA developer experience in native C++.
 - Provide a native C++ path for teams that like the XNA/MonoGame model but need non-managed runtime/toolchain control.
@@ -71,164 +15,69 @@ Native Windows developers should start with the shared Visual Studio/VS Code pre
 - Enable one high-level API surface across different rendering technologies.
 - Keep SDL- and graphics-API-level concerns behind framework abstractions.
 
-## 3. ✨ Features
+## 2. Status and where to look
 
-### XNA API Compatibility (Incremental)
+- Current state, known bugs and limitations: [KNOWN_ISSUES.md](KNOWN_ISSUES.md), the one authoritative bug list.
+- Index of the documentation: [`docs/README.md`](docs/README.md). What a task ID in a comment belonged to:
+  [`docs/task-id-index.md`](docs/task-id-index.md).
+- Graphics: what each renderer supports is [`docs/graphics-renderer-feature-matrix.md`](docs/graphics-renderer-feature-matrix.md).
+- API surface: every public type and documented member of the XNA 4.0 reference corpus is represented; counts and
+  classifications are in the [member audit](docs/xna-4-runtime-member-coverage.md)
+  (`python3 tools/audit_xna_runtime_surface.py --write-reports`). Representation does not establish behavioural
+  compatibility; the Content Pipeline is measured separately.
+- Compiled XNA effects (Direct3D 9 Effect Framework bytecode through `Effect(GraphicsDevice&, byte[])` and the XNB
+  `EffectReader`): [`docs/shader-effect-vs-fx-bytecode.md`](docs/shader-effect-vs-fx-bytecode.md).
+- Verification method: differential tests against a running `FNA.dll` with disputed behaviour settled against genuine
+  XNA 4.0 ([`docs/fna-reference-harness.md`](docs/fna-reference-harness.md)), and the `CNAEXT` purity build
+  (`CHECKLIST.md`, "CNAEXT markers").
+- CI (`.github/workflows/`) runs the full suite on Linux for `OPENGLES3` plus narrower subsystem, Apple and MSVC jobs;
+  there is no automatic GPU pixel matrix across renderers and no automatic Android gate.
 
-- Public API uses XNA-style namespaces, especially under `Microsoft::Xna::Framework`.
-- Core game loop and framework primitives are available (`Game`, `GameTime`, graphics types, input/audio surfaces).
-- Compatibility is partial and evolving; implementation status is tracked progressively in source.
+## 3. Version and dependencies
 
-### Diagnostics and Inspector
+Current release: **0.2.0** (pre-1.0 — a minor release may still change the public API; see
+[`CHANGELOG.md`](CHANGELOG.md) and [`docs/releasing.md`](docs/releasing.md)). Compiled code reads its own version from
+`CNA::getVersionString()` in `CNA/Version.hpp`.
 
-- `CNA_DIAGNOSTICS=OFF|STATS|FULL` provides the bounded renderer-independent profiler and resource
-  metadata foundation; `OFF` remains the default and compiles instrumentation out.
-- `CNA_BUILD_INSPECTOR=ON` optionally builds a separately linked, explicitly started application
-  agent and the standalone `cna-inspector` local browser bridge. It is authenticated,
-  demand-driven, localhost-only by default, and never embeds HTTP/JSON work in the game loop.
-- See [`docs/diagnostics.md`](docs/diagnostics.md) and [`docs/inspector.md`](docs/inspector.md) for
-  activation, security, protocol, supported views, performance measurements, and limitations.
+CNA 0.2.0 requires the sibling checkouts **sharp-runtime 0.2.0**, **easy-gl 0.1.1** and **meta-gl 0.4.1** (or a later
+patch release of each). They are not submodules: check out those tags next to this repository; configuration stops with
+instructions when a checkout declares an incompatible version (`cmake/DependencyVersions.cmake`).
 
-### Input
+Binary C++ consumers opt in to `CNA_INSTALL_CXX=ON` and install the SDK, which exports `CNA::` and `SharpRuntime::`
+for `find_package(CNA CONFIG)` ([`docs/installed-cpp-sdk.md`](docs/installed-cpp-sdk.md)).
 
-- `Keyboard`, `Mouse` (incl. `MouseCursor`), `GamePad` (up to 4 players), `TouchPanel`/`TouchCollection`,
-  and the `GestureDetector` gesture recognizer (Tap/DoubleTap/Hold/Drag/Flick/Pinch) — all under
-  `Microsoft::Xna::Framework::Input`, matching FNA/XNA 4.0 behavior member-for-member.
-  See `docs/input-fna-fidelity.md` and `docs/input-member-parity-matrix.md` for the FNA-parity record.
-- CNAEXT extensions beyond stock XNA: `TextInputEXT` (IME composition), rumble/trigger-rumble/light-bar/
-  gyro/accelerometer on `GamePad`, raw `CNA::Input::Joysticks` (distinct from `GamePad`'s mapped view),
-  device-level `CNA::Input::Sensors`/`Power`, and `CNA::Input::Haptics` for standalone haptic devices.
-- Single platform-event funnel (`IPlatform::PollEvents` → `PlatformInputBridge::ProcessEvent`),
-  renderer-agnostic and independent of the selected native event source. SDL3 translation stays
-  inside its platform implementation; the `CnaTests` input suite verifies the shared state path.
+## 4. Quick start
 
-### Rendering
-
-- `GraphicsDevice` abstraction with renderer delegation.
-- `SpriteBatch` API with `Begin(...)` / `Draw(...)` / `End()` workflow.
-- `Texture2D` abstraction with renderer-owned texture resources.
-
-### Content pipeline — `.gltf` / `.glb` / `.cnj`
-
-- **glTF 2.0 loads directly**: `Content.Load<Model>("character.glb")` — no offline step. An offline
-  converter (`tools/gltf_to_cnj`) produces `.cnj` + binary sidecars for the same asset, and the two
-  loaders are held to identical output by a per-fixture parity sweep.
-- Geometry, PBR materials, skinning, animation (LINEAR/STEP/CUBICSPLINE), morph targets, cameras and
-  punctual lights all import. What that costs is stated rather than implied: XNA's model is four
-  joint influences and three directional lights, two sampled UV channels, and one colour channel — glTF data
-  beyond those is **counted and reported**, never silently dropped.
-- Correctness is held by a **generated 145-asset conformance corpus**: the exact L0–L6 numerical
-  ladder covers container, accessor, semantic mesh, world geometry, packed GPU bytes and bound
-  effect parameters per commit (including ASan + UBSan), then the production OPENGLES3 viewer
-  supplies the final deterministic L7 image/disposition gate.
-- **Read `docs/gltf-limitations.md` before choosing CNA for a glTF pipeline.** It lists every
-  approximation and every unsupported feature next to the report field that names the loss at run
-  time. The older `misc/CNAEXT.md` design is historical; use the current glTF limitations document.
-
-### Standalone CNA graphics extensions (`CNA_CNAEXT`)
-
-`CNA_CNAEXT=ON` enables the small `modules/graphics-ext` surface: `AsciiPostProcessEffect`,
-`CRTEffect`, `DepthEffect` (colour-depth and palette reduction), and `DebugDraw`. CRT and Depth
-are ordinary `ShaderEffect` descendants usable with render targets and SpriteBatch; ASCII has a
-direct draw API. `DebugDraw` batches wireframe lines, bounds, spheres and frusta using `BasicEffect`.
-The option is off by default. See [graphics extension guide](docs/cnaext-engine-layer.md).
-
-The XNA-compatible graphics core, renderer backends, custom shaders, `PbrEffect` and
-`SkinnedPbrEffect`, glTF loading, and CNB/CNJ content pipeline do not depend on this option.
-
-### Cross-Platform Direction
-
-- Platform layer (`CNA_PLATFORM`): `SDL3` (default; Windows, X11, Wayland, macOS, iOS, Android and
-  the browser are all reached through SDL3's own drivers), `HEADLESS`, and POSIX-only `TERMINAL`.
-  See [`docs/platform-abstraction.md`](docs/platform-abstraction.md).
-- Renderer abstraction supports targeting multiple rendering paths from one API layer.
-- **Windows:** `DIRECTX9` (through DXVK), `SDLGPU` (its Direct3D 12 backend through vkd3d-proton)
-  and `SOFTWARE` are cross-compiled with MinGW-w64 and verified under Wine. An automatic native
-  MSVC workflow now covers an SDL-free compiler contract and the focused SDLGPU/Direct3D 12 smoke
-  set; the deeper `DIRECTX9` workflow remains manual. Validation on real Windows hardware is not current.
-- **Linux:** `OPENGLES3`/`OPENGL33`, `SDLGPU` (Vulkan), `WEBGPU`, `FNA3D`, and the CPU/no-GPU
-  renderers `SOFTWARE`, `HEADLESS` and `STUB`.
-- **Web (Emscripten) and Android (NDK) targets are implemented and verified**, not just
-  architecturally planned — see section 7 (Networking, Services & Avatar) below for what `Net`
-  does on each (browsers have no multiplayer through the XNA API).
-- **macOS** has a native CI build/test gate (`SOFTWARE`); `SDLGPU`'s Metal backend passed the full
-  test tree on a Mac mini M4 once and has not been re-qualified since. **iOS/iPadOS** is
-  experimental platform support. The Apple workflow final-links an actual `.app` for device and
-  simulator and launches a one-frame `SOFTWARE` `Game` smoke application in the simulator. There
-  is still no physical-device, pixel, touch, audio, storage or performance evidence. The boundary
-  is stated per claim in [`docs/apple-platforms.md`](docs/apple-platforms.md).
-
-### Performance / C++ Advantages
-
-- Native C++23 codebase and explicit control over memory/lifetime.
-- Interface-driven renderer boundaries to keep hot rendering paths renderer-specific.
-- Lightweight gameplay-facing API over renderer-specific implementations.
-
-## 4. 🏗 Architecture
-
-CNA is organized into clear layers with strict responsibility boundaries:
-
-```text
-+-----------------------------------------------------------+
-|                 Game / Application Code                  |
-|        (uses Microsoft::Xna::Framework API)             |
-+------------------------------+----------------------------+
-                               |
-                               v
-+-----------------------------------------------------------+
-|            API Layer (XNA-style public surface)           |
-| modules/<module>/include/Microsoft/Xna/Framework/...      |
-| - Game, GraphicsDevice, SpriteBatch, Texture2D, ...       |
-+------------------------------+----------------------------+
-                               |
-                               v
-+-----------------------------------------------------------+
-|         CNA Internal Layer (abstractions/factories)       |
-| modules/graphics/include/CNA/Internal/Renderers/Common/... |
-| - IGraphicsRenderer, ISpriteBatchRenderer, ITextureRenderer  |
-+------------------------------+----------------------------+
-                               |
-                               v
-+-----------------------------------------------------------+
-|               Renderer Implementations                     |
-| modules/renderers/{easygl,sdl-gpu,webgpu,...}/src         |
-+-----------------------------------------------------------+
+```bash
+git submodule update --init
+cmake -S . -B build -DCNA_GRAPHICS_RENDERER=OPENGLES3
+cmake --build build
+tools/platform/run_gpu_tests_private.sh build --output-on-failure   # private display, never the desktop
 ```
 
-### Interface vs Implementation Separation
+Tests that open a window run on a private headless compositor, never on the live desktop.
 
-- **Public API** lives under `modules/<module>/include/Microsoft/...` and stays framework-facing.
-- **Renderer contracts** live under `CNA::Internal::Renderers` interfaces
-  (`modules/graphics/include/CNA/Internal/Renderers/Common/`).
-- **Renderer implementations** live under `modules/renderers/<family>/`.
-- `GraphicsDevice` constructs renderers via factory (`CreateGraphicsRenderer(...)`) based on build-time renderer selection.
+## 5. Renderers
 
-## 5. 🎮 Rendering System
+One renderer is chosen per build with `CNA_GRAPHICS_RENDERER`; the registry and capability inventory is
+[`docs/renderer-registry.md`](docs/renderer-registry.md).
 
-`SpriteBatch` is the primary 2D rendering abstraction.
+| Identity | Role | Default on | Page |
+|---|---|---|---|
+| `SDLGPU` | Modern native path; SDL's `SDL_GPU` owns its Vulkan, Direct3D 12 and Metal backends | Windows, macOS, iOS | [sdl-gpu-renderer.md](docs/sdl-gpu-renderer.md) |
+| `OPENGLES3` | EasyGL, GL ES 3.0 profile | Linux, Android, other hosts | [renderer-registry.md](docs/renderer-registry.md) |
+| `OPENGL33` | EasyGL, desktop GL 3.3 core profile | — | [opengl33-renderer.md](docs/opengl33-renderer.md) |
+| `WEBGL2` | EasyGL, WebGL 2 (Emscripten only) | Emscripten | [webgl2-renderer.md](docs/webgl2-renderer.md) |
+| `WEBGPU` | wgpu-native, and emdawnwebgpu in the browser (supported) | — | [webgpu-renderer.md](docs/webgpu-renderer.md) |
+| `DIRECTX9` | Windows-only Direct3D 9 running Microsoft's Stock Effects bytecode; diffed against real XNA 4.0 renders | — | [directx9-renderer.md](docs/directx9-renderer.md) |
+| `FNA3D` | FNA's graphics library (SDL_GPU/Direct3D 11/OpenGL chosen at run time) | — | [fna3d-renderer.md](docs/fna3d-renderer.md) |
+| `SOFTWARE` | Deterministic CPU rasterizer, no GPU or window (experimental) | — | [software-renderer.md](docs/software-renderer.md) |
+| `HEADLESS` | CI/testing renderer: validates and traces graphics calls without rasterizing | — | [headless-renderer.md](docs/headless-renderer.md) |
+| `STUB` | Minimal no-op renderer | — | [stub-renderer.md](docs/stub-renderer.md) |
 
-- You create it against a `GraphicsDevice`.
-- Call `Begin(...)` to start a draw pass.
-- Issue `Draw(...)` calls for textures/sprites.
-- Call `End()` to close the batch.
-
-The API surface is renderer-agnostic, while rendering behavior is executed by renderer-specific `ISpriteBatchRenderer` implementations.
-
-This keeps game code stable while allowing renderer-specific optimizations in EasyGL, SDLGPU,
-WebGPU and the other renderers.
-
-## 6. 🔌 Renderer System
-
-CNA exposes **10 public renderer identities** through `CNA_GRAPHICS_RENDERER` (choose one per build
-configuration; when none is named the default is `WEBGL2` under Emscripten, `SDLGPU` on Windows,
-macOS and iOS, and `OPENGLES3` everywhere else). The set is curated: a renderer is added only when
-it provides meaningful platform coverage, compatibility value, architectural value, or a capability
-the existing set does not reasonably cover, and forty-one identities have been retired
-([`docs/removed-renderers.md`](docs/removed-renderers.md)). The canonical registration, implementation-sharing, capability, and platform-gate
-inventory is [`docs/renderer-registry.md`](docs/renderer-registry.md).
-
-Renderers are normally chosen at **compile time**, one per build. CNA can also be built with
-several renderers and the concrete one chosen at **runtime**, before the game starts:
+Several renderers can be compiled into one binary and one chosen at run time, before the game starts; an unavailable
+renderer is an error unless the game opts in to a fallback chain
+([`docs/runtime-renderer-selection.md`](docs/runtime-renderer-selection.md)):
 
 ```cpp
 #include "CNA/GraphicsRendererSelection.hpp"
@@ -236,307 +85,113 @@ several renderers and the concrete one chosen at **runtime**, before the game st
 CNA::GraphicsRendererSelection::SetPreferred(CNA::GraphicsRendererType::SdlGpu);
 ```
 
-A renderer that is unavailable or fails to start is an **error** by default — CNA never silently
-substitutes another. An opt-in fallback chain is available when a game wants one. See
-[docs/runtime-renderer-selection.md](docs/runtime-renderer-selection.md).
+The set is curated; retired identities and why they went are in [`docs/removed-renderers.md`](docs/removed-renderers.md).
 
-The former `ASCII` renderer identity was removed 2026-08 in favor of a renderer-neutral post-process
-effect, `CNA::Graphics::AsciiPostProcessEffect` (`modules/graphics-ext/`), usable with any renderer's
-`RenderTarget2D` output — see [`docs/ascii-post-process-effect.md`](docs/ascii-post-process-effect.md).
+## 6. Platforms
 
-- `SDLGPU`
-- `OPENGLES3` (internal implementation: EasyGL)
-- `OPENGL33` (internal implementation: EasyGL)
-- `WEBGL2` (Emscripten only; internal implementation: EasyGL)
-- `WEBGPU`
-- `HEADLESS`
-- `SOFTWARE`
-- `STUB`
-- `DIRECTX9` (Windows-only; native Direct3D 9 running Microsoft's own vendored Stock Effects HLSL bytecode)
-- `FNA3D` (FNA's own XNA-shaped graphics library; picks SDLGPU/Direct3D 11/OpenGL at runtime, executes XNA's stock effects and CNA's compiled punctual/PBR extensions — see [`docs/fna3d-renderer.md`](docs/fna3d-renderer.md))
+`CNA_PLATFORM` selects `SDL3` (default; Windows, X11, Wayland, macOS, iOS, Android and the browser through SDL3's own
+drivers), `HEADLESS`, or POSIX-only `TERMINAL` ([`docs/platform-abstraction.md`](docs/platform-abstraction.md)).
 
-### Tradeoffs
+| Platform | Toolchain | Renderers | Limits |
+|---|---|---|---|
+| Linux x86_64 | GCC 12+, Clang 15+ | `OPENGLES3`, `OPENGL33`, `SDLGPU` (Vulkan), `WEBGPU`, `FNA3D`, `SOFTWARE`, `HEADLESS`, `STUB` | [feature matrix](docs/graphics-renderer-feature-matrix.md) |
+| Windows x86_64 | MSVC 2022 (presets) | `HEADLESS`, `SDLGPU` (automatic workflow); `DIRECTX9` (manual workflow) | [windows-visual-studio.md](docs/windows-visual-studio.md) |
+| Linux → Windows | MinGW-w64, run under Wine | `SDLGPU` (Direct3D 12 through vkd3d-proton), `SOFTWARE`, `DIRECTX9` (through DXVK) | [directx9-renderer.md](docs/directx9-renderer.md) |
+| Web | Emscripten (emsdk) | `WEBGL2`, `WEBGPU`, in Chrome | [web-emscripten-graphics-limitations.md](docs/web-emscripten-graphics-limitations.md) |
+| Android | NDK 29/30 Clang | `OPENGLES3`, x86_64 emulator | [android-graphics-limitations.md](docs/android-graphics-limitations.md) |
+| macOS | Xcode | `SOFTWARE` (CI); `SDLGPU`'s Metal backend is not re-qualified | [apple-platforms.md](docs/apple-platforms.md) |
+| iOS / iPadOS | Xcode | `SOFTWARE` (experimental; simulator smoke app only) | [apple-platforms.md](docs/apple-platforms.md) |
 
-- **EasyGL renderer (OpenGL-based path through `easy-gl`)**
-    - Custom shader-driven rendering path across GL ES 3.0, GL 3.3 core and WebGL 2.
+Validation on real Windows hardware and on physical Apple devices is open.
 
-- **SDLGPU renderer**
-    - One native path to SDL's Vulkan, Direct3D 12 and Metal backends.
-    - `ShaderEffect` is compiled out on Windows, Apple and Emscripten; no occlusion queries.
+## 7. Subsystems
 
-## 7. 🌐 Networking, Services & Avatar
+- **Input:** `Keyboard`, `Mouse` (incl. `MouseCursor`), `GamePad` (4 players), `TouchPanel` and `GestureDetector` under
+  `Microsoft::Xna::Framework::Input`, matching XNA 4.0 member for member ([`docs/input-fna-fidelity.md`](docs/input-fna-fidelity.md)).
+  CNAEXT adds `TextInputEXT`, rumble/light-bar/gyro on `GamePad`, raw `CNA::Input::Joysticks`, `Sensors`, `Power` and
+  `Haptics`. All events flow through one funnel (`IPlatform::PollEvents` → `PlatformInputBridge::ProcessEvent`).
+- **Content and glTF:** `Content.Load<Model>("character.glb")` loads glTF 2.0 directly; `tools/gltf_to_cnj` produces
+  `.cnj` + binary sidecars with identical output. glTF data beyond XNA's model (four joint influences, three directional
+  lights, two UV channels, one colour channel) is counted and reported, never silently dropped; a generated conformance
+  corpus holds it. Read [`docs/gltf-limitations.md`](docs/gltf-limitations.md) before choosing CNA for a glTF pipeline.
+- **CNAEXT graphics extensions:** `CNA_CNAEXT=ON` (off by default) builds `AsciiPostProcessEffect`, `CRTEffect`,
+  `DepthEffect` and `DebugDraw` ([`docs/cnaext-engine-layer.md`](docs/cnaext-engine-layer.md)). The graphics core, custom
+  shaders, `PbrEffect`/`SkinnedPbrEffect`, glTF loading and the CNB/CNJ pipeline do not depend on it.
+- **Diagnostics and inspector:** `CNA_DIAGNOSTICS=OFF|STATS|FULL` (default `OFF`, compiled out) is a bounded profiler and
+  resource-metadata layer; `CNA_BUILD_INSPECTOR=ON` builds an explicitly started agent and the localhost `cna-inspector`
+  browser bridge ([`docs/diagnostics.md`](docs/diagnostics.md), [`docs/inspector.md`](docs/inspector.md)).
+- **GamerServices, Net and Avatar:** the XNA 4.0 `GamerServices` and `Net` namespaces backed by CNA's own account service
+  ([`cna-gamer-services-server`](https://github.com/libcna/cna-gamer-services-server)): accounts and Guide sign-in,
+  profiles, friends, presence, messages, achievements, leaderboards, invitations and parties, or local offline profiles
+  without a service. The public API is XNA-compatible and the workflow Xbox-like; backend policy is CNA's own and is
+  not Xbox LIVE compatible ([`docs/gamer-services-server.md`](docs/gamer-services-server.md),
+  [`docs/gamer-services-known-limitations.md`](docs/gamer-services-known-limitations.md)). `SystemLink` runs over ENet
+  (`third_party/enet`); `PlayerMatch` and `Ranked` run through the service's authenticated relay; voice uses libopus
+  (`CNA_ENABLE_VOICE`). Browsers have no multiplayer through the XNA API
+  ([`docs/browser-network-readiness.md`](docs/browser-network-readiness.md)). Avatars render on XNA's 71-bone skeleton
+  with the 31 animation presets from original CNA catalogs ([`docs/avatars.md`](docs/avatars.md)).
 
-Beyond graphics, CNA ports the XNA 4.0 `GamerServices` and `Net` namespaces (and, within
-`GamerServices`, the Avatar subsystem), backed by CNA's own account service
-([`cna-gamer-services-server`](https://github.com/libcna/cna-gamer-services-server)).
+## 8. Architecture
 
-### GamerServices
+- **Game code** uses only the `Microsoft::Xna::Framework` API.
+- **XNA API layer:** `modules/<module>/include/Microsoft/Xna/Framework/...` (`Game`, `GraphicsDevice`, `SpriteBatch`, ...).
+- **Renderer contracts:** `modules/graphics/include/CNA/Internal/Renderers/Common/` (`IGraphicsRenderer`,
+  `ISpriteBatchRenderer`, `ITextureRenderer`).
+- **Renderer implementations:** `modules/renderers/<family>/`, created by `CreateGraphicsRenderer(...)` from the
+  selected renderer.
+- **Platform services:** `CNA::Platform::IPlatform`; SDL3 calls stay in its platform, audio and renderer edges.
+- **Runtime support:** `sharp-runtime` (`System::*` and the .NET primitive aliases).
 
-- The XNA gamer services API with real behaviour: with a configured CNA service, accounts and Guide
-  sign-in, profiles, friends and presence, messages and player reviews, achievements, leaderboards
-  (including Ranked arbitration), invitations, parties and social notifications; without one, local
-  offline profiles, as on a console without Xbox LIVE. An Xbox 360-inspired Guide (sign-in picker,
-  gamer cards, friends, party, avatar editor) is drawn by CNA over the game, in CNA's own look.
-- A **CNA-owned, XNA/Xbox-like** implementation with its own protocol, accounts and backend
-  policies — **not** Xbox LIVE compatible. See [`docs/gamer-services-server.md`](docs/gamer-services-server.md)
-  and, for everything that is not done or done differently,
-  [`docs/gamer-services-known-limitations.md`](docs/gamer-services-known-limitations.md).
-- What "Xbox-like" does and does not claim: the **public API is XNA-compatible** (names, types,
-  exceptions and event order read from the XNA 4.0 assemblies and documentation); the **workflow is
-  Xbox-like** (sign in, Guide, friends, invitations, parties, as XNA games expected); how the backend
-  decides what XNA only reports -- the Reputation formula, host election, party rules, presence
-  timeouts, invitation lifetime, Ranked arbitration, privilege policy -- is **CNA policy**, not a
-  claim about Xbox LIVE; console behaviour was **never traced** on an Xbox 360, so exact historical
-  equivalence is claimed nowhere; and the Guide and avatars **resemble** the Xbox 360 era in
-  original CNA art only.
+Module ownership and the physical layout are in [`docs/physical-modules.md`](docs/physical-modules.md).
 
-### Net (`Microsoft::Xna::Framework::Net`)
+## 9. Building and running tests
 
-- Complete `NetworkSession` API surface (5 enums + 18 classes).
-- **`SystemLink`** runs over [ENet](http://enet.bespin.org/) (reliable UDP, vendored under
-  `third_party/enet`): hosting, joining, LAN discovery with measured QoS, data relay, host
-  migration, disconnect handling and `StartGame`/`EndGame` state broadcast.
-- **`PlayerMatch` and `Ranked`** run through the CNA service's session directory, with every datagram
-  carried by its authenticated TLS/WSS relay: create, find, join, invitations, online host migration,
-  `AddLocalGamer` and Ranked arbitration. `Local` and `LocalWithLeaderboards` need no transport.
-- **Voice** is routed automatically in SystemLink and online sessions (microphone capture, Opus,
-  realtime session packets, playback) where libopus is available (`CNA_ENABLE_VOICE`).
-- **Networking by platform:**
-  - **Linux** — native ENet/UDP, including a genuine two-OS-process loopback test.
-  - **Windows** — native ENet/UDP via WinSock2; cross-compiled with MinGW-w64 and verified running
-    under Wine.
-  - **Web (Emscripten)** — ENet runs over Emscripten's WebSocket-emulated sockets as a client of a
-    Node.js-run host, but a browser has no LAN discovery, no service transport and no relay, so a
-    browser game cannot find or join sessions through the XNA API: browser multiplayer is outside
-    the current scope ([`docs/browser-network-readiness.md`](docs/browser-network-readiness.md)).
-  - **Android (NDK)** — native ENet/UDP via bionic libc's genuine POSIX sockets, verified on a real
-    x86_64 emulator — no platform-specific transport workarounds needed at all, unlike Web.
-
-### Avatar
-
-- `AvatarAnimation`, `AvatarDescription` and `AvatarRenderer` work as XNA's documentation describes
-  them on the Xbox 360 (the Windows assembly only stubbed them): real rendering on XNA's 71-bone skeleton, the 31 animation
-  presets, expressions and `AvatarDescription.Changed`, drawn from original CNA avatar catalogs
-  compiled into the runtime. The service stores each account's description; a catalog a client
-  lacks is installed as a verified pack. See [`docs/avatars.md`](docs/avatars.md).
-
-## 8. 🧰 Technology Stack
-
-- **Language:** C++23
-- **Core platform/runtime library:** SDL3 (vendored via Git submodule at `third_party/SDL`)
-- **Media integration:** `SDL3_mixer` (vendored via Git submodule)
-- **Graphics dependency:** `easy-gl` (for the `OPENGLES3`/`OPENGL33`/`WEBGL2` renderers),
-  resolved from the canonical `../easy-gl` sibling; EasyGL in turn resolves `../meta-gl`
-- **Networking:** [ENet](http://enet.bespin.org/) (vendored directly at `third_party/enet`) —
-  the realtime transport of every `Microsoft::Xna::Framework::Net` session (UDP on the LAN, carried
-  through the service relay online); libcurl (TLS HTTPS and WebSockets to the CNA service);
-  optional libopus for network voice
-- **Utility/runtime layer:** `sharp-runtime`
-- **Build system:** CMake
-- **Tests:** GoogleTest (`CnaTests` target)
-
-## 9. ⚡ Getting Started
-
-### Prerequisites (Linux)
-
-- CMake 3.20+
-- C++23-capable compiler (GCC 12+ or Clang 15+)
-- Dependency directories available to CMake:
-    - `../sharp-runtime`
-    - `../easy-gl` and `../meta-gl` (needed for the `OPENGLES3`/`OPENGL33`/`WEBGL2`
-      renderers)
-- libcurl and nlohmann-json development packages (GamerServices and Net, both on by default)
-- SDL3 and SDL3_mixer are built from vendored submodules by default — no system SDL packages required,
-  but building them needs the X11, OpenGL and audio development headers.
-- The Debian 13 package list for all of the above, the test environment and the optional features
-  is [docs/development-environment.md](docs/development-environment.md).
-- FFmpeg is optional. `CNA_ENABLE_VIDEO=AUTO` (the default) enables video decoding when
-  `libavcodec`, `libavformat`, `libavutil` and `libswresample` development packages are present;
-  use `OFF` for a game that does not need video, or `ON` to require them. The XNA video types remain
-  available in all three modes; see [docs/video-backend.md](docs/video-backend.md).
-
-### Prerequisites (Windows)
-
-- CMake 3.21+ for the checked-in presets (direct non-preset configuration still supports 3.20)
-- One of:
-    - **MSVC 2022** (Visual Studio 2022, v17.8+, with C++20/23 support)
-    - **clang-cl** (LLVM for Windows, targeting MSVC ABI)
-    - **MinGW-w64** (either natively on Windows or cross-compiled from Linux)
-- Dependency directories:
-    - `../sharp-runtime` (no external dependencies — builds cleanly on Windows)
-- SDL3 and SDL3_mixer are built from vendored submodules by default — no pre-built SDL binaries or `CMAKE_PREFIX_PATH` configuration required.
-
-### Initialise Submodules
-
-Before the first build, initialise the vendored submodules:
+Prerequisites: CMake 3.20+ (3.21+ for the presets), a C++23 compiler (GCC 12+, Clang 15+ or MSVC 2022 17.8+), the
+`../sharp-runtime`, `../easy-gl` and `../meta-gl` sibling checkouts, and libcurl and nlohmann-json for GamerServices and
+Net (both on by default). SDL3 and SDL3_mixer are built from vendored submodules. FFmpeg is optional
+(`CNA_ENABLE_VIDEO=AUTO`, [`docs/video-backend.md`](docs/video-backend.md)). The Debian package list, sibling setup,
+system SDL and source-archive notes are in [`docs/development-environment.md`](docs/development-environment.md).
 
 ```bash
-git submodule update --init
-```
+git submodule update --init                       # SDL, SDL_mixer, Draco, googletest, avatar catalogs
 
-This populates `third_party/SDL`, `third_party/SDL_mixer`, `third_party/draco` and
-`vendor/googletest`. `--recursive` is not needed: it only adds SDL_mixer's and Draco's nested
-submodules, which CNA's configuration does not build.
-After that, no system SDL packages are required.
-
-> **Building from a source zip/tarball instead of a Git clone?** GitHub's "Download ZIP"
-> and release archives do **not** include submodule contents, so `third_party/SDL` will be
-> empty and CMake aborts with a clear error (`Missing vendored 'SDL' … Run: git submodule
-> update --init`, from `cmake/ThirdPartySDL.cmake`). Either clone with Git and run
-> the command above, or set `-DCNA_USE_SYSTEM_SDL=ON` to use system-installed SDL3 packages.
-
-### Build (Linux — OPENGLES3 renderer, default)
-
-```bash
-git submodule update --init
+# Linux (OPENGLES3 is the default); other renderers: -DCNA_GRAPHICS_RENDERER=OPENGL33|SDLGPU|...
 cmake -S . -B build -DCNA_GRAPHICS_RENDERER=OPENGLES3
 cmake --build build --target CnaTests
+
+# Linux -> Windows with MinGW-w64 (sudo apt install mingw-w64); SDLGPU or DIRECTX9
+cmake -S . -B cmake-build-mingw -DCMAKE_TOOLCHAIN_FILE=cmake/toolchains/mingw-w64.cmake -DCNA_GRAPHICS_RENDERER=DIRECTX9
+cmake --build cmake-build-mingw --target CnaTests --parallel 8
+ctest --test-dir cmake-build-mingw -L DIRECTX9 --output-on-failure   # Wine + DXVK through scripts/run-wine-dxvk9.sh
+
+# macOS
+cmake -S . -B cmake-build-macos -DCNA_GRAPHICS_RENDERER=SDLGPU
+cmake --build cmake-build-macos --target CnaTests --parallel 8
 ```
 
-### Build (Windows — SDLGPU renderer, vendored SDL)
-
-On Windows `SDLGPU` is selected automatically when no renderer is named. SDL is built from the
-vendored submodule — no pre-built SDL binaries or `CMAKE_PREFIX_PATH` needed. The shared presets
-used by Visual Studio, VS Code and CI are documented in
-[`docs/windows-visual-studio.md`](docs/windows-visual-studio.md).
+On Windows `SDLGPU` is the default and the presets serve Visual Studio, VS Code and CI
+([`docs/windows-visual-studio.md`](docs/windows-visual-studio.md)):
 
 ```powershell
-git submodule update --init
 cmake --preset windows-msvc-sdlgpu-debug
 cmake --build --preset windows-msvc-sdlgpu-debug
 ctest --preset windows-msvc-sdlgpu-debug
 ```
 
-### Build (Linux → Windows cross-compilation with MinGW-w64)
+The MinGW build needs a Windows libcurl (`CURL_INCLUDE_DIR`, `CURL_LIBRARY`) or
+`-DCNA_ENABLE_NET=OFF -DCNA_ENABLE_GAMER_SERVICES=OFF`; `SDLGPU`'s Direct3D 12 backend runs under Wine through
+`scripts/run-wine-vkd3d.sh`. `DIRECTX9` configures only for Windows targets
+([`docs/directx9-renderer.md`](docs/directx9-renderer.md)). iOS/iPadOS cross-compilation (`cmake/toolchains/ios.cmake`)
+is in [`docs/apple-platforms.md`](docs/apple-platforms.md).
 
-GamerServices and Net, both on by default, need a libcurl built for Windows, which Debian does not
-package. Point `CURL_INCLUDE_DIR` and `CURL_LIBRARY` at a MinGW build of curl, or add
-`-DCNA_ENABLE_NET=OFF -DCNA_ENABLE_GAMER_SERVICES=OFF` to the configure below. Details:
-[docs/development-environment.md](docs/development-environment.md), *Windows cross-development*.
-
-```bash
-# Install cross toolchain
-sudo apt install mingw-w64
-
-git submodule update --init
-cmake -S . -B build-windows \
-      -DCMAKE_TOOLCHAIN_FILE=cmake/toolchains/mingw-w64.cmake \
-      -DCNA_GRAPHICS_RENDERER=SDLGPU
-cmake --build build-windows --target CnaTests
-```
-
-The resulting `.exe`s run under Wine; `SDLGPU`'s Direct3D 12 backend needs vkd3d-proton
-(`scripts/run-wine-vkd3d.sh`).
-
-### Build (macOS)
+Run the tests on the private display; the second command also proves the run left the checkout clean:
 
 ```bash
-brew install ccache ffmpeg
-git submodule update --init
-
-cmake -S . -B cmake-build-macos -DCNA_GRAPHICS_RENDERER=SDLGPU
-cmake --build cmake-build-macos --target CnaTests --parallel
-```
-
-CI builds macOS with `SOFTWARE`; `SDLGPU` (Metal backend) is not currently re-qualified on macOS.
-
-### Build (macOS → iOS / iPadOS cross-compilation)
-
-Requires a macOS host with Xcode. This produces a final-linked `cna_ios_smoke.app` for a device
-or simulator; the Apple workflow also launches its one-frame `Game` path in the simulator. This
-is not evidence for a physical device or correct pixels/input/audio/storage — see
-[`docs/apple-platforms.md`](docs/apple-platforms.md) for the exact boundary. iOS accepts `SOFTWARE`
-and `SDLGPU`; `SDLGPU` has never been built for iOS.
-
-```bash
-cmake -S . -B cmake-build-ios \
-      -DCMAKE_TOOLCHAIN_FILE=cmake/toolchains/ios.cmake \
-      -DCNA_GRAPHICS_RENDERER=SOFTWARE \
-      -DCNA_BUILD_TESTS=OFF -DCNA_BUILD_EXAMPLES=OFF
-cmake --build cmake-build-ios --parallel
-
-# Simulator: add -DCNA_IOS_SIMULATOR=ON (use a separate build directory).
-# Device deployment needs the Xcode generator and a team id:
-#   -G Xcode -DCNA_APPLE_DEVELOPMENT_TEAM=<TEAMID>
-```
-
-### Optional: use system-installed SDL
-
-If you prefer to link against system-installed SDL3 packages instead of the
-vendored submodules, pass `-DCNA_USE_SYSTEM_SDL=ON`:
-
-```bash
-cmake -S . -B build -DCNA_USE_SYSTEM_SDL=ON -DCNA_GRAPHICS_RENDERER=OPENGLES3
-cmake --build build --target CnaTests
-```
-
-This calls `find_package(SDL3 REQUIRED)` and `find_package(SDL3_mixer REQUIRED)` and requires
-those packages to be present on the system (e.g. installed via your package manager).
-
-### Other renderers
-
-```bash
-cmake -S . -B build -DCNA_GRAPHICS_RENDERER=OPENGL33
-cmake -S . -B build -DCNA_GRAPHICS_RENDERER=SDLGPU
-```
-
-### Build (Windows cross-compilation — DIRECTX9 renderer)
-
-A native Direct3D 9 renderer, Windows-only (hard-`FATAL_ERROR`-gated at configure time on any other
-`CMAKE_SYSTEM_NAME`), targeting real XNA 4.0 pixel authenticity rather than just feature parity —
-see [`docs/directx9-renderer.md`](docs/directx9-renderer.md) for what that means and why. Developed and
-verified on this repo's own Debian dev machine via the MinGW-w64 cross toolchain, tested locally
-through Wine + DXVK (`scripts/run-wine-dxvk9.sh`). See
-[`docs/directx9-renderer.md`](docs/directx9-renderer.md) and
-[`docs/d3d9-divergence-report.md`](docs/d3d9-divergence-report.md) for full detail.
-The Windows libcurl note of the MinGW `SDLGPU` build above applies here too.
-
-```bash
-# Install cross toolchain
-sudo apt install mingw-w64
-
-git submodule update --init
-# Reuse the existing cmake-build-mingw tree when it is there; configure only a missing one.
-cmake -S . -B cmake-build-mingw \
-      -DCMAKE_TOOLCHAIN_FILE=cmake/toolchains/mingw-w64.cmake \
-      -DCNA_GRAPHICS_RENDERER=DIRECTX9 \
-      -DCNA_BUILD_TESTS=ON
-cmake --build cmake-build-mingw --target CnaTests --parallel 8
-```
-
-Running the resulting `.exe`s needs a Wine + DXVK dev-loop
-(`docs/directx9-renderer.md` has full setup steps); CTest wires this in automatically:
-
-```bash
-ctest --test-dir cmake-build-mingw -L DIRECTX9 --output-on-failure
-```
-
-### Run Demo / Verification
-
-This repository intentionally prioritizes framework/runtime development over shipping a bundled game demo executable.
-
-Use these commands for quick environment and rendering-path verification. Tests that open a
-window run on a private headless compositor, never on the desktop:
-
-```bash
-cmake --build build
 tools/platform/run_gpu_tests_private.sh build --output-on-failure
-scripts/check_clean_checkout.sh -- tools/platform/run_gpu_tests_private.sh build   # also proves the run left the checkout clean
+scripts/check_clean_checkout.sh -- tools/platform/run_gpu_tests_private.sh build
 ```
 
-### Tested Compilers
-
-| Platform | Compiler | Renderer | Status |
-|----------|----------|---------|--------|
-| Linux x86_64 | GCC 12+ | OPENGLES3, SDLGPU | ✅ |
-| Linux x86_64 | Clang 15+ | OPENGLES3 | ✅ |
-| Windows x86_64 | MSVC 2022 | HEADLESS, SDLGPU, DIRECTX9 | automatic headless + SDLGPU preset workflow added 2026-10-30 (first successful run not yet recorded here); focused DIRECTX9 workflow is manual; real-hardware qualification remains open |
-| Linux → Windows (cross) | MinGW-w64 | SDLGPU, SOFTWARE | ✅ verified building + running under Wine (`SDLGPU`'s Direct3D 12 backend through vkd3d-proton) |
-| Linux → Windows (cross) | MinGW-w64 | DIRECTX9 | ✅ verified building + `DIRECTX9`-labelled CTest suite under Wine+DXVK on a real GPU — 0/40 active oracle scenes diverge from real XNA 4.0 at `--tolerance 0`; real Windows hardware verification still open, see `docs/directx9-renderer.md` |
-| Web (Emscripten) | emcc/Clang (emsdk) | WEBGL2, WEBGPU | ✅ verified building + running in Chrome; limits in `docs/web-emscripten-graphics-limitations.md` |
-| Android (NDK) | Clang (NDK 29/30) | OPENGLES3 | ✅ verified building + running on an x86_64 emulator; limits in `docs/android-graphics-limitations.md` |
-
-## 10. 📖 Usage Example
+## 10. Usage example
 
 Minimal XNA-style game skeleton in CNA (`Game` presents the frame itself, exactly as in XNA):
 
@@ -555,23 +210,13 @@ using namespace Microsoft::Xna::Framework::Graphics;
 
 class MyGame final : public Game {
 public:
-    MyGame()
-        : graphics_(this)
-    {
-        getContentProperty().setRootDirectoryProperty("Content");
-    }
+    MyGame() : graphics_(this) { getContentProperty().setRootDirectoryProperty("Content"); }
 
 protected:
     void LoadContent() override
     {
         spriteBatch_ = std::make_unique<SpriteBatch>(getGraphicsDeviceProperty());
         logo_ = std::make_unique<Texture2D>(getContentProperty().Load<Texture2D>("logo"));
-    }
-
-    void Update(GameTime& gameTime) override
-    {
-        // Update game state here.
-        Game::Update(gameTime);
     }
 
     void Draw(const GameTime& gameTime) override
@@ -599,24 +244,11 @@ int main()
 }
 ```
 
-## 11. 🧠 Design & Engineering Highlights
+## 11. Direction and license
 
-- **API mirroring strategy:** Public classes follow XNA naming and namespace conventions to reduce conceptual migration cost from XNA/MonoGame-style code.
-- **Abstraction design:** Gameplay-facing rendering APIs (`GraphicsDevice`, `SpriteBatch`, `Texture2D`) delegate to renderer interfaces instead of exposing low-level renderer objects.
-- **Separation of concerns:** Public framework API, internal contracts, and renderer implementations are physically separated in directory structure and ownership.
-- **Renderer-oriented architecture:** Renderer can be swapped at build-time with a single CMake option while keeping high-level game code stable.
-- **Performance-minded C++ implementation:** Native code path enables tighter control over memory, lifetime, and rendering behavior than managed runtime abstractions.
+CNA is in long-term maintenance by a human C++ developer: fixing the defects in [KNOWN_ISSUES.md](KNOWN_ISSUES.md),
+keeping behaviour faithful to XNA 4.0 and keeping validation deterministic. The renderer set, the platform layer and the
+content formats are kept as they are; new renderers, asset formats or subsystems are not planned.
 
-## 12. 🛣 Direction
-
-CNA is moving from feature expansion to long-term maintenance by a human C++ developer. The work
-ahead is fixing the defects listed in [KNOWN_ISSUES.md](KNOWN_ISSUES.md), keeping behaviour faithful to XNA
-4.0, and keeping validation deterministic. The renderer set (10 identities), the platform layer and
-the content formats are deliberately kept as they are; new renderers, asset formats or subsystems
-are not planned.
-
-## 13. 📜 License
-
-CNA is licensed under the Microsoft Public License (Ms-PL). See the [LICENSE](LICENSE) file for details.
-
-Portions of CNA are derived from or based on FNA, which is also licensed under the Microsoft Public License (Ms-PL).
+CNA is licensed under the Microsoft Public License (Ms-PL); see [LICENSE](LICENSE). Portions of CNA are derived from or
+based on FNA, which is also licensed under the Ms-PL.

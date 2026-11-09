@@ -13,11 +13,14 @@ declarations: **7,510 implemented**, **17 partially mapped**, **5 planned** and 
 applicable**. The experimental release verdict is therefore **Not ready**: the only unmet release
 criterion covers the four Windows path declarations under **CBIND-117** that still need Windows
 qualification and the ordered `Keyboard::KeyDownEXT` event under **CBIND-127** that needs a
-C-native subscription route or reviewed disposition. The 17 partial rows retain ten recorded dispositions. The 154 exact-row no-C-form
-decisions approved on 2026-11-02 and two transport-managed decisions approved by Robert Vokac on
-2026-11-03 are included in the 635 not-applicable rows, as are the seven CNAEXT content-reader hook and boxed-Tag symbols TQ-033 added on 2026-11-04 and the TouchCollection indexer setter, which XNA always refuses (TQ-036), the native
-ContentLoadException cause-carrier constructor (TQ-053), the two private QoS-result friend declarations GAP-17 added on 2026-11-06, the internal leaderboard-snapshot rehydration helper GAP-18 declares in PropertyDictionary.hpp, and the fourteen stock-clone dispatch declarations HND-TQ-25 D9 added to Effect and the five stock effects. Passing the inventory or release-record check verifies that this accounting
-is current; it does not authorize publication. The route-name census likewise measures source
+C-native subscription route or reviewed disposition. The 17 partial rows retain ten recorded
+dispositions. The not-applicable rows include the owner-approved exact-row no-C-form and
+transport-managed decisions ([CLOSURE_060.md](CLOSURE_060.md)), CNAEXT content-reader hook and
+boxed-Tag symbols, the TouchCollection indexer setter (which XNA always refuses), the native
+ContentLoadException cause-carrier constructor, private QoS-result friend declarations, an internal
+leaderboard-snapshot rehydration helper and the stock-effect clone dispatch declarations. Passing
+the inventory or release-record check verifies that this accounting is current; it does not
+authorize publication. The route-name census likewise measures source
 presence, not successful runtime calls or behavior parity.
 These values are summaries, not a second status ledger; [`COVERAGE.md`](COVERAGE.md),
 [`LIMITATIONS.md`](LIMITATIONS.md) and [`RELEASE_GATE.md`](RELEASE_GATE.md) are generated and remain
@@ -80,7 +83,7 @@ python3 tools/c-api/generate_coverage_inventory.py --check
 callable declarations remain `planned`; useful but incomplete routes remain `partial`; explicitly
 deleted C++ operations are retained as `not applicable` so the source inventory stays complete
 without inventing a C operation. `--check` reports an unmapped public symbol or a stale summary.
-Since 2026-11-09 it is advisory, like `CApiLimitations` and `CApiReleaseGate`: the CTest test
+It is advisory, like `CApiLimitations` and `CApiReleaseGate`: the CTest test
 `CApiCoverageMatrix` reports a failed check as a skip that names the regeneration commands, and the
 `c-api-coverage-gate` workflow marks its job `continue-on-error`. Any public-header edit, a comment
 included, can make the inventories stale. Bring them up to date with:
@@ -177,8 +180,7 @@ Every new route needs all applicable layers in the same change:
 
 Regenerate coverage after the change and verify that the implemented delta matches the reviewed
 symbols. `planned_owners` in `tools/c-api/coverage_mappings.json` contains only live owner metadata;
-the generated [`COVERAGE.md`](COVERAGE.md) is the current backlog and measured count. Completed
-campaign chronology belongs in Git history, not in a second status document.
+the generated [`COVERAGE.md`](COVERAGE.md) is the current backlog and measured count.
 
 ## Public naming and language baseline
 

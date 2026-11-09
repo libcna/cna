@@ -5,21 +5,19 @@ CNA ships no XMA encoder. Its stable unavailable diagnostic marker is
 
 > **XMA ENCODER EXTERNALLY UNAVAILABLE**
 
-This is the encoder limitation recorded by the completed content-pipeline campaign, whose plan is
-now in Git history. It is not a statement that every other pipeline feature is fully compatible.
-See [xna-content-pipeline-parity-report.md](xna-content-pipeline-parity-report.md) for the matrix.
+It is not a statement that every other pipeline feature is fully compatible. See
+[xna-content-pipeline-parity-report.md](xna-content-pipeline-parity-report.md) for the matrix.
 
 ## What the blocker establishes
 
 The repository contains an external-process encoder seam, not a built-in XMA bitstream encoder.
-On this audit host, FFmpeg 7.1.5 lists xma1/xma2 decoding but no XMA encoder. No conforming
-redistributable encoder has been integrated or qualified as a project dependency.
+As the runtime's unavailable reason states, XMA is Microsoft's own Xbox 360 codec with no public
+specification sufficient to implement a conforming encoder, no encoder licensable to the project,
+and none in FFmpeg, which decodes xma1 and xma2 and encodes neither. Container documentation and
+the committed oracle bytes do not establish a complete encoding algorithm either.
 
-Container documentation and the committed oracle bytes do not establish a complete encoding
-algorithm. The older claims that no licensable encoder could exist, or that a particular SDK
-licence authorizes a user's use, go beyond what these source/tests establish. CNA does not bundle
-Microsoft's SDK encoder; an explicitly attached tool must be supplied under its own applicable
-terms. This page does not determine those terms.
+CNA does not bundle Microsoft's SDK encoder; an explicitly attached tool must be supplied under its
+own applicable terms. This page does not determine those terms.
 
 ## Measured fixture, not a general encoding formula
 
@@ -70,7 +68,7 @@ documents XMA buffer alignment constraints, separately from this fixture's measu
 
 The built-in WAV sound-effect route (`CNA.SoundEffectProcessor`) writes PCM for Windows and Windows
 Phone, which agrees with XNA for the measured corpus. For an Xbox 360 build it writes XMA when an
-encoder is attached (L16, 2026-11-02): `SetBuildXmaEncoder` installs an
+encoder is attached: `SetBuildXmaEncoder` installs an
 `XboxSoundEffectEncoder` that the processor uses for that target, and the XNB writer emits the
 encoder's XMA2WAVEFORMATEX with every field, extension included, big-endian as in the genuine
 fixture. Without an encoder the Xbox build stays PCM, and that difference remains recorded as
@@ -124,24 +122,20 @@ format/data/loop fields.
 ## Identity and incremental builds
 
 XmaEncoderIdentity is the executable's filename plus a fingerprint of what decides the output: the
-SHA-256 of the program's bytes, the launcher, and the argument template (L16). The same program
+SHA-256 of the program's bytes, the launcher, and the argument template. The same program
 copied elsewhere fingerprints the same; a changed program or a differently run one does not. There
-is still no version query, because no command is common to every encoder.
+is no version query, because no command is common to every encoder.
 
 With an encoder attached, `CNA.SoundEffectProcessor`'s component version is
 `3+xbox:<identity>`, so the incremental manifest rebuilds sound effects when the encoder changes
 (conservatively for every target, not only Xbox). Custom processors that call
 `AudioContent::ConvertFormat(Xma, ...)` must fold the identity into their own version themselves.
 
-## Verification and future qualification
+## Tests and future qualification
 
-On 2026-11-01, the focused ContentPipeline target builds and all nine XmaEncoderService cases plus
-the per-target audio processor case pass on the private runner. Tests use Python stub encoders
-and the committed genuine fixture; no real XMA encoding or console playback is qualified.
-The independent parser also accepts all three target fixture files.
-
-L16 (2026-11-02) added the extension checks, the measured loop, the fingerprint, the processor
-version, the CMake options and the Xbox routing, verified with stub encoders and a fake encoder
-(`XmaEncoderService.*`, `XnbOutputContentPipelineTest.AnAttachedXboxEncoderMakesTheXboxWavRouteWriteXma`).
-A real encoder's output and console playback are still unqualified; only remove the recorded
-divergence when genuine output/playback comparisons actually pass.
+`XmaEncoderService.*` and `XnbOutputContentPipelineTest.AnAttachedXboxEncoderMakesTheXboxWavRouteWriteXma`
+cover the extension checks, the measured loop, the fingerprint, the processor version, the CMake
+options and the Xbox routing with Python stub encoders, a fake encoder and the committed genuine
+fixture; the independent parser accepts all three target fixture files. A real encoder's output and
+console playback are unqualified; remove the recorded divergence only when genuine output/playback
+comparisons pass.

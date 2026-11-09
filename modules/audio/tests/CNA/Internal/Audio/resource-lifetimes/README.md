@@ -10,8 +10,8 @@ interactive cues resolve no waves. Stop settles32, Destroy removes the handle.
 Destroy-playing stops actual current waves and destroys prepared successors, but
 resolved bank ownership survives until sound-bank destruction. EOF can release
 interactive waves while the cue remains Playing8/count1. Clones hold independent
-owners; weighted clone choices may match or differ. Ordered native4/CNA3 remains
-open: complete native lifecycles are checked here, not claimed as CNA parity.
+owners; weighted clone choices may match or differ. Complete native lifecycles are
+checked here; CNA's ordered four-wave count for raw3 is HND-XACT-05's (docs/xact-looping.md).
 
 Unregister cells show no callbacks after the final unregister returns in these
 runs, while playback state and resources continue to settle as in controls.

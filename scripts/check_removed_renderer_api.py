@@ -42,7 +42,6 @@ ACTIVE_DOC_DIRS = ("docs",)
 
 # Files whose whole purpose is to record the removal, so they must name it.
 REMOVAL_RECORD_FILES = {
-    "docs/c-api/ABI_VERSIONING.md",      # the 0.29.0 release notes
     "CHANGELOG.md",
 }
 

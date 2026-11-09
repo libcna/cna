@@ -1,8 +1,7 @@
 # FNA reference harness
 
-Bounded evidence map reconciled for MTH-CONF-007 on 2026-11-03. Phase 53 (Tasks 471–480) introduced the
-non-rendering value comparison; FX-005 later added compiled-effect reflection/state/pixel modes.
-The old Phase 53 environment blockers are historical, not current dependency detection.
+A running-FNA comparison for non-rendering values (Phase 53) and, through native FNA3D,
+compiled-effect reflection/state/pixel modes (FX-005).
 
 FNA remains the normal readable implementation reference. A running FNA comparison is useful
 independent evidence, but measured Microsoft XNA 4.0 behavior wins where it disagrees; record those
@@ -37,33 +36,29 @@ an exhaustive test of every method, input, exception, preset mutation or GPU beh
 it is not an execution count. **Tested behaviour** below means only the listed input domains.
 **Platform-qualified** for the value rows is Linux x86_64 CPU execution in Release/SOFTWARE/shared
 with DISPLAY/WAYLAND_DISPLAY unset, offscreen video and dummy audio; those runs do not qualify
-GPU output. Later renderer/C API/browser captures have their own scope linked below. Other
-operating systems and unselected inputs are **unassessed** by these runs.
-[Evidence descriptions, reproduction commands and source-identity limits](execution-evidence.md#compatibility-campaign-captures-mth-conf-007)
-identify the runs; commits below identify integrated changes, not a claim that pre-commit binaries
-were built at those exact Git HEADs. All CONF-003 rows use the pinned FNA identity stated below,
-seed `0xC0FFEE03`, tolerance zero and explicit signed-zero/nonfinite strings.
+GPU output; renderer, C API and browser witnesses have their own scope. Other operating systems
+and unselected inputs are **unassessed** by these runs. Commits below identify integrated changes.
+All CONF-003 rows use the pinned FNA identity stated below, seed `0xC0FFEE03`, tolerance zero and
+explicit signed-zero/nonfinite strings.
 
 | Family / integrated commit | Oracle and executable witness | Result / bounded detail |
 |---|---|---|
-| Comparator, CONF-001 `a31835b10` | Independent malformed/numeric CLI fixtures; `FnaReferenceComparisonToolTests` (`scripts/test_compare_fna_reference.py`) | 36 tests pass; five former false passes now refuse. Tool correctness, not runtime parity. |
-| Reference repeatability, CONF-002 `aa0a7364e` | Actual FNA.dll, `run-reference.py`; `test_run_reference.py` | Two byte-identical dumps; three original categories repeat at zero tolerance; comparator 49 and recipe 5 pass. Native FNA3D/SDL3 not loaded. |
+| Comparator, CONF-001 `a31835b10` | Independent malformed/numeric CLI fixtures; `FnaReferenceComparisonToolTests` (`scripts/test_compare_fna_reference.py`) | Tool correctness, not runtime parity. |
+| Reference repeatability, CONF-002 `aa0a7364e` | Actual FNA.dll, `run-reference.py`; `test_run_reference.py` | Two byte-identical dumps repeat every category at zero tolerance. Native FNA3D/SDL3 not loaded. |
 | Vector2 / perspective, CONF-003 `a8132d099` | FNA `ValueEdgeReference.cs`; literal `Vector2EdgeReferenceTest.*`, `MatrixPerspectiveEdgeReferenceTest.*`, `MatrixPerspectiveCompatibilityTest.*` | [Domains and retained decisions](#bounded-value-and-exception-edges-mth-conf-003); scalar fields superseded below. |
 | Vector3/4 / Quaternion, `72305ac4d` | FNA spatial/quaternion probes; `SpatialVectorTransformEdgeTest.*`, `QuaternionEdgeReferenceTest.*` | [Arithmetic, magnitudes, transforms and factory-rounding repair](#follow-up-1-vector3-vector4-and-quaternion). |
 | Matrix, `e70314d6b` | FNA `MatrixEdgeReference.cs`; literal `MatrixEdgeReferenceTest.*` | [87 cases, factories, aliasing, inversion/decomposition and trig repair](#follow-up-2-matrix-beyond-perspective). |
 | Plane / Bounding* / Ray, `1841a8150` | FNA `GeometryEdgeReference.cs`; literal `GeometryEdgeReferenceTest.*` | [Coplanar-plane repair and 114 retained fields](#follow-up-3-plane-boundingbox-boundingsphere-boundingfrustum-and-ray). Three negative-radius fields retain an algorithm decision, without a separate XNA measurement. |
 | Color / 17 PackedVector types, `ee5c7b4b4` | FNA `PackingEdgeReference.cs`; `ColorEdgeReferenceTest.*`, `PackedVectorEdgeReferenceTest.*`; shipped-XNA HalfUtils IL plus literal `XnaHalfConversionTest.*` | [366 cases and half repair](#follow-up-4-color-and-all-17-packedvector-types). No successful original-XNA runtime run. |
 | Curve, `ee5c7b4b4` | FNA `CurveEdgeReference.cs`; literal `CurveEdgeReferenceTest.*`; shipped-XNA Add/ComputeTangent IL | [12 curves, loop/tangent overloads, insertion ordering](#follow-up-5-curve-evaluation-and-tangents). IL settles 20 fields; no general tangent equivalence. |
-| Scalar division follow-up, `661925667` (MTH-TEST-003) | Shipped-XNA IL; typed `VectorScalarDivisionContractTest/*.*`, `Vector3CompoundAssignmentTest.*`; independent rational binary32 proof | 57 more retained fields; final audit **1,859**, zero undecided, equal remainder. Reuses the aligned FNA dump; no FNA rerun. [Decision](xna-fna-behavior-decisions.md#vector-scalar-division). |
+| Scalar division follow-up, `661925667` (MTH-TEST-003) | Shipped-XNA IL; typed `VectorScalarDivisionContractTest/*.*`, `Vector3CompoundAssignmentTest.*`; independent rational binary32 proof | 57 more retained fields; final audit **1,859**, zero undecided, equal remainder. [Decision](xna-fna-behavior-decisions.md#vector-scalar-division). |
 | Native lifecycle, CONF-004 `3671c7ee0` | Shipped-XNA IL / inspected FNA paths plus event/cache transcripts | [Owning decision and witness map](xna-fna-behavior-decisions.md#mth-conf-004-lifecycle-inspection); separate HEADLESS qualification. |
-| Graphics, CONF-005 / TEST-007 / EXIT-002, `cba2e9e36`, `9036515ca`, `177b55ecc`, `74a61a0b2` | FNA source semantics, hand-derived pixels and independent literals; observational line/point witness kept separate | [Claim-to-CTest/run/limit map](execution-evidence.md#renderer-c-api-and-browser-follow-up-2026-11-03): deferred uploads, sprite destination/depth transforms, readback/blend/MSAA, FNA3D viewport/storage, runtime adapter queries. Six Linux pixel renderers; capability subskips retained. |
-| C API, SAFE-004 / TEST-005 / EXIT-002, `ade6f921e`, `f942e63ba`, `96dadb0c0` | C ownership/result contracts, independent byte/value expectations; XNA IL/FNA agree on component removal | Same execution map: lifetime sequences, subscription teardown, texture refusals/output atomicity and literal value checks. C handles are a separate contract from native disposal; no new XNA/FNA decision. |
-| Browser / performance, `982d75273`, `b0d1b2c5a` | Browser pixel/lifecycle checks; EasyGL A/B checksum and call counters (neither is an XNA oracle) | Same execution map: Chrome WEBGL2/WEBGPU campaign pages and Linux OPENGLES3/OPENGL33 Debug benchmark. Non-CTest witnesses, platform and timing limits are explicit. |
+| Graphics, CONF-005 / TEST-007 / EXIT-002, `cba2e9e36`, `9036515ca`, `177b55ecc`, `74a61a0b2` | FNA source semantics, hand-derived pixels and independent literals; observational line/point witness kept separate | Deferred uploads, sprite destination/depth transforms, readback/blend/MSAA, FNA3D viewport/storage, runtime adapter queries on six Linux pixel renderers; capability subskips retained. |
+| C API, SAFE-004 / TEST-005 / EXIT-002, `ade6f921e`, `f942e63ba`, `96dadb0c0` | C ownership/result contracts, independent byte/value expectations; XNA IL/FNA agree on component removal | Lifetime sequences, subscription teardown, texture refusals/output atomicity and literal value checks. C handles are a separate contract from native disposal; no new XNA/FNA decision. |
+| Browser / performance, `982d75273`, `b0d1b2c5a` | Browser pixel/lifecycle checks; EasyGL A/B checksum and call counters (neither is an XNA oracle) | Chrome WEBGL2/WEBGPU pages and a Linux OPENGLES3/OPENGL33 Debug benchmark; non-CTest witnesses with explicit platform and timing limits. |
 
-The raw comparator still exits **1** on the 1,859 retained differences; only the exact
-disposition audit exits **0**. This is not FNA parity. Earlier batch counts below are historical.
-The final scalar follow-up ran 1,084 math tests (two missing ShipGame XML fixture skips),
-172 CPU packing tests and 32 real-dump evidence tests; no selected new scalar witness skipped.
+The raw comparator exits **1** on the 1,859 retained differences; only the exact disposition
+audit exits **0**. This is not FNA parity.
 
 | Unassessed family | Precise next experiment / limitation |
 |---|---|
@@ -99,7 +94,7 @@ revision with Git and hashes the actual loaded assembly, rejecting dirty tracked
 wrong pins and stale copied DLLs. See [the tool README](../tools/fna-reference/README.md) for
 manual recipes and native-library settings.
 
-Provenance enforcement landed in `aa0a7364e`. If generation reports `Output exists`,
+If generation reports `Output exists`,
 choose a fresh evidence directory; use `--update` only for an intentional replacement. A dirty
 source/revision or assembly-hash refusal requires the reviewed clean FNA pin and a fresh wrapper
 build, rather than copying a DLL into the probe output. .NET 8 SDK, Git, Python 3 and the managed
@@ -215,28 +210,14 @@ The tool README contains the explicit paths/hash settings and owner-run recipes.
 Do not overwrite committed reference JSON incidentally during a documentation audit.
 See [compiled effects](fx-compiled-effects.md) for the runtime boundary and genuine-XNA exceptions.
 
-## Historical findings and current verification
+## Pinned reference identity
 
-The first campaign found harness precision/omission bugs and an IndexElementSize mismatch.
-Task 921 corrected CNA to SixteenBits=0/ThirtyTwoBits=1. This history is not a substitute for a
-fresh full comparison.
-
-On 2026-11-02, the owner provisioned the five pinned managed submodules after the initial
-missing-source build failure. FNA.Core.csproj at revision
-00498b0b81425b14bf8da23e68655215b9b5daa7 and the complete harness then built with SDK 8.0.425.
-The assembly reports 26.10.0.0; its built/loaded SHA-256 is
-`f973ec1edd32290f19750d6d3d26fba23ab1a813fedd71f1ea026edf03c9647c`.
-The real recipe produced two byte-identical dumps and passed all three category comparisons at
-zero tolerance. Neither FNA3D nor SDL3 was loaded, and FNA3D's uninitialized source submodule
-was not needed. Five runtime negative checks rejected missing or wrong references. Checks with
-real dumps reject missing first-input provenance and changed candidate reference identities,
-while accepting a candidate without metadata. All 49 comparator and 5 recipe tests passed,
-including candidate/producer validation. Builds had no errors, with upstream CA2255 and existing
-probe SYSLIB0050 warnings.
-
-This is measured non-rendering reference repeatability on the Linux host. No fresh CNA/FNA
-parity, native effect run, screenshot qualification or C++/C ABI change is claimed. Native
-validation and golden regeneration remain separate integration-owner work.
+The recipe pins FNA.Core.csproj at revision `00498b0b81425b14bf8da23e68655215b9b5daa7`, built with
+the .NET 8 SDK; the assembly reports 26.10.0.0 and its built/loaded SHA-256 is
+`f973ec1edd32290f19750d6d3d26fba23ab1a813fedd71f1ea026edf03c9647c`. Value dumps load neither FNA3D
+nor SDL3, so they qualify no native effect mode. Two runs of the recipe produce byte-identical dumps
+that match at zero tolerance. Native effect validation and golden regeneration are separate
+integration-owner work.
 
 ## Bounded value and exception edges (MTH-CONF-003)
 
@@ -269,13 +250,14 @@ perspective coefficients in `Vector2EdgeReferenceTest`, `MatrixPerspectiveEdgeRe
 and `test_value_edges.py`. The Python test checks both real dumps. Copy-hash equality and
 agreement between overloads are consistency checks only: implementations can share a mistake.
 Large/tiny axis expectations use the **existing measured-XNA decision**, independently of the
-fresh FNA run. No genuine XNA binaries were run for CONF-003.
+FNA run. No genuine XNA binaries were run for CONF-003.
 
 ### Retained dispositions and reproduction
 
 On Linux x86_64, Release/SOFTWARE/shared CNA and the pinned FNA/net8 reference, the strict
-initial zero-tolerance edge comparison reported **60 differences**, all retained.
-Follow-up 1 expanded the audit to **155**; follow-up 2 brought it to **566**. The geometry batch reached **680 retained and zero undecided** diagnostics. The packing batch reached **807 retained and zero undecided** after the shipped-XNA half IL correction. The Curve batch reached **1,802 retained and zero undecided** after shipped-XNA Curve IL inspection; the [scalar-division follow-up](#campaign-evidence-map-mth-conf-001007) raises the current audit to **1,859**; see follow-ups 3–5 below:
+zero-tolerance edge comparison retains **1,859** differences, zero undecided: the 60 of the two
+original categories below, those of follow-ups 1–5 and the
+[scalar-division follow-up](#campaign-evidence-map-mth-conf-001007).
 
 | Witnesses | Count of comparator diagnostics | Disposition |
 |---|---:|---|
@@ -310,22 +292,12 @@ The real-dump suite checks independent literal results and negative controls (ch
 witnesses, a boolean substituted for a retained number, disappearing retained differences,
 and missing/wrong reference provenance). Without the two dump paths it explicitly skips.
 
-CONF-003 execution on 2026-11-02: both allowed C++ targets built, FNA's two dumps were
-byte-identical and all five categories repeated at zero tolerance. The FNA assembly identity
-remains the 26.10.0.0 / `f973ec1edd32290f19750d6d3d26fba23ab1a813fedd71f1ea026edf03c9647c`
-identity above, with FNA3D/SDL3 not loaded. CnaMathTests: **978 passed, 0 failed, 2 skipped**
-(missing external ShipGame XML fixtures), including all seven new tests. Comparator tests:
-49 passed; recipe tests: 5 passed; real-edge evidence tests: 9 passed. Executions unset DISPLAY
-and WAYLAND_DISPLAY and use offscreen video/dummy audio; no GPU/window test ran.
-
-A supplementary comparison of the old default categories still reports eight pre-existing
-NonRenderingApis differences: BlendFunction Min/Max ordinals (CNA Min=3/Max=4 versus FNA's
-reverse order, `9a42a7e82`, `StateEnumFallbackTest.BlendFunctionValuesMatchMicrosoftRuntime`)
-and StencilMask/StencilWriteMask for all three depth presets (-1 versus FNA's 2147483647,
-XNA repair `ce2d52444`, `DepthStencilStateTest`). They are retained outside this task's selected
-families; no graphics state code was changed or graphics test newly run. PackedVector and
-Viewport have no differences in that comparison at its existing 1e-4 tolerance. This is not
-a fresh expansion or qualification of those families.
+The default categories report eight retained NonRenderingApis differences: BlendFunction Min/Max
+ordinals (CNA Min=3/Max=4 versus FNA's reverse order, `9a42a7e82`,
+`StateEnumFallbackTest.BlendFunctionValuesMatchMicrosoftRuntime`) and StencilMask/StencilWriteMask
+for all three depth presets (-1 versus FNA's 2147483647, XNA repair `ce2d52444`,
+`DepthStencilStateTest`). PackedVector and Viewport have no differences at the default 1e-4
+tolerance.
 
 ### Follow-up 1: Vector3, Vector4 and Quaternion
 
@@ -355,16 +327,12 @@ Fixed factory angles are zero, ±Pi/2, Pi, NaN and +infinity. Factory axes inclu
 UnitY, zero and `(2,-1,0.5)`. Matrix cases are identity, exact X/Y/Z half turns and all zero.
 No inverse-trigonometric domain rejection or unit-axis normalization is assumed.
 
-The new quaternion factory probes exposed **eight unequal fields** in value/out results at
-seeded angles. CNA called the `float` overloads of sin/cos; the inspected FNA methods round
-the half-angle to Single, call double Math.Sin/Math.Cos and cast back to Single before
-multiplication. `Quaternion::CreateFromAxisAngle` and `CreateFromYawPitchRoll` now preserve
-that evaluation order. For example, UnitX/angle=0.390625 changed X from bits `3e46bb1a` to
-`3e46bb19`. The exact-bit native regression failed before the fix and passes after it;
-all factory fields now compare at **zero tolerance**. This follows FNA, with no claim of a
-new genuine-XNA measurement and no change to public signatures or documented XNA deviations.
+`Quaternion::CreateFromAxisAngle` and `CreateFromYawPitchRoll` round the half-angle to Single,
+call double sin/cos and cast back to Single before multiplication, as the inspected FNA methods
+do (for UnitX/angle=0.390625, X is bits `3e46bb19`); an exact-bit native regression pins it and
+all factory fields compare at **zero tolerance**. This follows FNA, with no genuine-XNA measurement.
 
-The follow-up retains these **95 additional differences**, all pinned by path and both values:
+The follow-up retains these **95 differences**, all pinned by path and both values:
 
 | Family | Retained diagnostics | Existing decision |
 |---|---:|---|
@@ -374,26 +342,11 @@ The follow-up retains these **95 additional differences**, all pinned by path an
 | Quaternion magnitude/Normalize | 38 | `bd46b6ffe`; includes finite rounding witnesses as well as overflow/underflow |
 | Quaternion Inverse | 20 | `df9234202`, wide norm/reciprocal/product; finite rounding and extreme magnitudes |
 
-The audit after follow-up 1 was **155** (original 60 + follow-up 95). No factory differences are
-accepted. The strict comparator remains unchanged, no tolerance was widened, and every other
-selected field matches exactly. The audit freezes these Quaternion observations in
-`quaternion_retained_differences()` and checks every declared case/overload/component exists.
-
-Follow-up verification on the same Linux Release/SOFTWARE/shared configuration: reference
-recipe **8/8** categories reproduce at zero tolerance; the two dumps are byte-identical.
-CnaMathTests **998 passed, 0 failed, 2 skipped** (the same missing ShipGame XML fixtures),
-including **20 new tests**: 13 vector and seven quaternion tests. The real-dump suite has
-**13 passing tests**, including literal vector/matrix/quaternion assertions on both dumps,
-the factory regression, and omission/mutation controls for the new categories. Literal
-arithmetic, Hamilton-product order and analytic rotations are independent expectations;
-exact factory bits are measured FNA regressions. Analytic sqrt(1/2) assertions use 1e-7 in
-native tests; this does not change the zero tolerance used in the paired dump comparison.
-
-Follow-up 1 stopped after Vector3/Vector4/Quaternion. Follow-up 2 below adds Matrix coverage;
-geometry, Color/PackedVector expansion and Curve remain unassessed by this campaign. No BoundingFrustum ray behavior,
-C API, GPU/window, browser or native-Windows changes/runs are included. Native fixture skips
-and remaining unassessed input domains are not turned into broader parity claims.
-
+No factory differences are accepted; every other selected field matches exactly. The audit
+freezes these Quaternion observations in `quaternion_retained_differences()` and checks every
+declared case/overload/component exists. Literal arithmetic, Hamilton-product order and analytic
+rotations are independent expectations; exact factory bits are measured FNA regressions. Analytic
+sqrt(1/2) assertions use 1e-7 in native tests; the paired dump comparison stays at zero tolerance.
 
 ### Follow-up 2: Matrix beyond perspective
 
@@ -416,14 +369,11 @@ scales. C++ brace initializers sequence every draw. The evidence suite checks in
 literal inputs and outputs, and rejects omitted matching fields even if removed from both dumps.
 No array overloads, exhaustive threshold sweep, or general decomposition/recomposition claim is made.
 
-The initial strict Matrix comparison had **415 diagnostics**. Four were a confirmed factory
-defect: `CreateFromAxisAngle(UnitX, -0.84375)` returned M22/M33 bits `3f2a2789` instead of
-`3f2a2788`, in both value and output forms. It called float sin/cos; the inspected reference
-calls double Math.Sin/Math.Cos, then rounds to Single before the products. CNA now does that.
-`MatrixEdgeReferenceTest.AxisAngleRoundsDoubleTrigBeforeMatrixArithmetic` failed all four
-cosine assertions before the fix and passes after it. No public API or new XNA decision changed.
+`Matrix::CreateFromAxisAngle` calls double sin/cos and rounds to Single before the products, as
+the inspected reference does (`CreateFromAxisAngle(UnitX, -0.84375)` gives M22/M33 bits `3f2a2788`;
+`MatrixEdgeReferenceTest.AxisAngleRoundsDoubleTrigBeforeMatrixArithmetic`).
 
-The remaining **411 Matrix diagnostics** are retained under verified existing decisions:
+**411 Matrix diagnostics** are retained under verified existing decisions:
 
 | Group | Retained diagnostics | Existing measured-XNA decision |
 |---|---:|---|
@@ -433,25 +383,12 @@ The remaining **411 Matrix diagnostics** are retained under verified existing de
 
 `matrix_retained_differences()` freezes every path and **both observed values**, with overload
 expansion only for explicitly named cases/operations. A changed, additional or disappearing
-retained difference fails. The audit after follow-up 2 had **566 diagnostics** (155 earlier + 411).
-No axis-angle difference is accepted; all remaining selected fields match at zero tolerance.
+retained difference fails. No axis-angle difference is accepted; all remaining selected fields
+match at zero tolerance.
 Camera, determinant, transpose and Lerp results have no observed differences in this domain.
 This is a bounded disposition audit, **not FNA parity** or a new Microsoft XNA binary run.
 
-Verification on 2026-11-02, Linux x86_64 Release/SOFTWARE/shared: both allowed native targets
-built; **9/9** reference categories repeated at zero tolerance and the two real-FNA dumps were
-byte-identical. The source/assembly identity above is unchanged; FNA3D and SDL3 were not loaded.
-CnaMathTests: **1,010 passed, 0 failed, 2 skipped**, including **12 new Matrix tests** with
-literal matrices, analytic degeneracy checks and frozen reference bits. The skips are the same
-missing external ShipGame XML fixtures. Real-dump tests: **18 passed**; recipe tests: **5 passed**;
-comparator tests: **49 passed**. Every executable ran with DISPLAY/WAYLAND_DISPLAY unset,
-offscreen video and dummy audio. No graphics/window test was run.
-
-This batch stops after Matrix. Plane/BoundingBox/BoundingSphere/BoundingFrustum/Ray comparisons,
-Color/PackedVector edge expansion and Curve remain for subsequent batches. In particular,
-BoundingFrustum::Intersects(Ray) was neither implemented nor probed. No C ABI, language binding,
-GPU, browser or native-Windows qualification is claimed.
-
+BoundingFrustum::Intersects(Ray) is neither implemented nor probed.
 
 ### Follow-up 3: Plane, BoundingBox, BoundingSphere, BoundingFrustum and Ray
 
@@ -474,17 +411,12 @@ triples. The six fixed ray-direction X values are 0.5e-6, 1e-6, 2e-6, 9e-6, 1e-5
 A negative radius is assigned through the public mutable field after valid construction; no
 constructor refusal is bypassed or changed in CNA production code.
 
-After correcting a native probe helper to update its JsonWriter by reference, the strict
-geometry comparison reported **117 diagnostics**. Three were a new confirmed mismatch:
-`BoundingFrustum::Intersects(Plane)` classified zero-distance corners separately from negative
-corners; the inspected FNA method compares only `distance > 0`, grouping zero with the
-nonpositive side. A zero plane returned Intersecting rather than Back, also through the
-Plane forwarding method. CNA now uses the same boolean classification. The focused native
-regression failed six assertions before the fix (zero plane and a nonzero plane coplanar with
-the far face, each through the three public routes). All three dumped fields now match.
-This follows the reference; no new genuine-XNA measurement is claimed.
+`BoundingFrustum::Intersects(Plane)` compares only `distance > 0`, as the inspected FNA method
+does, grouping zero-distance corners with the nonpositive side (a zero plane gives Back), through
+all three public routes; a native regression covers a zero plane and one coplanar with the far
+face. This follows the reference; no genuine-XNA measurement is claimed.
 
-The remaining **114 geometry diagnostics** are inventoried as follows:
+**114 geometry diagnostics** are retained:
 
 | Disposition | Count | Existing evidence |
 |---|---:|---|
@@ -494,36 +426,16 @@ The remaining **114 geometry diagnostics** are inventoried as follows:
 | Box/sphere Contains(frustum) | 8 retained | `5ab1c7729`: actual convex separation precedes corner containment. Includes distant and inside-out boxes. |
 | Sphere construction / CreateFromFrustum | 31 retained | `52f797f60`, `f46f26ea8`, `f5063e08c`: later-axis seed ties, wide distances/half-span radius, growth storage order and Distance-based span selection. Existing sphere-oracle tests remain authoritative for the XNA model; these are new FNA/CNA observations. |
 | Touching frustum pair | 4 retained | `5ab1c7729`: GJK intersection rather than conservative Contains planes. |
-| Negative-radius/frustum intersection | 3 retained | FNA false, CNA true for sphere.Intersects(frustum), frustum.Intersects(sphere), and its out form. Integration-owner decision (2026-11-02), under `5ab1c7729`: "algorithmic consequence of the measured XNA GJK port; negative radii were not separately measured against XNA". CNA's support mapping is center + v * Radius / length(v), while FNA uses a plane-distance test. Production behavior is unchanged. |
+| Negative-radius/frustum intersection | 3 retained | FNA false, CNA true for sphere.Intersects(frustum), frustum.Intersects(sphere), and its out form. Owner decision, under `5ab1c7729`: "algorithmic consequence of the measured XNA GJK port; negative radii were not separately measured against XNA". CNA's support mapping is center + v * Radius / length(v), while FNA uses a plane-distance test. Production behavior is unchanged. |
 
-The seven-edge-category raw comparison reports **680 retained diagnostics and zero undecided**
-(the prior 566 + 114 retained geometry). The audit pins every path and both values, then
-**exits 0** only when those exact dispositions match and every other selected field equals the
-reference at zero tolerance. The temporary undecided inventory and its test-only bypass were
-removed after the integration-owner decision. Mutation controls still reject unlisted changes,
-altered retained values and disappearing differences; the three negative-radius paths are
-frozen separately in the evidence assertions. This is a disposition audit, not FNA parity.
+The audit pins every path and both values; mutation controls reject unlisted changes, altered
+retained values and disappearing differences, and the three negative-radius paths are frozen
+separately in the evidence assertions.
 
-Verification on 2026-11-02: both allowed native targets built; reference recipe **10/10**
-categories reproduce at zero tolerance and its two dumps are byte-identical. Source revision,
-assembly SHA-256 and unloaded native-library identities are unchanged from above. CnaMathTests
-**1,020 passed, zero failed, two skipped** (the same external ShipGame XML fixtures), including
-**10 new geometry tests**. Real-dump evidence suite: **22 passed**; recipe tests: **5 passed**.
-The comparator implementation is unchanged; its 49 tests already passed in the Matrix batch.
-Runs unset DISPLAY/WAYLAND_DISPLAY and use offscreen video/dummy audio. No GPU/window, C ABI,
-language binding, dependency or new XNA-oracle execution is included.
-
-Follow-up verification after the integration-owner decision: the default exact audit passes
-with **680 retained differences, zero undecided**; the **22** real-dump evidence tests and
-CnaMathTests (**1,020 passed, zero failed, two existing fixture skips**) pass again using the
-same dumps and native binary. No production change or new XNA measurement was made to resolve
-the three fields. Their caveat remains: "algorithmic consequence of the measured XNA GJK port; negative radii were not separately measured against XNA".
-
-The geometry batch ended here; follow-ups 4–5 below complete the selected packing/Curve expansion. General geometry precision, invalid frustum matrices,
+General geometry precision, invalid frustum matrices,
 nonfinite convex-volume inputs and unselected array/aliasing routes are not qualified by this
 comparison. The negative-radius disposition preserves the ported algorithm; it is not a
 separate empirical qualification of that input against Microsoft XNA.
-
 
 ### Follow-up 4: Color and all 17 PackedVector types
 
@@ -562,27 +474,25 @@ The four seeded interpolation factors continue the Color subgroup's state after 
 draws. All fixed and seeded input vectors, raw words, integer channels and interpolation factors
 are emitted. No timestamp or standard-library random generator is involved.
 
-The initial strict comparison reported **175 packing diagnostics** before the half correction below:
+Packing dispositions:
 
 | Disposition | Count | Evidence boundary |
 |---|---:|---|
 | Minimum SNORM raw-code expansion | 39 retained | `b6f127b15`, inspected PackUtils.UnpackSNorm decision: 0x80/0x8000 expands to exactly -1 in CNA, while FNA divides the signed value by 127/32767. Four NormalizedByte/Short types; the repacked words agree. |
 | Color fixed-point Lerp/Multiply/operator | 40 retained | `1ad0a3916`, ISSUE-132 and its 1,782-check ColorFixedPointOracle: NaN Lerp retains the first color, positive-infinite scaling saturates nonzero channels, and packed-factor boundaries differ from FNA's floating arithmetic. Exact paths/values are frozen, including derived expanded channels. |
-| HalfSingle/HalfVector2/HalfVector4 decode and repack | 96 initially undecided; now settled | The subsequent shipped-XNA HalfUtils IL inspection below requires extended finite decoding and different saturation. These observations are no longer accepted as IEEE behavior or left undecided. |
+| HalfSingle/HalfVector2/HalfVector4 decode and repack | 48 retained | Shipped-XNA HalfUtils IL, below: extended finite decoding and XNA saturation. |
 
-Before correction, all selected constructor and PackFromVector4 words matched FNA. All Color
-constructors/premultiplication/int/raw conversions still match. The actual pinned FNA Color
-constructors already use Math.Round; historical comments describing truncation are not authoritative.
+All Color constructors/premultiplication/int/raw conversions match FNA; the pinned FNA Color
+constructors use Math.Round.
 
-The initial 96 half observations (15 HalfSingle, 27 HalfVector2, 54 HalfVector4) prompted inspection
-of the installed original Microsoft XNA 4.0 Windows assembly. The types live in
+The half contract comes from the installed original Microsoft XNA 4.0 Windows assembly. The types live in
 **Microsoft.Xna.Framework.dll**, SHA-256
 `38e7093f52d7474bbc6256906519781a1210d7da50a1c667b52716fcf49ca130`, version `4.0.0.0`,
 public key token `842cf8be1de50553`. The
 [HalfUtils inspection and local regeneration notes](../tools/fna-reference/xna-half/README.md) identify:
 
 - `Unpack(uint16)`, 139 bytes, IL_005f–IL_008a: exponent 31 is finite, so 7c00/7e00/7fff
-  expand to 65536/98304/131008 (with the stored sign). CNA's former IEEE special case was wrong.
+  expand to 65536/98304/131008 (with the stored sign), not IEEE infinities/NaN.
 - `Pack(float32)`, 145 bytes, IL_001b–IL_002c: unsigned absolute bits above 47ffefff saturate
   to sign|7fff, including NaN/infinity. IL_002e–IL_008e handles subnormals, rebias and ties to even.
   Exponent-31 finite values are representable. FNA's IEEE-style overflow/NaN packing also differs.
@@ -591,46 +501,20 @@ public key token `842cf8be1de50553`. The
 
 Microsoft disassembly stays outside the repository; the linked notes provide the local
 `ikdasm` regeneration command and original prose summaries, without copied instruction listings.
-CNA now matches the inspected integer/bit behavior. `XnaHalfConversionTest` has three independent
-literal-bit regressions for helper overloads and public paths; all three failed before the fix.
-Old native IEEE expectations were corrected to the authoritative XNA contract. The original
-assembly probe compiles with mcs for all 57 half records, including every originally undecided
-input, but Mono fails in the mixed-mode `<Module>` initializer (`_getFiberPtrId`) before any
-measurement. **No successful XNA runtime measurement is claimed**; the exact shipped IL settles it.
+CNA matches the inspected integer/bit behavior; `XnaHalfConversionTest` has three independent
+literal-bit regressions for helper overloads and public paths. The original assembly probe
+compiles with mcs for all 57 half records, but Mono fails in the mixed-mode `<Module>` initializer
+(`_getFiberPtrId`) before any measurement. **No successful XNA runtime measurement is claimed**;
+the exact shipped IL settles it.
 
-After correction, **57 of the original 96 fields match FNA**, while 39 existing paths have changed
-XNA results and nine constructor/pack paths become new retained differences. The **48 remaining
-half diagnostics** are frozen against the new IL decision: nine constructor/PackFrom words,
-18 expanded constructor/interface channels, 21 raw repacked words. Direct raw expansion agrees
-with FNA. Example: positive Single NaN now packs to 7fff and expands to 131008 in CNA, while FNA
-packs 7e00 and expands to 98304; raw ffff expands to -131008 on both, then repacks to ffff in CNA
-and fc00 in FNA. See `half_retained_differences()` for every exact path and both values.
+The **48 retained half diagnostics** are nine constructor/PackFrom words, 18 expanded
+constructor/interface channels and 21 raw repacked words; direct raw expansion agrees with FNA.
+Example: positive Single NaN packs to 7fff and expands to 131008 in CNA, while FNA packs 7e00 and
+expands to 98304; raw ffff expands to -131008 on both, then repacks to ffff in CNA and fc00 in FNA.
+See `half_retained_differences()` for every exact path and both values.
 
-The eight-edge-category raw comparison now reports **807 retained differences, zero undecided**
-(previous 680 + 39 SNORM + 40 Color + 48 half). The default audit passes only on those exact
-path/value pairs and an equal remainder at tolerance zero. The temporary undecided inventory and
-bypass are removed; changed, unlisted or disappearing differences fail. This remains a bounded
-disposition audit, not FNA parity.
-
-Verification on 2026-11-02, the same Linux x86_64 Release/SOFTWARE/shared build and pinned FNA
-source/assembly: reference recipe **11/11** categories reproduce at zero tolerance, byte-identical
-dumps; no SDL3/FNA3D loaded by the managed probe. Native targets cna_reference_dump, CnaMathTests
-and CnaGraphicsTests built. CnaMathTests **1,023 passed, zero failed, two existing fixture skips**;
-selected CPU-only packed-vector/value-contract/oracle graphics suites **141 passed, zero failed,
-zero skipped**. This includes **20 new tests** (three Color, one for each packed type), using
-literal independent reference words/channel values and the existing measured-XNA fixed-point
-witnesses. Those initial tests left half decoding undecided; the additional IL regressions now settle that contract. Real-dump
-suite **26 passed**; recipe tests **5 passed**. Native executions unset both displays and use
-offscreen video/dummy audio; no GPU/window test is included.
-
-Half correction verification: the affected targets build; the selected CPU packing suites pass
-with **154 tests**, including all three new IL regressions, and CnaMathTests passes **1,023 tests**
-with two existing fixture skips. The real-dump suite passes **26 tests** on the corrected candidate;
-the default audit passes with **807 retained, zero undecided**. FNA source/dumps are unchanged.
-No GraphicsDevice, GPU/window, browser, native-Windows runtime or new original-assembly execution
-success is claimed. General hash/text contracts, all named Color constants, arbitrary NaN payloads,
-integer-overflow domains and every unselected input/array/aliasing path are outside this paired coverage.
-
+General hash/text contracts, all named Color constants, arbitrary NaN payloads, integer-overflow
+domains and every unselected input/array/aliasing path are outside this paired coverage.
 
 ### Follow-up 5: Curve evaluation and tangents
 
@@ -654,20 +538,20 @@ float-to-int overflow for nonfinite or very distant cycle counts. Infinity cycle
 zero-span outside-loop behavior are explicitly unassessed. Negative and end key-index exception
 names are recorded through the two single-key tangent overloads.
 
-FNA inserts equal-position keys in a different order from CNA. The initial direct-Add probe
-reported 1,355 diagnostics, many downstream effects of unequal actual evaluation inputs. The
-final probe records **insertionKeys** separately, then replaces indexed keys with fresh keys
+FNA inserts equal-position keys in a different order from CNA. So that the insertion difference
+does not change every downstream evaluation, the probe records **insertionKeys** separately, then
+replaces indexed keys with fresh keys
 in the intended sorted input order before evaluation/tangent computation. Every input position
 list is nondecreasing, so these replacements keep the position and only restore the intended
 key data. The evidence tests require identical actual evaluation keys on both implementations.
 The insertion discrepancy remains explicit; it is not silently filtered or treated as XNA evidence.
 
-Final Curve diagnostics: **995**:
+Curve diagnostics: **995**:
 
 | Disposition | Count | Evidence / limitation |
 |---|---:|---|
 | Evaluate boundaries | 975 retained | Verified existing `d753d0997`: NaN scan outcome, normalized Step segment threshold, duplicate/tiny segment selection (span <=1e-10), and last-key tangent for post-linear extrapolation. Exact case/query/loop names and both values are frozen by `curve_retained_differences()`; 68 grouped observations expand only to explicitly listed loop keys. |
-| Equal-position insertion ordering | **8 retained** | For duplicateStart, FNA Add gives values [10,0,20], CNA [0,10,20]. For allEqual, FNA reverses the two keys, including their value/in/out fields; CNA preserves insertion order. Local [Curve inspection notes](../tools/fna-reference/xna-curve/README.md), Add `IL_0020`–`IL_005a`, advances past equal keys: CNA agrees. The original direct-Add dumps remain in the lane report. |
+| Equal-position insertion ordering | **8 retained** | For duplicateStart, FNA Add gives values [10,0,20], CNA [0,10,20]. For allEqual, FNA reverses the two keys, including their value/in/out fields; CNA preserves insertion order. Local [Curve inspection notes](../tools/fna-reference/xna-curve/README.md), Add `IL_0020`–`IL_005a`, advances past equal keys: CNA agrees. |
 | Tiny-span Smooth outgoing tangent | **12 retained** | Keys at positions [0,1e-11], values [7,9], initially zero tangents. FNA gives first outgoing tangent 0, CNA 2 through the affected bulk/single-key forms. Shipped Curve.ComputeTangent `IL_010e`–`IL_011f` checks the value delta against 2^-23; `IL_012d`–`IL_013e` calculates 2 for this input. Delegating overloads share that calculation. CNA agrees for these selected fields; no production change is needed. |
 
 No Curve production source was changed. Eight new native regressions provide independent literal
@@ -676,24 +560,13 @@ normal-span tangents through every overload, index-refusal state preservation, a
 IL-settled contracts above. Shape/omission controls cover every loop/tangent entry;
 mutation/disappearance controls protect all retained observations.
 
-Across nine edge categories, the raw comparison reports **1,802 retained diagnostics and zero
-undecided** (807 earlier + 975 existing Curve evaluation decisions + 20 shipped-IL decisions).
-The default audit passes only with that exact inventory and a remainder equal at tolerance zero.
-The temporary undecided map and inventory-only bypass have been removed. The [local inspection notes](../tools/fna-reference/xna-curve/README.md) record
-`Microsoft.Xna.Framework.dll`, version `4.0.0.0`, public key token `842cf8be1de50553`,
-SHA-256 `38e7093f52d7474bbc6256906519781a1210d7da50a1c667b52716fcf49ca130`,
-method offsets and the command to regenerate disassembly from a maintainer's own copy.
-Microsoft disassembly stays outside the repository and is not required by the audit or tests; the mixed-mode original assembly could not initialize under
-Mono, so this is not a successful original-XNA runtime measurement. The selected tangent result
-does not establish general equality of CNA and XNA tangent implementations.
+The [local inspection notes](../tools/fna-reference/xna-curve/README.md) record the same
+`Microsoft.Xna.Framework.dll` identity as follow-up 4, the method offsets and the command to
+regenerate disassembly from a maintainer's own copy. Microsoft disassembly stays outside the
+repository and is not required by the audit or tests; as above, this is not a successful
+original-XNA runtime measurement. The selected tangent result does not establish general equality
+of CNA and XNA tangent implementations.
 
-Verification on 2026-11-02: reference recipe **12/12** categories reproduce at zero tolerance;
-two aligned-fixture FNA dumps are byte-identical, with unchanged pinned source/assembly identity
-and no native SDL3/FNA3D loaded. cna_reference_dump and CnaMathTests build. CnaMathTests
-**1,031 passed, zero failed, two existing ShipGame fixture skips**, including all eight new Curve
-tests. Real-dump tests **30 passed**; recipe tests **5 passed**. The earlier selected CPU half/packing
-run remains **154 passed**. No GPU/window/native-Windows execution is claimed.
-
-All requested bounded families have been attempted and all observed differences are decided. The comparisons do not establish exhaustive
+Every observed difference in these bounded families is decided. The comparisons do not establish exhaustive
 Curve precision, Clone/collection reference semantics, arbitrary invalid enums, unbounded cycle
 conversion, hashes/text or the complete XNA API's behavior.

@@ -12,8 +12,8 @@ Playing cue in both same-bank and clone cases; both cues really dispatch waves.
 Victim may be Stopping16 at200ms but is Stopped32 at400ms. No exact fade latency.
 Interactive EOF retains Playing8/count1, separately from wave destruction.
 
-Ordered complete sequences contain4 waves per cue for raw3; the existing HND02
-native4/CNA3 gap remains open. These CNA tests qualify prefixes and ownership,
-not full cardinality, hidden timing, native PCM/gain or multiple-victim ordering.
+Ordered complete sequences contain4 waves per cue for raw3, the n+1 rule CNA
+implements since HND-XACT-05 (docs/xact-looping.md). These CNA tests qualify prefixes
+and ownership, not hidden timing, native PCM/gain or multiple-victim ordering.
 Clone buffer comparison differs only for ordered (both architectures); the fresh
 backing-buffer repair succeeds without altering authored bytes or expectations.

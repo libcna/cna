@@ -2,9 +2,7 @@
 
 This is the subsystem register of what CNA's GamerServices, Net, Guide and Avatar implementation
 does **not** do, does only in part, does differently from XNA on Xbox 360 by design, or has not been
-able to verify. Source review was refreshed on 2026-11-01; the dated software baselines below
-state what was executed. GSH-01..GSH-22 is the historical hardening campaign, not a proof of every
-current claim. Current defects also belong in [KNOWN_ISSUES.md](../KNOWN_ISSUES.md).
+able to verify. Current defects also belong in [KNOWN_ISSUES.md](../KNOWN_ISSUES.md).
 When code changes one of these entries, change it here in the same commit.
 
 CNA provides a **CNA-owned, XNA/Xbox-like** GamerServices implementation: CNA's own protocol,
@@ -18,9 +16,7 @@ deployment), [`avatars.md`](avatars.md) (the avatar system),
 [`link-size-architecture.md`](link-size-architecture.md) (which parts a program links: the Guide's
 license and dialogs without the system Guide, which `GamerServicesDispatcher.Initialize` installs,
 and the avatar catalog only with avatars). This page records known subsystem refusals and
-limitations, not an exhaustive proof that no others exist; the GS-011 snapshot and plans -- the server (GS-*),
-avatar-polish (GSP-*), Xbox-fidelity (GSX-*) and final-hardening (GSH-*) passes -- are in Git
-history only.
+limitations, not an exhaustive proof that no others exist.
 
 **Categories** (the summary's third column): *intentional* (CNA will not do it, or does it its own
 way, for the reason given) · *compatibility gap* (XNA-observable behaviour CNA lacks) · *platform
@@ -32,24 +28,15 @@ entry below also keeps its own status line.
 
 ## Automated HEADLESS baselines
 
-On 2026-11-01, the current `cmake-build-multi` targets built and ran through the private GPU
-runner with `CNA_GRAPHICS_RENDERER=HEADLESS` and `SDL_AUDIODRIVER=dummy`:
-`CnaGamerServicesTests` ran 744 cases, 743 passed and
-`AvatarRendererTest.AFailedGpuUploadFailsEveryDrawCleanlyRatherThanHalfBuilding` skipped because
-the selected renderer accepts the vertex-buffer probe rather than refusing it. All 565
-`CnaNetTests` cases passed. The canonical
-six-file parser/header/golden drift check matched the companion server source. These are software
-and source-contract results, not a newly built/deployed companion server or a physical device run.
-
-The earlier 2026-10-31 record remains historical:
-
-The focused module targets built successfully with at most eight parallel compile jobs.
-`CnaGamerServicesTests` ran 744 tests: 742 passed and two environment-dependent cases skipped on
-the HEADLESS platform. `CnaNetTests` passed all 565 tests, including local ENet loopback,
-host-migration and simulated-network-condition coverage. No test failed. This baseline does not
-qualify a physical display, GPU, controller, microphone, speaker, LAN/WAN/NAT deployment, Windows
-or macOS. Those cases remain explicitly **not executed** in
-[`gamer-services-manual-qualification.md`](gamer-services-manual-qualification.md).
+`CnaGamerServicesTests` and `CnaNetTests` (local ENet loopback, host migration and simulated
+network conditions) run through the private GPU runner with `CNA_GRAPHICS_RENDERER=HEADLESS` and
+`SDL_AUDIODRIVER=dummy`. On HEADLESS
+`AvatarRendererTest.AFailedGpuUploadFailsEveryDrawCleanlyRatherThanHalfBuilding` skips, because
+that renderer accepts the vertex-buffer probe rather than refusing it. A six-file
+parser/header/golden drift check compares the client with the companion server source. These are
+software and source-contract results; they do not qualify a deployed server, a physical display,
+GPU, controller, microphone, speaker, LAN/WAN/NAT deployment, Windows or macOS. Those cases remain
+**not executed** in [`gamer-services-manual-qualification.md`](gamer-services-manual-qualification.md).
 
 ## Not limitations: implemented and tested
 
@@ -57,8 +44,8 @@ SystemLink join-in-progress transmits the host's current state in the welcome
 message. Native `Join` returns `Playing` before the caller subscribes; as in XNA,
 subscribing to `GameStarted` while Playing immediately notifies that handler once.
 The optional wire extension retains the old Lobby message layout. Correct state
-on a late join requires both host and client to include the 2026-10-22 welcome-state
-repair; older hosts do not send state and older clients ignore the extension.
+on a late join requires both host and client to carry the welcome-state extension;
+older hosts do not send state and older clients ignore the extension.
 
 Listed so that nobody reads an older document as saying they are missing. Achievements (service
 and offline catalogs), leaderboards (LocalWithLeaderboards, PlayerMatch, Ranked, Stream columns),
@@ -71,7 +58,7 @@ NetworkSession voice, SystemLink QoS including upstream bandwidth, trial mode an
 title-version gating, the console-style Guide with its sign-in picker, gamer cards and avatar
 editor, the Guide owning input while visible, the standard `AvatarRenderer`/`AvatarAnimation`/
 `AvatarDescription` with XNA's 71-bone skeleton and `AvatarDescription.Changed`, locally installed
-avatar catalogs and versioned catalog-pack updates. Since the final hardening pass (2026-09-30):
+avatar catalogs and versioned catalog-pack updates; also
 eligible service mutations with durable same-ID outcomes/replay, `NetworkGamer.IsGuest` of
 remote SystemLink guests, `GamerPrivileges` from account policy with blocking, `FriendGamer.HasVoice`,
 a single-owner database lock on every server host, refresh credentials in the desktop keyring (Linux)
@@ -98,8 +85,8 @@ are not replayable results. It is not a universal exactly-once transport guarant
 | 13 | Invitation lifetime and identity | CNA backend-policy difference | None | n/a |
 | 14 | Voice routing: one microphone per machine, process-local mutes | CNA backend-policy difference | Minor | Yes (per-gamer devices) |
 | 15 | Guide look, sounds, input ownership | Intentional | None | n/a |
-| 16 | Online guests refused | Compatibility gap | Specialized titles only | Needs a service guest identity |
-| 17 | QoS of online search results | Compatibility gap | Minor | Yes, with a relay probe |
+| 16 | Online guests through negotiated service authority (`online-guests-v1`); legacy services refuse them | CNA backend-policy difference | None with a current service | Native Xbox guest policy only with console traces |
+| 17 | Pre-join QoS of online search results through relay probes (`qos-prejoin-v1`) | CNA backend-policy difference | None with a current service; unavailable otherwise | n/a |
 | 18 | `FriendGamer.HasVoice`: CNA's definition of "voice capability" | Historically unknown Xbox behaviour | None | n/a |
 | 19 | Push scope | Intentional | None | Yes (more topics) |
 | 20 | Privileges and privacy: operator policy, not console parental controls | CNA backend-policy difference | Minor | Self-service settings |
@@ -282,7 +269,7 @@ claim about how Xbox LIVE decided.
 - **Porting impact:** none.
 - **Future work:** none needed.
 
-Same-machine host-identity replacement is separate from machine migration. **CNA policy (owner 2026-11-08):** in Local and SystemLink, if the local host leaves while another local remains on its authority machine, that machine stays host and its first surviving local in join order becomes Host at the next Update. AllowHostMigration does not gate this substitution. GamerLeft precedes HostChanged, with the departed host as OldHost; the transport communicates the replacement to existing peers and names it in later welcomes. If no local survives, the established end and machine-migration paths are unchanged. XNA's managed ProcessGamerLeft/ProcessHostChanged routines do not establish this native selection policy. PlayerMatch/Ranked continue to use the service's authority and election rules. Mixed-version SystemLink peers must both include HND-NET-01 to observe same-machine replacements: additive control tag 0x05 now carries old/new host IDs and tag 0x0e carries an individual leave request; old packet layouts are unchanged, but older clients ignore the new replacement control.
+Same-machine host-identity replacement is separate from machine migration. **CNA policy (owner decision):** in Local and SystemLink, if the local host leaves while another local remains on its authority machine, that machine stays host and its first surviving local in join order becomes Host at the next Update. AllowHostMigration does not gate this substitution. GamerLeft precedes HostChanged, with the departed host as OldHost; the transport communicates the replacement to existing peers and names it in later welcomes. If no local survives, the established end and machine-migration paths are unchanged. XNA's managed ProcessGamerLeft/ProcessHostChanged routines do not establish this native selection policy. PlayerMatch/Ranked continue to use the service's authority and election rules. Mixed-version SystemLink peers must both include HND-NET-01 to observe same-machine replacements: additive control tag 0x05 now carries old/new host IDs and tag 0x0e carries an individual leave request; old packet layouts are unchanged, but older clients ignore the new replacement control.
 
 ### 10. Ranked arbitration
 
@@ -422,7 +409,7 @@ Same-machine host-identity replacement is separate from machine migration. **CNA
 
 ### 17. `QualityOfService` of online search results
 
-- **Status:** implemented (additive CNQ v1, GAP-17, 2026-11-06).
+- **Status:** implemented (additive CNQ v1, GAP-17).
 - **XNA / Xbox:** `AvailableNetworkSession.QualityOfService`: round trip (average and minimum),
   estimated bandwidth up and down, `IsAvailable`. XNA's documentation expects it for matchmaking
   results too: they are "returned before the quality of service probing has finished", and
@@ -445,8 +432,7 @@ Same-machine host-identity replacement is separate from machine migration. **CNA
   or canceled probes stay unavailable with zero values. At most 32 jobs are retained
   per backend/collection, with four process-wide workers (therefore at most four
   per backend), 5s per job and 30s from receipt; the actual probe phase is 3s.
-- **Measurement boundary:** this replaces GSH-05's missing pre-join path. A ping
-  to the control service alone is never QoS. Measurements include both relay/host
+- **Measurement boundary:** a ping to the control service alone is never QoS. Measurements include both relay/host
   legs on a separate connection; they do not reproduce gameplay WSS head-of-line
   queues or promise saturated/public-Internet throughput. The rates count 1200-byte
   CNQ application frames, excluding TLS/TCP/IP overhead; missing sequence slots
@@ -459,11 +445,10 @@ Same-machine host-identity replacement is separate from machine migration. **CNA
   RTT and byte-rate behavior is unchanged.
 - **Qualification:** deterministic client and service fixtures cover four-leg
   timing, loss/rates, immutable snapshots, expiry/cancel and authority isolation.
-  On 2026-11-06 the paired real-process E2E passed against the real service
-  (`service_cna_qos`, and `service_cna_qos_nohost`, where a host without a responder
-  stays unavailable and the ordinary join still works). The NAT variant needs
-  slirp4netns, which the qualification host lacks (exit 77). No public Internet
-  qualification is claimed.
+  The paired real-process E2E tests run against the real service (`service_cna_qos`,
+  and `service_cna_qos_nohost`, where a host without a responder stays unavailable and
+  the ordinary join still works). The NAT variant needs slirp4netns and exits 77
+  without it. No public Internet qualification is claimed.
 
 ### 18. `FriendGamer.HasVoice`
 
@@ -638,8 +623,7 @@ Same-machine host-identity replacement is separate from machine migration. **CNA
 
 ### 26. Browser (WebAssembly) multiplayer and services
 
-- **Status:** platform limitation, out of scope by the owner's decision (2026-09-28, confirmed in
-  the Xbox-fidelity pass, GSX-E7).
+- **Status:** platform limitation, out of scope by the owner's decision.
 - **XNA / Xbox:** no browser target.
 - **CNA now:** browser builds render and run games; without a service they use local profiles.
   A configured service is refused (`BROWSER_SERVICE_TRANSPORT_UNAVAILABLE`), so accounts,
@@ -680,11 +664,10 @@ Same-machine host-identity replacement is separate from machine migration. **CNA
 
 - **Status:** not independently validated.
 - **CNA now:** the online client paths (HTTPS, relay, event channel, credential store) and the
-  server were tested on Linux. On 2026-09-30 the server's single-owner database lock and the Windows
-  credential store (DPAPI) were built with MinGW and passed their tests under Wine 10
+  server were tested on Linux. The server's single-owner database lock and the Windows credential
+  store (DPAPI) were built with MinGW and passed their tests under Wine
   (`tests/DatabaseLockTests.cpp`, `tools/gamer-services/windows-credential-probe`); Wine is not
-  Windows. Nothing ran on Windows itself or on macOS: the Windows 10 VM this project used is gone
-  and no macOS host exists. CNA builds for Windows, but its GamerServices online paths, TLS, Guide
+  Windows. Nothing has run on Windows itself or on macOS. CNA builds for Windows, but its GamerServices online paths, TLS, Guide
   input, SystemLink, voice and `AvatarRenderer` were not exercised there; Windows and macOS server
   builds are unvalidated (the server has not been built on either). The Android NDK has no libcurl,
   so an Android build links none unless one is found for the target. Without it, it refuses a configured
@@ -707,16 +690,14 @@ been run.
 
 - **Status:** not independently validated end to end (hardware-unverified).
 - **CNA now:** voice is tested in software (codec, routing, relaying, concealment, muting,
-  `EnableSendVoice`, two processes, SystemLink and online). On 2026-09-30 the real devices of the
-  test machine (PipeWire; built-in microphone and speaker) were used with
-  `tools/net/voice_physical_check.sh`:
+  `EnableSendVoice`, two processes, SystemLink and online). The real devices of a test machine
+  (PipeWire; built-in microphone and speaker) were used with `tools/net/voice_physical_check.sh`:
   - **capture:** the real microphone -> speech detection -> Opus -> SystemLink -> the other process's
     decoder: the room's sound was detected as talking and arrived decoded;
   - **playback:** a synthetic voice -> SystemLink -> Opus decode -> `DynamicSoundEffectInstance` ->
     the real output device: the tone arrives intact at the device's input (0.999 of its power in
     the tone's band).
-  The loop through the air could not be closed: the machine's speaker was muted by its owner and
-  was not unmuted. So what a person hears -- quality, latency, echo -- and the content of what the
+  The loop through the air was not closed (the speaker stayed muted), so what a person hears -- quality, latency, echo -- and the content of what the
   microphone hears were not measured. Mute, `EnableSendVoice` and reconnection are device-independent
   logic, tested in software only. Voice playback advances in `FrameworkDispatcher.Update`, which a
   `Game` calls every frame and which XNA requires of a program without one.
@@ -727,9 +708,9 @@ been run.
 ### 30. Guide system sounds
 
 - **Status:** not independently validated (hardware-unverified).
-- **CNA now:** the Guide's synthesized sounds play through `SoundEffect`; on 2026-09-30 all six reached
-  the machine's real output device (`tools/net/voice_physical_check.sh`), but its speaker was muted by
-  its owner, so nobody heard them. `CNA_GAMER_SERVICES_SOUNDS=0` turns them off.
+- **CNA now:** the Guide's synthesized sounds play through `SoundEffect`; all six reached a
+  machine's real output device (`tools/net/voice_physical_check.sh`) with its speaker muted, so
+  nobody heard them. `CNA_GAMER_SERVICES_SOUNDS=0` turns them off.
 - **Observable impact:** none on function; how they sound is unverified.
 - **Porting impact:** none.
 - **Future work:** listen once on a machine with speakers.
@@ -743,8 +724,8 @@ been run.
   host migration and a killed host; the server README has a public deployment checklist. No
   deployment between two genuinely remote networks has been qualified: public Internet latency,
   loss and failover are unmeasured. The service is unqualified there, not unsupported.
-- **Reason:** no second, genuinely remote network was available (re-checked 2026-09-30: still none;
-  the qualification stays pending, not simulated).
+- **Reason:** no second, genuinely remote network was available; the qualification stays pending,
+  not simulated.
 - **Observable impact:** none in the tests; production latency and failure behaviour are unknown.
 - **Porting impact:** none for porting; relevant to whoever operates a public service.
 - **Future work:** a two-network qualification following the README's deployment checklist.
@@ -764,29 +745,18 @@ been run.
 ### 33. `AvatarRenderer` on other renderers
 
 - **Status:** not independently validated.
-- **CNA now:** at catalog v3 revision 4, on 2026-10-24 at `ba707082e`
-  (Avatar acceptance AVA-01, Git history), the full avatar review (982 frames: views, hands, feet,
-  every face control at both ends, every hairstyle from the front and from behind, every garment,
-  headwear, facial-hair style, ear shape, accessory and makeup style, portraits, face presets,
-  builds, key frames of every animation, every expression) rendered on OpenGL 3.3, OpenGL ES 3,
-  SOFTWARE, SDLGPU (Vulkan), WebGPU and FNA3D (its SDLGPU Vulkan driver) from one multi-renderer
-  build through the private GPU runner, each confirmed by its log, all frames rendered. Against
-  OpenGL 3.3 (`avatar_review.py compare`) the worst mean absolute pixel difference is 0.09/255
-  (WebGPU) and the worst silhouette overlap 0.9992 (SOFTWARE); OpenGL ES 3 is identical. At catalog
-  v3 revision 5, on 2026-10-25 at `ac20344ef` (Avatar acceptance AVH-08, Git history), the
-  Avatar v3 acceptance command (`tools/avatar_builder/avatar_acceptance.py --all-renderers --service
-  ...`, `avatars.md`), which builds the binaries it runs from the commit it names, passed on all
-  eight renderers compiled in, in the main tree and in a freshly configured checkout: the 233
-  avatar tests it names on each (one skip by design, three on STUB) and the 36-view checked-in
-  visual regression (`GamerServices_AvatarVisualRegression`) on the six that draw, against goldens
-  captured on SOFTWARE (it also passed on Mesa llvmpipe at revision 4).
-  Through Windows translation layers, not native drivers, and not repeated for revision 5:
-  revision 4's 258-frame review rendered on DIRECTX9 (Wine with DXVK) and on SDLGPU's Direct3D 12
-  backend (Wine with vkd3d-proton) from the MinGW build on 2026-10-16, and the Windows build's
-  gamer-services suite passed under Wine at revision 2 on 2026-10-15. The XNA AvatarShadows sample ran on OpenGL ES 3
-  (Mesa software) on 2026-09-30, not re-run since. HEADLESS runs the API tests. Pending external
-  qualification, not simulated here: SDLGPU's Metal backend on macOS, and DIRECTX9, FNA3D and
-  SDLGPU's Direct3D 12 backend on native Windows drivers.
+- **CNA now:** the Avatar v3 acceptance command (`tools/avatar_builder/avatar_acceptance.py
+  --all-renderers --service ...`, `avatars.md`) builds the binaries it runs from the commit it names
+  and runs, on every renderer compiled in, the avatar tests it names (one skip by design, three on
+  STUB) and, on the six that draw (OpenGL 3.3, OpenGL ES 3, SOFTWARE, SDLGPU on Vulkan, WebGPU and
+  FNA3D on its SDLGPU Vulkan driver), the 36-view checked-in visual regression
+  (`GamerServices_AvatarVisualRegression`) against goldens captured on SOFTWARE. The full avatar
+  review (`avatar_review.py compare` against OpenGL 3.3) found a worst mean absolute pixel
+  difference of 0.09/255 and a worst silhouette overlap of 0.9992. Through Windows translation
+  layers only, and at an earlier catalog revision, the review rendered on DIRECTX9 (Wine with DXVK)
+  and SDLGPU's Direct3D 12 backend (Wine with vkd3d-proton) from the MinGW build. HEADLESS runs the
+  API tests. Pending external qualification, not simulated here: SDLGPU's Metal backend on macOS,
+  and DIRECTX9, FNA3D and SDLGPU's Direct3D 12 backend on native Windows drivers.
 - **Reason:** Metal and native Windows drivers need another host.
 - **Observable impact:** unknown on those; none found on the ones measured.
 - **Porting impact:** none known.
@@ -1060,8 +1030,8 @@ cluster and flood limits (34-37), public Internet qualification (31), avatar sha
 (40, 41), host-language differences (43-46).
 
 **Only affects specialized titles or samples:** partner tokens (2), a real store (3), a
-service-computed skill (4), the historical Xbox Recent window (7), online guests (16),
-online QoS before joining (17), large Stream
+service-computed skill (4), the historical Xbox Recent window (7), online guests or pre-join QoS
+against a service without their capabilities (16, 17), large Stream
 columns (22), several local talkers on one PC (14), avatar catalog edge cases (42),
 competitive titles that must not trust their clients (39).
 
@@ -1069,15 +1039,13 @@ competitive titles that must not trust their clients (39).
 validation (28), physical audio (29, 30), avatars on unmeasured renderers (33), relay latency (25).
 
 **Could block faithful porting:** the answer depends on a title's requirements. Direct examples
-include browser multiplayer (26), authenticated online guests (16), pre-join online QoS (17),
-larger Stream columns (22), or a Microsoft service CNA does not reproduce (partner web services,
+include browser multiplayer (26), larger Stream columns (22), or a Microsoft service CNA does not reproduce (partner web services,
 the Xbox Marketplace or an assumed service-computed skill). No blocker was observed in the
 recorded verified sample corpus; this is not an exhaustive compatibility result for every title.
 
 **Samples.** GamerServices/Net/Avatar functionality is no longer a general blocker for ordinary
 XNA 4 sample ports. The currently verified corpus includes AvatarShadows (SAMPLE-087), Invites
 (SAMPLE-096), NetworkStateManagement over SystemLink and online PlayerMatch (SAMPLE-075), and the
-achievements/leaderboards compatibility program (a CNA-written program on the XNA API), last run on
-2026-09-30 after the final hardening pass (`/rv/tmp/samples/*/evidence/*-20260930-final-hardening`). This does not mean that every
+achievements/leaderboards compatibility program (a CNA-written program on the XNA API). This does not mean that every
 historical XNA sample has been individually ported and executed. Samples depending specifically on
 one of the limitations above may still require adaptation or may not be faithfully reproducible.

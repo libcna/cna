@@ -41,5 +41,5 @@ python3 tools/xna-oracle/check-xact-bank-lifetime-oracle.py <matrix.json>
 Eight altered-evidence controls are rejected. PROVENANCE.json records hashes and
 scope. Native execution uses Wine, private display and null audio. No managed,
 native-Windows, PCM/gain, weighted/interactive/streaming or exact prefetch-timing
-claim follows. CNA's current bank flags still retire too early; this reference task
-does not repair the runtime. See `docs/xact-instance-limits.md`.
+claim follows. CNA's runtime implements this boundary (TQ-XACT-32, the
+`XactBankLifetime.*` regressions). See `docs/xact-instance-limits.md`.

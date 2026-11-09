@@ -278,7 +278,7 @@ The usual way to obtain one is `cna_network_session_get_gamer` with the
 internal factory for the cases where a gamer is needed outside a session; the session handle may be
 `CNA_INVALID_HANDLE`, and such a gamer belongs to no roster.
 
-**CNA policy (owner 2026-11-08):** Local/SystemLink identities that sign out leave their session at its next Update. Every machine receives GamerLeft for that identity; surviving locals retain their IDs and participation. With no local left, that machine's session raises SessionEnded(ClientSignedOut) using the existing end path; it is not automatically freed, and the application retains its existing Dispose/handle-release obligation. Host-identity departure with surviving locals uses join-order succession on the same machine. Its synthesized HostChanged reports the actual departed old host; independent explicit transport host-change results keep the existing XNA-derived null OldHost behavior after a leave. A disposed pending AddLocalGamer is refused at completion: C++ Update throws System.ObjectDisposedException with ObjectName "gamer"; cna_network_session_update returns CNA_RESULT_INVALID_STATE through the existing exception barrier. The gamer never joins, while the other results and notifications of that update complete. Releasing a C input handle remains different from signing out: the session retains an accepted signed-in input's native lifetime. No C symbol, public C enum value or C ABI layout was added. The existing Update, AddLocalGamer, remove_gamer_ext and host-changed route comments are updated; regenerate only inventory summary metadata after integration, using the check results in REPORT.md.
+**CNA policy (owner decision):** Local/SystemLink identities that sign out leave their session at its next Update. Every machine receives GamerLeft for that identity; surviving locals retain their IDs and participation. With no local left, that machine's session raises SessionEnded(ClientSignedOut) using the existing end path; it is not automatically freed, and the application retains its existing Dispose/handle-release obligation. Host-identity departure with surviving locals uses join-order succession on the same machine. Its synthesized HostChanged reports the actual departed old host; independent explicit transport host-change results keep the existing XNA-derived null OldHost behavior after a leave. A disposed pending AddLocalGamer is refused at completion: C++ Update throws System.ObjectDisposedException with ObjectName "gamer"; cna_network_session_update returns CNA_RESULT_INVALID_STATE through the existing exception barrier. The gamer never joins, while the other results and notifications of that update complete. Releasing a C input handle remains different from signing out: the session retains an accepted signed-in input's native lifetime. The policy adds no C symbol, public C enum value or C ABI layout.
 
 ### Receiving
 
@@ -367,6 +367,6 @@ CNA_RESULT_INVALID_HANDLE, matching the native non-null requirement. Assign a ne
 machine to detach from an old identity. Assignment itself does not edit either roster. The
 existing `copy_machine` / `set_machine` routes continue to copy values.
 
-Guest/private-slot flags remain managed by the transport/session. Robert Vokac approved no-C-form
-dispositions for their native mutators on 2026-11-03; C callers use the existing getters.
-See [CLOSURE_060.md](CLOSURE_060.md) for exact rows and execution evidence.
+Guest/private-slot flags remain managed by the transport/session. Their native mutators have an
+owner-approved no-C-form disposition; C callers use the existing getters.
+See [CLOSURE_060.md](CLOSURE_060.md) for the exact rows.

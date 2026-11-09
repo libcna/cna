@@ -1,9 +1,8 @@
 # XACT pause clock
 
 CNA excludes paused time from cue scheduling. This matches measured Microsoft
-retail XACT 3.6 marker dispatch, rather than pinned FAudio's pause/resume accounting.
-The runtime algorithm is unchanged by TQ-XACT-24; the task establishes its reference
-and adds regressions using the same untouched SDK banks.
+retail XACT 3.6 marker dispatch, rather than pinned FAudio's pause/resume accounting
+(TQ-XACT-24, whose regressions use the same untouched SDK banks).
 
 ## Reference selection
 
@@ -53,12 +52,10 @@ controls showed the same first-pause shift, but do not establish the Refresh
 runtime selection; the 3.6 matrix is the reference for this decision.
 
 Pinned FAudio `6839b88e304a046ae1a609ff14a085371e02a4e0` differs. Its unmodified
-FACTCue_Pause previously measured start 1000/elapsed 500 after pause 1500 and
-start 1000/elapsed 2000 after resume 2500. Evaluating its UpdateSound expression at
-2600 gives 3600, while active elapsed excluding pause is 600. That earlier injected
-clock/minimal-record evidence remains valid within its scope; it is not replaced
-by an invented FAudio playback observation. CNA retains the measured Microsoft
-pause exclusion and boolean semantics.
+FACTCue_Pause measured start 1000/elapsed 500 after pause 1500 and start 1000/elapsed
+2000 after resume 2500 (injected clock, minimal records). Evaluating its UpdateSound
+expression at 2600 gives 3600, while active elapsed excluding pause is 600. CNA keeps
+the measured Microsoft pause exclusion and boolean semantics.
 
 ## CNA regressions and limits
 
@@ -80,5 +77,4 @@ Refresh wrapper relationship is static IL evidence; x64 is an additional native
 control, not a claim that the retained x86 XNA assembly ran as x64. No native
 Windows timing or sample-accurate output is claimed. All SDK binaries and headers
 remain external. The own probe is
-[`XactPauseClockProbe.cpp`](../tools/xna-oracle/XactPauseClockProbe.cpp); complete
-campaign evidence is under `../cnaplan/evidence/rev002/xact-pause-clock/`.
+[`XactPauseClockProbe.cpp`](../tools/xna-oracle/XactPauseClockProbe.cpp).

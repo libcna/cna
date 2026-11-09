@@ -14,11 +14,6 @@ Where two Microsoft XNA 4.0 builds disagree, **XNA Game Studio 4.0 Refresh (4.0.
 here quotes, not the original 4.0 (4.0.20823) installed in the Wine prefix that the executable oracles run. A
 measurement on 4.0.20823 that the Refresh IL contradicts is recorded as a note, not as the contract.
 
-The first binding-led campaign was collected in 2026-09 from ten consumer repositories. Those
-historical consumer findings do not establish any external binding's current release status.
-The approved planning boundary here is CNA's native C API/C ABI; language-specific binding work
-requires separate owner authorization. See [`binding.md`](binding.md).
-
 Rows record accepted implementation decisions within their evidence's scope. A regression name
 or commit does not prove every platform/input is covered or that its test ran in a particular
 configuration. FNA comparisons in this review use local revision
@@ -343,17 +338,15 @@ guides and their dated results.
 | XACT ordered variation successor preparation | Refresh-selected native Microsoft3.6 prepares one successor near Play before the current wave stops, in the measured ordered type3/NEW_ON_LOOP/no-effect resident and streaming shapes. Prepare retains only the first A bank. A missing B successor does not refuse Play; it cancels further waves and is not retried when B loads100ms later, before EOF. B loaded after Prepare but before Play is usable. Prefetched resolved bank ownership survives cue destruction until SoundBank destruction. | HND-XACT-02:88 checked x86/x64 prefetch cells with unchanged TQ-XACT-31/resident positive controls, [own corpus/provenance](../modules/audio/tests/CNA/Internal/Audio/variation-prefetch/README.md), archive `cnaplan/evidence/rev002/hnd-xact-02-prefetch/`. Probe SHA2568d31126cd31752457871daa174ee4463fa950150ed7bc030068dc632e2270613; exact DLL/EXE/fixture/raw identities in provenance/matrix. Native callbacks observe PREPARED/PLAY/STOP/DESTROY; streaming callbacks forward real reads/completions. CNA uses one existing preparation slot for this shape, consumes it on promotion, cancels its remaining schedule only on missing-bank prefetch, creates no extra playing voice, and preserves existing source-derived random/effect paths. Five offline timing/ownership/prefix regressions plus ordinary resident control, causal red/fixed and mutation witnesses. Native SDK raw3 yields4 actual waves whereas CNA's prior FAudio-derived budget yields3: full cardinality parity remains open pending discriminating count/flags controls; the native checker retains4 and CNA tests explicitly qualify prefixes. No exact hidden instant/lookahead-delay mapping, RNG, managed/native-Windows, native PCM/gain, overlap or generic finite-count claim. |
 | XACT finite play-wave loop cardinality | Refresh-selected native Microsoft3.6 x86/x64 play a PlayWave or PlayWaveTrackVariation with raw loop byte n (0..4) n+1 times, and XACT_TRACK_PROPERTIES report loopCount n and duration (n+1) wave lengths. With track NEW_ON_LOOP each pass is a separate complete wave (n+1 PREPARED/PLAY/STOP/DESTROY, next ordered candidate each); without it one wave of the first candidate is held for all n+1 passes. The flags byte (0x0c versus0) changes nothing. FAudio plays max(n,1) complete waves for every finite n and reselects regardless of NEW_ON_LOOP. | HND-XACT-05: 56 checked x86/x64 cells (retained TQ-XACT-31 and one-wave resident controls, HND-XACT-02 samebank rerun, raw0..4 for four one-field variants, base sweep twice); [own corpus/oracle/provenance](../modules/audio/tests/CNA/Internal/Audio/finite-cardinality/README.md), archive `cnaplan/evidence/rev002/hnd-xact/`, checker `check-xact-finite-cardinality-oracle.py`. Probe `XactFiniteLoopCardinalityProbe.cpp`; exact DLL/EXE/bank hashes in provenance. Refresh Cue.Play IL_0006 forwards to UnsafeNativeMethods/Cue::Play, whose IL_0032-0036 calls native IXACT3Cue::Play; managed code holds no loop count. Cue.cpp applies the rule to event types1/3; the unmeasured effect families4/6 keep the FAudio budget and 255 keeps the owner policy. Measured-bank replays in both mixers, HND-XACT-02 four-wave regression, retargeted synthetic finite-loop/codec/variation tests, mutation witnesses. No loop-region, effect-family, random-variation, raw>4, streaming or native PCM claim. |
 | SpriteBatch native storage at device teardown | Refresh leaves SpriteBatch untracked (`.ctor` IL_0021/0039–003b), while its Effect and dynamic buffers are tracked and released by `ReleaseAllDeviceResources` IL_009e–00a7. Deferred `Begin` IL_0081–00b5 and `InternalDraw` IL_01e9–0232 still queue managed state after device disposal; Immediate `Begin` IL_0065–0066 and deferred `End` IL_001c–001d call `SetRenderState`, whose viewport read IL_00b8–00be checks the device (`get_Viewport` IL_0000–0012). `Helpers.CheckDisposed` IL_000d–001d throws `ObjectDisposedException`. An empty open Immediate pair can End (IL_0024–0033/0047–0062). FNA clears its Begin flag before a deferred flush; XNA preserves it when state application fails. | HND-REVIEW2-S1 extends the existing untracked shared identity binding with a private native-only teardown hook under the renderer context. Every live SpriteBatch releases its renderer object and queued native texture leases before renderer destruction, retaining IsDisposed/Disposing and pair state. `GraphicsResourceSpriteBatchEventTest` covers native release, both batch disposal/destruction orders, queued texture release, disposed-device Begin/Draw/End, and dead C++ parent guards. SOFTWARE ASan mutation removes the teardown call and exercises an owner-dependent renderer destructor; GPU/Wine qualification is recorded separately in the lane report. |
-| XACT sole foreign category victim and cross-bank resource selection | Refresh-selected native Microsoft3.6 cap1/REPLACE_OLDEST retires the sole eligible older Playing cue across cloned SoundBank objects, as in its same-bank control. Duplicate A names resolve the first registered bank; resident/ordered/interactive cloned banks resolve the same wave identities and independently retain their owners until both sound banks are destroyed. | HND-XACT-03:22 checked x86/x64 cells, unchanged ordinary resident controls, actual wave lifecycle notifications and retained bank-state snapshots; [own corpus/provenance](../modules/audio/tests/CNA/Internal/Audio/cross-bank/README.md), archive `cnaplan/evidence/rev002/hnd-xact-03-cross-bank/`. Probe SHA256a66079bf844a7237330d89e457c38a849fa00598122b48bc454ec10110664cf0; exact EXE/DLL/input hashes in provenance. CNA preserves local search, adding only a unique foreign Playing/nonfading OLDEST fallback; other modes/multiple victims/prepared-foreign ordering remain source fallback pending measurement. Three native-fixture regressions plus strengthened existing sole-victim fade/gain assertions; no assertions removed or relaxed. Native x64 victim16 at200ms versus x86 32, both32 at400ms: settled retirement only, no new native fade/PCM/gain/clock promise. HND02 native4/CNA3 cardinality and hidden timing gaps remain open. Fresh backing buffers fix native ordered clone INVALIDDATA; no fixture/expectation changes. |
+| XACT sole foreign category victim and cross-bank resource selection | Refresh-selected native Microsoft3.6 cap1/REPLACE_OLDEST retires the sole eligible older Playing cue across cloned SoundBank objects, as in its same-bank control. Duplicate A names resolve the first registered bank; resident/ordered/interactive cloned banks resolve the same wave identities and independently retain their owners until both sound banks are destroyed. | HND-XACT-03:22 checked x86/x64 cells, unchanged ordinary resident controls, actual wave lifecycle notifications and retained bank-state snapshots; [own corpus/provenance](../modules/audio/tests/CNA/Internal/Audio/cross-bank/README.md), archive `cnaplan/evidence/rev002/hnd-xact-03-cross-bank/`. Probe SHA256a66079bf844a7237330d89e457c38a849fa00598122b48bc454ec10110664cf0; exact EXE/DLL/input hashes in provenance. CNA preserves local search, adding only a unique foreign Playing/nonfading OLDEST fallback; other modes/multiple victims/prepared-foreign ordering remain source fallback pending measurement. Three native-fixture regressions plus strengthened existing sole-victim fade/gain assertions; no assertions removed or relaxed. Native x64 victim16 at200ms versus x86 32, both32 at400ms: settled retirement only, no new native fade/PCM/gain/clock promise. The HND02 native4/CNA3 cardinality is settled by HND-XACT-05 (n+1 passes); hidden timing gaps remain open. Fresh backing buffers fix native ordered clone INVALIDDATA; no fixture/expectation changes. |
 
 
 
 ## MTH-CONF-004 lifecycle inspection
 
-Integrated in `3671c7ee0`. [Retained evidence, reproduction commands and platform scope](execution-evidence.md#compatibility-campaign-captures-mth-conf-007)
-retain the HEADLESS run: 427 pass, zero fail, five capability skips; all 26 new cases pass.
-The table below maps **tested native behaviour** to its oracle; public declaration presence is
-only the [member inventory](xna-4-runtime-member-coverage.md). Broader private execution totals
-are distinguished from reconciled raw captures in the linked execution map.
+Integrated in `3671c7ee0` and qualified on HEADLESS. The table below maps **tested native
+behaviour** to its oracle; public declaration presence is only the
+[member inventory](xna-4-runtime-member-coverage.md).
 
 The following bounded decisions use the original Windows XNA 4.0 assemblies, version
 `4.0.0.0`, inspected with `ikdasm`. They are IL observations, not successful executions of
@@ -381,41 +374,22 @@ are not distributed here.
 | Instance streams and the draw routes | `SetVertexBuffers` IL_0150–IL_0172 sets bit *i* of `instanceStreamMask` for a binding with a non-zero `InstanceFrequency`. `DrawPrimitives` IL_0055–IL_0067 and `DrawIndexedPrimitives` IL_006c–IL_007e throw `InvalidOperationException` when that mask is non-zero; `DrawInstancedPrimitives` IL_00b0–IL_00da (throw IL_036f–IL_0374) requires at least one per-instance and at least one per-vertex stream. FNA performs none of these checks. CNA now applies all three after its shader/data checks (the CNAEXT base-instance route shares the instanced rule). This supersedes RRC-043's inference that XNA draws `instanceCount` copies when no instance stream is bound: that path is never reached, because IL_00b0–IL_00da throws first. | `InstanceStreamDrawRuleTest.OrdinaryDrawsRefuseABoundPerInstanceStream`, `InstancedDrawsNeedBothAPerVertexAndAPerInstanceStream`; `InstancedDrawRangeTest.InstancedDrawWithoutInstanceStreamIsRefused` and `BaseInstanceWithoutInstanceStreamIsRefused` (formerly `…RepeatsTheDraw`) (TQ-021). |
 | `SetRenderTargets` slot validation | One loop (IL_00b1–IL_0145) validates each slot completely before the next: null target → `ArgumentException(message)` with no ParamName (IL_0147–IL_0151), disposed (IL_00d1–IL_00e3), foreign device (IL_0152–IL_015c), then for slots after the first a repeated texture (IL_015d–IL_0167) and `RenderTargetHelper::IsSameSize` (width, height, multisample count, pixel size; IL_0168–IL_0172). Device state is touched only from IL_0173. FNA has no per-slot checks. CNA reports the first defective slot's error (it previously checked null/disposed/device for every slot before any duplicate or size check) and no longer names `renderTargets`. | `RenderTargetBindingOrderTest.*` (five cases), `GraphicsDeviceValidationTest.SetRenderTargets_DefaultNullBindingThrows` (TQ-021). |
 
-SAFE-004 (`ade6f921e`) additionally confirmed **agreement**, not a new XNA/FNA decision:
-GameComponent.Dispose(bool) in the Game assembly above removes `this` from Components at
-IL_0023 before invoking Disposed at IL_003d (inspection span IL_0017–IL_003d).
-FNA `src/GameComponent.cs` agrees. Existing
-`ComponentLifecycleCompatibilityTest.DisposalRemovesComponentBeforeRepeatedEvents` pins native
-ordering; `CApi_GraphicsLifetime_membership-regression` checks the C route, repeated Dispose,
-re-add/remove and Destroy. The [follow-up execution map](execution-evidence.md#renderer-c-api-and-browser-follow-up-2026-11-03)
-retains the SDLGPU run and distinguishes the C ownership model from native lifecycle semantics.
-No new native behavior change or original-XNA runtime execution is claimed.
+Agreements, not XNA/FNA decisions, pinned by the same work:
 
-Additional selected witnesses reuse the established reference paths: `GameComponentCollection`
-inherits `Collection<IGameComponent>` in both the Game assembly and FNA's
-`src/GameComponentCollection.cs`; its list enumeration fails on structural mutation, rather
-than taking a snapshot. `GameComponentEnumerationContractTest` covers the new native
-`GetEnumerator` cursor, callback-stage invalidation, refused mutations and retained current
-ownership. The nested cursor type is a C++ adaptation; existing CNAEXT range iterators keep C++
-iterator rules. `GameServiceContainer` exposes no public enumeration contract. Effect and model
-enumerator witnesses remain in `EffectCollectionTests.cpp` and
-`ModelCollectionEnumeratorTests.cpp`; their internal mutation helpers are CNA extensions.
+- GameComponent.Dispose(bool) removes `this` from Components (IL_0023) before invoking Disposed
+  (IL_003d); FNA agrees. `ComponentLifecycleCompatibilityTest.DisposalRemovesComponentBeforeRepeatedEvents`
+  pins native ordering and `CApi_GraphicsLifetime_membership-regression` the C route (SAFE-004).
+- `GameComponentCollection` is a `Collection<IGameComponent>` whose enumeration fails on structural
+  mutation rather than taking a snapshot (`GameComponentEnumerationContractTest`; the nested cursor
+  type is a C++ adaptation). `GameServiceContainer` exposes no public enumeration contract.
+- `GraphicsResource.Dispose(bool)` (IL_0000–IL_001b) and the finalizer paths publish disposal before
+  raising the event (`GraphicsResourceEventOrderTest`); a standalone resource's name/tag remain
+  accessible after disposal (`StandaloneMetadataRemainsAccessibleAfterDisposal`).
 
-Graphics assembly `GraphicsResource.Dispose(bool)` IL_0000–IL_001b routes explicit and finalizer
-paths separately; `!GraphicsResource` IL_0000–IL_0007 publishes disposal before
-`~GraphicsResource` IL_0008–IL_0021 raises the event. The existing
-`GraphicsResourceEventOrderTest` cases pin recursion, exceptions and repeat calls.
-`StandaloneMetadataRemainsAccessibleAfterDisposal` additionally checks the unbound resource's
-local name/tag paths (`get_Name`/`get_Tag` IL_001e–IL_0024 and setters IL_0020–IL_0027).
-These observations do not qualify resource release when the device is disposed first.
-
-The selected content carrier tests do not establish CLR assignability between arbitrary C++
-types or the separate move-only SoundEffect cache. Missing compiled assets are checked for
-`ContentLoadException` at open time and successful retry after failure; preservation of the
-original inner exception is not qualified. Native object lifetime and these event contracts
-are independent of C API handle ownership. The same integration commit preserves the C adapter's
-one-shot device-disposal guard; `CApi_GraphicsDeviceManagerSmoke` is its separate witness.
-Its owner-reported SDLGPU result is qualified only as described in the execution map.
+The content carrier tests do not establish CLR assignability between arbitrary C++ types or the
+separate move-only SoundEffect cache, nor preservation of a missing asset's inner exception. Native
+object lifetime and these event contracts are independent of C API handle ownership;
+`CApi_GraphicsDeviceManagerSmoke` witnesses the C adapter's one-shot device-disposal guard.
 
 | Unassessed or divergent lifecycle boundary | Next experiment / limitation |
 |---|---|
@@ -427,10 +401,10 @@ Its owner-reported SDLGPU result is qualified only as described in the execution
 
 ## Further measured oracle families
 
-The 2026-10 demos repair campaign also measured and pinned cases in these families. Detailed raw probes live
-in the sibling `cna-demos/docs/repair-evidence/` tree; the named CNA tests and commits are the local
-regression authority. The family descriptions summarize those finite witnesses, not exhaustive
-precision/exception guarantees for every overload, value or platform.
+Measured and pinned cases in these families. Raw probes live in the sibling
+`cna-demos/docs/repair-evidence/` tree; the named CNA tests and commits are the local regression
+authority. The descriptions summarize finite witnesses, not exhaustive precision/exception
+guarantees for every overload, value or platform.
 
 | Family | Decisions retained here | Evidence |
 |---|---|---|
@@ -517,11 +491,9 @@ These are current decisions, not open defects:
   `ReleaseAllDeviceResources` IL_009e-00a7 only releases each child's native object (the children stay
   `IsDisposed == false` and raise no events), and its back buffer is cleared lazily after construction,
   Reset and Present (`Present` IL_009e-00a5, `GetBackBufferData` IL_0066-006f/01da-01ee) to
-  RGBA(68,34,136,255) on the next draw or read. Both were implemented and pinned on branch
-  `work/hnd-gfx` (56239f345, e8d5ecd69; evidence `cnaplan/evidence/rev002/hnd-gfx/`) but not integrated:
-  together they broke 114 EasyGL example programs in cmake-build-multi alone (99 read the back buffer
-  repeatedly, about 15 use resources across device disposal). CNA keeps its cascade and its eagerly
-  retained back buffer.
+  RGBA(68,34,136,255) on the next draw or read. CNA keeps its cascade and its eagerly retained back
+  buffer, because following XNA breaks CNA's own example programs, which read the back buffer
+  repeatedly or use resources across device disposal.
 - **A game with no IGraphicsDeviceService still loads its content** (owner decision 2026-11-09,
   HND-TQ-19). XNA's `Game.Initialize` IL_0032-0048 calls `LoadContent` only through a service that has
   a device, and its `HookDeviceEvents` (IL_0001) runs before the components initialize. CNA gives a
@@ -587,22 +559,14 @@ These are current decisions, not open defects:
 - Launch-parameter key enumeration in C is deliberately sorted even though the native dictionary's
   enumeration order is a separate implementation detail.
 
-## Rejected or retired findings
+## Dependency corrections
 
-- BINDFIX-028 did not reproduce: the adapter renderer identity and shader dialect follow the active
-  renderer; the old aggregate consumer probe had reset global test state before reading them.
-- BINDFIX-018 added the missing decal support query in `e18854238`; the complete graphics engine
-  layer was later retired by `5572f3ca1`.
-- BINDFIX-031's GPU instance-culler hypothesis was never measured through its failing path before
-  that engine layer was retired. Comparable future functionality requires a new measurement.
-- BINDFIX-052 is retained as an Emscripten dependency correction: SDL created the shared
+- BINDFIX-052, an Emscripten dependency correction: SDL created the shared
   file-drop directory defensively but removed it unguarded for every window, so destroying a
   second window raised `ENOENT`. CNA carries
   `cmake/patches/sdl-86296ac8-0001-emscripten-filedrop-rmdir.patch`, covered by the Game/device
   teardown check in `CApi_WasmBrowserProbe` (`modules/c-api/wasm/browser_probe.html`). The ordinal
   and total number of checks are not part of that contract.
-- Historical binding defect queues and their point-in-time test totals remain in Git history. A
-  fixed finding is not a current defect merely because an archived consumer still reports it.
 
 ## Adding a decision
 
@@ -613,16 +577,6 @@ These are current decisions, not open defects:
 3. Add a regression that fails on the old behavior.
 4. Record the decision here with its evidence and implementation disposition.
 5. Put a real current defect in `KNOWN_ISSUES.md` (Defects); do not turn this ledger into a second backlog.
-
-## Verification of this ledger
-
-Reconciled on 2026-11-01 against the retained evidence paths/commits, named regression declarations,
-current C boundary and local FNA reference. All 18 cited CNA commit hashes resolve. The current
-native test targets build; 19 selected adapter/microphone/string/resource/renderer-detail cases
-and ten Game clock/reset cases passed privately on OPENGLES3/dummy audio. This selected run does
-not replay every historical oracle family or qualify optional compiled-effect, Windows, browser
-or physical-device legs. In particular, the direct string round-trip test alone does not prove
-the compiled parameter-type refusal contract.
 
 ## Numeric IL overload index
 

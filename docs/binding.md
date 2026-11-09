@@ -25,9 +25,8 @@ met. Passing the gate checker means the recorded verdict is consistent, not that
 Ready.
 
 External language consumers own their ABI admission, public API, packaging and platform evidence.
-Historical consumer pins and measured findings are in Git history (`git show bdf18a7d5:handoff.md`). Consult each
-consumer's own checkout/release evidence for its current status; CNA's native documentation cannot
-certify an external repository's latest compatibility.
+Consult each consumer's own checkout/release evidence for its current status; CNA's native
+documentation cannot certify an external repository's latest compatibility.
 
 ## One native implementation, one public C boundary
 

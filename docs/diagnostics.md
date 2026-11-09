@@ -1,7 +1,6 @@
 # CNA diagnostics and profiler
 
-Current contract reconciled against source on 2026-11-01. DIAG-0001 introduced the foundation;
-later lifetime, accounting, UTF-8 and parser hardening remain part of the current implementation.
+The current contract of the diagnostics layer (introduced by DIAG-0001).
 
 ## Purpose and boundary
 
@@ -248,10 +247,42 @@ and its explicit preview source. The Inspector did not require a diagnostics pro
 - Resource registry size and total producer count follow application lifetime/use; fixed event/
   metric capacities do not make every snapshot or all diagnostics memory globally constant-size.
 
-The 2026-11-01 audit built isolated Linux HEADLESS/NULL configurations and passed the focused
-diagnostics suite in OFF (2 cases), STATS (16) and FULL (41). These are mode-specific suites;
-passing OFF does not exercise FULL event/trace paths. No new sanitizer, GPU/OS or whole-game
-performance qualification is implied.
+The focused diagnostics suite is mode-specific: OFF, STATS and FULL each build and run their own
+cases (Linux HEADLESS/NULL), and passing OFF does not exercise the FULL event/trace paths.
 
-See [`diagnostics-benchmark.md`](diagnostics-benchmark.md) for the historical measurements and
-current benchmark method.
+## Overhead measurement
+
+`modules/diagnostics/benchmarks/DiagnosticsBenchmark.cpp` (`CNA_BUILD_BENCHMARKS=ON`) runs five
+million operations per case and reports the loop baseline, a frame-counter macro, a scoped-zone
+macro and the baseline-subtracted overhead, as timings without a pass/fail threshold. The FULL zone
+case drains the 1,024-record producer buffer between timed 512-operation batches, so it measures the
+non-overflowing hot path; consumer merge/allocation time is outside the producer timing. Use an
+optimized build on an otherwise idle machine, one tree per mode (`cmake-build-diagnostics-off`,
+`-stats`, `-full`, changing `CNA_DIAGNOSTICS`):
+
+```sh
+cmake -S . -B cmake-build-diagnostics-off -G Ninja \
+  -DCMAKE_BUILD_TYPE=Release -DCNA_DIAGNOSTICS=OFF -DCNA_BUILD_BENCHMARKS=ON
+cmake --build cmake-build-diagnostics-off --target cna_diagnostics_benchmark --parallel 8
+./cmake-build-diagnostics-off/modules/diagnostics/cna_diagnostics_benchmark
+```
+
+Run each executable at least five times with the same compiler, CPU affinity, power policy and
+background load, and report the median. DIAG-0001 measured (AMD Ryzen 7 PRO 7840U, GCC 14.2.0,
+Release, pinned to one CPU, median of seven runs):
+
+| Build/case | Median baseline-subtracted overhead |
+|---|---:|
+| OFF frame-counter and scoped-zone macros | within noise (about ±0.02 ns/op) |
+| STATS frame-counter update | 1.641 ns/op |
+| STATS scoped-zone macro (compiled out) | within noise |
+| FULL frame-counter update | 1.594 ns/op |
+| FULL completed scoped zone | 63.913 ns/op (about 64 ns per zone) |
+
+OFF engine objects reference no `CNA::Diagnostics` symbol (`nm -C -u`), so instrumentation sites
+compile out rather than becoming runtime no-ops. A direct draw updates three frame counters, about
+4.9 ns on that system on top of draw validation and submission. A FULL zone (two timestamps,
+nesting validation, one thread-local event publication) stays allocation-free and lock-free after
+the thread's first event; it suits selected regions, not inner loops. No mode creates a profiler
+thread or does periodic work. First-use registration, snapshots, collection and serialization are
+not part of these steady-state numbers, and they are primitive costs, not a game workload.

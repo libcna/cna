@@ -2,7 +2,7 @@
 
 ## ABI identity
 
-The current experimental ABI is **0.60.0** (MTH-CABI-009, 2026-11-03).
+The current experimental ABI is **0.60.0** (MTH-CABI-009).
 
 | Added family | C API listing |
 |---|---|
@@ -25,20 +25,10 @@ contracts are unchanged. New
 snapshot handles have typed destruction; child code is independently copied. Device runtime
 variants are separate qualification tests. Public headers define the detailed contracts.
 
-## Behaviour corrections within ABI 0.60 (owner decisions 2026-11-09)
+## Behaviour corrections within ABI 0.60
 
-No route, layout or enum identity changes and no new symbols.
-
-- HND-TQ-25 D8: `cna_effect_material_create` now also retains every C texture handle its source
-  retains at that moment -- the stock texture slots and each parameter's slots, through elements and
-  structure members -- until the material replaces or clears it or is destroyed. Destroying such a
-  texture while only the material holds it returns `CNA_RESULT_INVALID_STATE`, as for its source.
-  This reverses the TQ-035 note below for materials; `cna_effect_clone` is unchanged.
-
-## Behaviour corrections within ABI 0.60 (TQ campaign, owner decisions 2026-11-04)
-
-No route, layout or enum identity changes and no new symbols. Existing routes now follow XNA under the
-experimental minor-version rule:
+No route, layout or enum identity changes and no new symbols. Existing routes follow XNA under the
+experimental minor-version rule (owner decisions):
 
 - TQ-036: the `cna_touch_state` mutation routes return `CNA_RESULT_NOT_SUPPORTED` and write nothing,
   because XNA's TouchCollection is read-only. `cna_touch_state_init` gives a disconnected snapshot, and
@@ -47,22 +37,25 @@ experimental minor-version rule:
 - TQ-035: after `cna_graphics_resource_dispose`, an occlusion query keeps XNA's state machine:
   `cna_occlusion_query_get_is_complete` and `cna_occlusion_query_get_is_pixel_count_precise_ext`
   succeed with `CNA_FALSE`, while pixel count, begin and end still return `CNA_RESULT_INVALID_STATE`.
-  A NullReferenceException from any route now maps to `CNA_RESULT_INVALID_STATE` instead of
+  A NullReferenceException from any route maps to `CNA_RESULT_INVALID_STATE` rather than
   `CNA_RESULT_INTERNAL`. Disposing subscriptions on effect and occlusion-query handles are never
-  invoked. A render target's ContentLost flag now survives binding, reversing the earlier "binding
-  clears it" note; a draw or SpriteBatch flush into it, a successful clear while it is bound, or a
-  completed SetData clears it.
+  invoked. A render target's ContentLost flag survives binding; a draw or SpriteBatch flush into
+  it, a successful clear while it is bound, or a completed SetData clears it.
 - TQ-035: `cna_sprite_effect_create` effects expose `MatrixTransform`, set on every apply to FNA's
   viewport projection (M33 = -1), and clones keep it. `cna_texture2d_create_from_encoded_memory`
   (non-DDS) gives texels whose alpha is 0 an RGB of 0, after any requested resize.
   `cna_effect_material_create` and the base `cna_effect_clone` of a stock effect keep its
   techniques, passes and parameter values instead of one "Default" technique; texture values are
-  shared references and the source's C retention is not extended to the copy. Since HND-TQ-25 D9
-  (owner decision 2026-11-09) such a copy also draws with the stock effect's shaders, fed its own raw
-  parameter values with no stock OnApply, where it drew through the base Effect before; an apply
-  whose ShaderIndex selects none of the stock shaders returns `CNA_RESULT_INVALID_STATE`.
-- TQ-037: `cna_game_run_one_frame` only ticks, as XNA's RunOneFrame does: it no longer initializes
-  the game or begins a run, so a host that needs initialization calls `cna_game_run_frame_ext`.
+  shared references. Such a copy draws with the stock effect's shaders, fed its own raw parameter
+  values with no stock OnApply; an apply whose ShaderIndex selects none of the stock shaders returns
+  `CNA_RESULT_INVALID_STATE` (HND-TQ-25 D9).
+- HND-TQ-25 D8: `cna_effect_material_create` also retains every C texture handle its source retains
+  at that moment -- the stock texture slots and each parameter's slots, through elements and
+  structure members -- until the material replaces or clears it or is destroyed. Destroying such a
+  texture while only the material holds it returns `CNA_RESULT_INVALID_STATE`, as for its source.
+  `cna_effect_clone` does not extend the source's C retention to the copy.
+- TQ-037: `cna_game_run_one_frame` only ticks, as XNA's RunOneFrame does: it does not initialize
+  the game or begin a run, so a host that needs initialization calls `cna_game_run_frame_ext`.
   Disposing the graphics device manager removes only its graphics-device service. A changed graphics
   profile or a repeated device creation replaces the device, so a borrowed device handle taken
   before it names the disposed predecessor. BeginDraw refuses an inactive device in applied fullscreen.
@@ -80,672 +73,85 @@ lifecycle callbacks, with a separate availability boolean for a declined size. E
 copy/set routes preserve value semantics. Shared aliases have independent session/roster pins and
 use the existing typed machine release. Null shared assignment is refused; assign a distinct empty
 machine to detach from an identity. Two explicit-handle component lifetime subsets and two
-transport-managed no-C-form rows were approved by Robert Vokac on 2026-11-03.
-[CLOSURE_060.md](CLOSURE_060.md) records exact rows, callback lifetime and the execution boundary.
+transport-managed no-C-form rows are owner-approved.
+[CLOSURE_060.md](CLOSURE_060.md) records the exact rows and the callback lifetime.
 The four Windows qualification rows remain planned; the experimental release stays Not ready.
 
 ## ABI 0.59 compatibility notes
 
 Sixteen additive routes were introduced in ABI 0.59; existing layouts and symbols stay fixed.
 Two existing route behaviors are corrected under the experimental minor-version rule:
-`cna_gamer_enumerator_get_current` now succeeds with a null handle before start/after exhaustion
-and preserves cached Current after collection mutation; MoveNext/Reset now refuse native version
+`cna_gamer_enumerator_get_current` succeeds with a null handle before start/after exhaustion
+and preserves cached Current after collection mutation; MoveNext/Reset refuse native version
 changes. `cna_sound_effect_create_from_encoded_ext` uses the System::IO::Stream strict PCM WAV
-factory, so non-WAV formats previously accepted by the std::istream extension are refused.
-The exact declarations, lifetime rules, strict-C regressions and owner device execution were
-recorded in `docs/c-api/CLOSURE_059.md`, now in Git history. No partial owner approval or release
-readiness is implied.
+factory, so non-WAV formats that the std::istream extension accepted are refused.
 
 ## ABI change ledger
 
-### Previous ABI 0.54.0
-
-The experimental ABI was **0.54.0** (MTH-CABI-006, 2026-11-02).
-
-| Added family | C API listing |
-|---|---|
-| Input values | `cna_gamepad_{buttons,dpad,thumb_sticks,triggers}_{get_string_size,copy_string}` |
-| Packed values | `cna_packed_vector_{get_hash_code,get_string_size,copy_string}` |
-| Display values | `cna_display_mode_{get_hash_code,get_title_safe_area,get_string_size,copy_string}`; `cna_graphics_device_information_{equals,get_hash_code}` |
-| Adapter/device queries | `CNA_GraphicsDeviceTypeEXT`; `cna_graphics_adapter_{is_wide_screen_aspect_ratio,get_current_device_type,get_required_renderer}_ext`; `cna_graphics_device_get_logical_size_ext` |
-| Input switches | GamePad/Accelerometer keyboard emulation, TouchPanel input suppression, GameWindow keyboard-orientation emulation getters/setters |
-| Project profile | `cna_project_graphics_profile_{get,set}_ext` |
-
-### Previous ABI 0.53.0
-
-The ABI was **0.53.0** (MTH-CABI-003 / CBIND-120, 2026-11-02).
-It adds three pure static profile-legality queries in `texture.h`:
-`cna_texture_is_format_allowed_by_profile_ext`,
-`cna_texture_is_cube_format_allowed_by_profile_ext` and
-`cna_texture_is_render_target_format_allowed_by_profile_ext`. Each takes an explicit
-`CNA_GraphicsProfile` and `CNA_SurfaceFormat` and returns a boolean independently of renderer
-support, construction fallback or exact storage. They need no device and may run on any thread.
-An invalid identity or null output returns `CNA_RESULT_INVALID_ARGUMENT`; a supplied output is
-unchanged on failure. A disallowed format returns success with `CNA_FALSE`.
-This was a purely additive change.
-
-### Previous ABI 0.52.0
-
-The ABI was **0.52.0** (2026-10-30). It adds
-`cna_content_manager_load_video`, the canonical C producer for compiled Video assets through
-`ContentManager.Load<Video>`. The returned Video handle is independently owned, survives manager
-unload or destruction and can be created without the optional decoder; decoding remains a playback
-concern. This was purely additive: no existing route, constant, layout or error rule changed.
-
-### Previous ABI 0.51.0
-
-The ABI was **0.51.0** (2026-10-30). It renames the surviving public renderer
-identity `SDL_GPU` to `SDLGPU` across the CMake selector, runtime name and C constant. The
-replacement `CNA_GRAPHICS_RENDERER_SDLGPU` keeps value `31`; the removed
-`CNA_GRAPHICS_RENDERER_SDL_GPU` name is not retained as an alias, and the textual `SDL_GPU`
-selector is rejected rather than silently mapped. No renderer is added, removed or renumbered and
-compiled consumers that carry value `31` keep the same behaviour. Source consumers must adopt the
-new constant and textual name. SDL's own `SDL_GPU*` API, `SDL_GPU_DRIVER` hint and MojoShader
-SDL_GPU adapter names are unchanged. Under the experimental `0.x` rule, removing the old C name is
-an incompatible source change and therefore takes this minor increment, release note and updated
-baseline.
-
-### Previous ABI 0.50.0
-
-The ABI was **0.50.0** (2026-10-23). It adds two routes,
-`cna_skinned_model_ext_get_part_diffuse_color_at` and
-`cna_skinned_model_ext_set_part_diffuse_color_at`, for the diffuse colour and alpha a
-`SkinnedModelEXT` part now carries (`PartEXT::DiffuseColor`, the converter's glTF
-`baseColorFactor`; galaxy-eggbert UB-002). A part added through this ABI starts white, and
-attaching, moving or removing parts keeps each part's colour. It also restores
-`CNA_DisplayColorSpace` with `CNA_DISPLAY_COLOR_SPACE_SRGB`, `_SCRGB` and `_HDR10` in
-`graphics_device.h` and types the three `cna_graphics_device_*_display_color_space_ext` routes with
-it (CNA-DEMOS-ISSUE-067); the 0.47.0 engine-layer retirement had removed the type and left those
-routes on bare ordinals. The typedef is `uint32_t`, so their binary signatures do not change. And
-it adds `CNA_CNB_MODEL_CHUNK_CAMERAS`, the versioned `CNA_CnbModelCamera` and five routes,
-`cna_cnb_model_add_camera`, `_get_camera_count`, `_get_camera`, `_get_camera_name_size` and
-`_copy_camera_name`, for the glTF cameras a compiled model now carries (CNA-DEMOS-ISSUE-023). It
-adds the detailed renderer features `CNA_RENDERER_FEATURE_SAMPLER_LEVEL_OF_DETAIL_BIAS` (32),
-`_PBR_EFFECT_SHADING` (33) and `_SKINNED_PBR_EFFECT_SHADING` (34) (CNA-DEMOS-ISSUE-006), and
-`_MULTI_SAMPLE_MASK` (35, CNA-DEMOS DC-R2) and `_RENDER_TARGET_READBACK` (36, a museum finding);
-`CNA_RENDERER_FEATURE_MAXIMUM` moves to 36. The export surface grows only by the routes named
-above. Purely additive: no existing route, constant, structure field or
-error rule changes, but a binding that requires the new routes or names needs this minor.
-
-### Previous ABI 0.49.0
-
-The ABI was **0.49.0** (2026-10-17). It **renames the renderer classification
-surface**, which `CBIND-037A` published in 2026-08 under the "graphics renderer" vocabulary the
-2026-08 renderer naming normalization had just retired: both classify a `CNA_GraphicsRendererType`,
-so they are renderer classifications. The C++ types behind them were renamed the same way
-(`CNA::GraphicsRendererCategory`, `CNA::GraphicsRendererMaturity`).
-
-| Removed | Replacement |
-|---|---|
-| `CNA_GraphicsBackendCategory` | `CNA_GraphicsRendererCategory` |
-| `CNA_GraphicsBackendMaturity` | `CNA_GraphicsRendererMaturity` |
-| `CNA_GRAPHICS_BACKEND_CATEGORY_*` (5 constants) | `CNA_GRAPHICS_RENDERER_CATEGORY_*` |
-| `CNA_GRAPHICS_BACKEND_MATURITY_*` (5 constants) | `CNA_GRAPHICS_RENDERER_MATURITY_*` |
-| `cna_graphics_backend_get_category` | `cna_graphics_renderer_get_category` |
-| `cna_graphics_backend_get_current_category` | `cna_graphics_renderer_get_current_category` |
-| `cna_graphics_backend_category_get_name_size` | `cna_graphics_renderer_category_get_name_size` |
-| `cna_graphics_backend_category_copy_name` | `cna_graphics_renderer_category_copy_name` |
-| `cna_graphics_backend_get_maturity` | `cna_graphics_renderer_get_maturity` |
-| `cna_graphics_backend_get_current_maturity` | `cna_graphics_renderer_get_current_maturity` |
-| `cna_graphics_backend_maturity_get_name_size` | `cna_graphics_renderer_maturity_get_name_size` |
-| `cna_graphics_backend_maturity_copy_name` | `cna_graphics_renderer_maturity_copy_name` |
-
-Every constant keeps its value (`NATIVE` `0` through `DIAGNOSTIC` `4`, `PRODUCTION` `0` through
-`DEPRECATED` `4`), every route keeps its signature, result rules and answers, and every renderer
-keeps its category and maturity. No alias of an old name is kept. The change is incompatible in
-source and in binary alike: a binding that names an old typedef or constant no longer compiles,
-and one that calls an old route no longer links or loads, because those eight symbols are no
-longer exported -- eight new ones are, so the export count did not change. Updating a binding is
-a rename with no change in behaviour. Under the `0.x` rule below that takes this minor increment,
-these release notes and an updated baseline.
-
-### Previous ABI 0.48.0
-
-The ABI was **0.48.0** (`RRC-031`..`RRC-035`, the 2026-10-13 retirement). It
-**retires the public renderer identities `SDL_RENDERER` (`1`), `VULKAN` (`8`), `DIRECTX11` (`14`)
-and `METAL` (`42`)** together with the constants `CNA_GRAPHICS_RENDERER_SDL_RENDERER`,
-`CNA_GRAPHICS_RENDERER_VULKAN`, `CNA_GRAPHICS_RENDERER_DIRECTX11` and `CNA_GRAPHICS_RENDERER_METAL`
-that named them (`docs/removed-renderers.md`). The values are permanently reserved: every route that takes a
-`CNA_GraphicsRendererType` refuses them with `CNA_RESULT_INVALID_ARGUMENT`, and
-`cna_graphics_renderer_set_preferred_by_name_ext` refuses each name with an error that says the
-renderer was retired. `CNA_GRAPHICS_RENDERER_MAXIMUM` stays `43` (`FNA3D`) and the next new
-identity still takes `52`. No route, structure, field, capability bit or exported symbol changes,
-and no surviving identity is renumbered. What breaks is a binding that names a
-removed constant; the `0.x` rule below takes this minor increment, these release notes and an
-updated baseline.
-
-### Previous ABI 0.47.0
-
-The ABI was **0.47.0** (MRT-008, 2026-10-13). It
-**removes the C surface of the retired modern GPU layer**: the capability identities
-`CNA_GRAPHICS_CAPABILITY_COMPUTE_SHADERS` (`17`) and `CNA_GRAPHICS_CAPABILITY_INDIRECT_DRAW`
-(`18`) with their `_FLAG_` bits, so `CNA_GRAPHICS_CAPABILITY_MAXIMUM` moves from `18` to `16`
-(`HALF_FLOAT_TEXTURE_LINEAR_FILTERING`); the renderer features `COMPUTE_SHADERS` (`18`),
-`COMPUTE_IMAGE_BINDING` (`19`), `INDIRECT_DRAWING` (`20`) and `GPU_TIMERS` (`23`); the thirteen
-compute/storage/timer limits (`MAX_COMPUTE_WORK_GROUP_COUNT_X` `2` through
-`MAX_VERTEX_SHADER_STORAGE_BLOCKS` `9`, `MAX_STORAGE_BUFFER_BYTES` `10`,
-`MAX_COMPUTE_STORAGE_BUFFER_BINDINGS` `12`, `MAX_TEXTURE_ARRAY_LAYERS` `13`,
-`MAX_STORAGE_IMAGES_PER_SHADER_STAGE` `15`, `MIN_STORAGE_BUFFER_OFFSET_ALIGNMENT` `19` and
-`TIMESTAMP_PERIOD_PICOSECONDS` `21`), so `CNA_RENDERER_LIMIT_MAXIMUM` moves from `21` to `20`
-(`MIN_UNIFORM_BUFFER_OFFSET_ALIGNMENT`); the format-usage bits `STORAGE_READ`, `STORAGE_WRITE` and
-`STORAGE_ATOMIC` (bits 5–7); the structures `CNA_IndirectDrawArguments` and
-`CNA_IndirectDrawIndexedArguments` with `cna_indirect_draw_arguments_init` and
-`cna_indirect_draw_indexed_arguments_init`; and the routes
-`cna_graphics_device_get_max_compute_work_group_count_ext`, `..._size_ext` and
-`..._invocations_ext`. Every surviving constant keeps its number: `CNA_RENDERER_FEATURE_MAXIMUM`
-stays `31`, the retired feature, limit ordinals and usage bits are permanently reserved and the
-feature/limit query routes refuse them with `CNA_RESULT_INVALID_ARGUMENT`. What breaks is a
-binding that names one of the removed constants, structures or routes (it no longer compiles or
-links); no other route, structure, field or exported symbol changes, nor does the export count. The
-`0.x` rule below takes this minor increment, these release notes and an updated baseline.
-
-### Previous ABI 0.46.0
-
-The ABI was **0.46.0** (Apple M4 `AM4-037`). It appends one
-native windowing-system identity, `CNA_NATIVE_WINDOW_SYSTEM_UIKIT` (`9`): on iOS/iPadOS
-`cna_game_window_get_native_window_ext` reports SDL's `uikit` window with
-`CNA_NativeWindowHandle::window` set to its `UIWindow*`, where it used to report
-`CNA_NATIVE_WINDOW_SYSTEM_HEADLESS` with every pointer null. `CNA_NATIVE_WINDOW_SYSTEM_MAXIMUM` moves
-from `8` to `9`; every existing value keeps its number and no route, structure or exported symbol
-changes. The minor increments because the closed enumerable range changed, so a binding can require
-the first ABI that can report a UIKit window.
-
-### Previous ABI 0.45.0
-
-The ABI was **0.45.0** (`RRC-018`). It **retires four public renderer
-identities** -- `OPENGLES2` (`2`), `WEBGL1` (`5`), `DIRECTX12` (`15`) and `CANVAS` (`17`) -- together
-with the four `CNA_GRAPHICS_RENDERER_*` constants that named them. CNA then had 14 public renderer
-identities (`docs/removed-renderers.md`). `CNA_GRAPHICS_RENDERER_MAXIMUM` stays `43` (`FNA3D`); no
-route, structure, field, capability bit or exported symbol changes, and no surviving identity is
-renumbered. What breaks is a binding that names one of the four removed constants (it no longer
-compiles) or passes one of their integers (every route now refuses it with
-`CNA_RESULT_INVALID_ARGUMENT`). The four values join the permanently reserved set, which is now
-`2`, `5`, `7`, `10`, `15`--`21`, `23`--`30`, `32`--`41` and `44`--`51`; a future identity still takes
-**`52`**.
-
-### Previous ABI 0.44.0
-
-The ABI was **0.44.0** (`CBIND-155`). No route, constant or structure
-changes; one rule does. The activated and deactivated handlers (`cna_game_subscribe`) run inside a
-callback scope, so they can borrow the game's device, and the activation that begins every run
-holds the game thread's context. They were raised as the run began and while a frame pumped window
-events, outside every scope: a handler's `cna_game_get_graphics_device` was refused. XNA's
-`OnActivated` ran on the game thread with the device at hand -- Charles Petzold's PhreeCell deals
-and sizes its table there and drew nothing. The export set did not change.
-
-### Previous ABI 0.43.0
-
-The ABI was **0.43.0** (`CBIND-154`). No route, constant or structure
-changes; one rule does. `cna_sound_effect_play` and `cna_sound_effect_play_with_settings` answer on
-any thread, not only the one that created the effect, as XNA's `SoundEffect.Play` did: games play
-sounds from threads of their own (stpettersens/21's dealer plays its shuffle sound on the thread
-that shuffles while the game thread spins until that thread ends). Fire-and-forget playback reads
-only the effect's audio and goes to the mixer, which both backends serialize. With foreign-thread
-calls on, such a call was queued for the game thread, which a game busy-waiting on that thread
-never serviced. Every other route on a sound effect keeps the creating-thread rule. The export set
-did not change.
-
-### Previous ABI 0.42.0
-
-The ABI was **0.42.0** (`CBIND-153`). No route, constant or structure
-changes; one rule does. `cna_game_get_graphics_device` also lends the device before the game's run
-begins -- its first run, frame step or tick -- on the thread that created the game, and that handle
-lasts until the run's first callback returns. XNA's `ApplyChanges` in a game's constructor creates
-the device, and games read it there (Kermit/SKraft sizes its menu from `Viewport`); CNA's game
-owns its device from creation, but no callback had lent it yet. Between frames, once the run has
-begun, the route still refuses with `CNA_RESULT_INVALID_STATE`. The export set did not change.
-
-### Previous ABI 0.41.0
-
-The ABI was **0.41.0** (`CBIND-152`). It adds one route,
-`cna_game_run_foreign_thread_calls_ext`: the game thread runs the calls other threads queued for it
-(`cna_game_set_foreign_thread_calls_ext`) now, rather than at the start of its next update or draw.
-XNA's loading screens start a thread that draws the loading animation and join it from `Update`
-(Microsoft's Network Game State Management sample); with the queue served only between updates,
-that thread waited for the game thread and the game thread for it. A binding calls the route while
-its game thread waits. Additive: nothing existing changes.
-
-### Previous ABI 0.40.0
-
-The ABI was **0.40.0** (`CBIND-145`). No route, constant or structure
-changes; one rule does. The twelve `cna_graphics_adapter_*` routes also accept the active game's own
-handle as their `graphics_device`, on the thread that created it (`cna_graphics_adapters_refresh`,
-which always refuses, is unchanged). The adapters are the system's, not a device's, and XNA reads
-`GraphicsAdapter.DefaultAdapter` anywhere -- most often in a game's constructor, to size the back
-buffer, before any lifecycle callback can lend a device; there a game had no handle these routes
-would take. A callback-scoped device is still accepted, and every other handle is refused as
-before; the export set did not change.
-
-### Previous ABI 0.39.0
-
-The ABI was **0.39.0** (`CBIND-141`). It adds one route,
-`cna_game_set_foreign_thread_calls_ext`: another thread's calls on the game thread's handles run on
-the game thread. Every handle belongs to the thread that created it, and any other thread is refused
-with `CNA_RESULT_THREAD` -- which stays the default. XNA let a game create resources, move their data
-and load content on a thread of its own, so a binding that offers that turns this on: a call that a
-handle refused only because another thread created it is queued, and the game thread runs it at the
-start of its next update or draw, inside the lifecycle callback scope, and hands back the result
-and, for a failure, the error record. Purely additive.
-
-### Previous ABI 0.38.0
-
-The ABI was **0.38.0** (`CBIND-134`). It adds one route,
-`cna_game_run_frame_ext`: the run a host drives one frame at a time. A browser page cannot block in
-`cna_game_run`, so it calls this from each animation frame instead; the first call initializes the
-game and begins the run, every call runs one frame, and the call that finds the game exited ends
-the run as `cna_game_run` does -- `exiting`, then `end_run` -- and reports it. `cna_game_run_one_frame`
-steps frames too, but never begins or ends a run, so a host built on it never delivered `begin_run`,
-`end_run` or `exiting`, one route more than 0.37.0; purely additive.
-
-### Previous ABI 0.37.0
-
-The ABI was **0.37.0** (`CBIND-132`). It adds four routes that report the
-canonical exception behind the most recent failure on a thread:
-`cna_error_get_last_exception_type_size_ext`/`cna_error_copy_last_exception_type_ext` give its .NET
-type name (`System.ArgumentOutOfRangeException`,
-`Microsoft.Xna.Framework.GamerServices.GamerPrivilegeException`), and
-`cna_error_get_last_exception_param_name_size_ext`/`cna_error_copy_last_exception_param_name_ext`
-an argument exception's parameter name, four routes more than 0.36.0; purely additive -- no existing route,
-constant, structure, field or error rule moves.
-
-A result and a category say what kind of failure happened, but a managed binding re-raising it
-needs the exception the canonical call threw, and neither can name it: `GamerPrivilegeException`,
-`GuideAlreadyVisibleException` and `InvalidOperationException` are all `CNA_RESULT_INVALID_STATE`, an
-`ArgumentOutOfRangeException` is `CNA_RESULT_INVALID_ARGUMENT` like its base, and a
-`ContentLoadException` is `CNA_RESULT_IO` like any I/O error. The exception barrier notes the
-dynamic type of the exception it translates -- CNA's C++ namespaces are the .NET ones, so the
-demangled name is the canonical one -- and `SetLastError` attaches it to the failure it records; a
-failure the C layer raises itself names none.
-
-### Previous ABI 0.36.0
-
-The ABI was **0.36.0** (`CBIND-130`). It adds one route,
-`cna_packet_reader_copy_data_ext`, which copies the bytes a packet reader holds -- the inverse of
-`cna_packet_reader_set_data_ext`, as `cna_packet_writer_copy_data_ext` is of writing -- one route
-more than 0.35.0. The change is purely additive: no existing route, constant, structure field or error
-rule moves.
-
-It closes a gap the C# binding hit while putting XNA's `LocalNetworkGamer.ReceiveData(PacketReader,
-out NetworkGamer)` on the ABI. XNA's `PacketReader` is a `BinaryReader`, so the binding's reader is a
-managed object, not a native handle. `cna_local_network_gamer_receive_data_into_packet_reader` sizes a
-native reader to the next packet, but nothing could read those bytes back out, and
-`cna_local_network_gamer_receive_data` refuses a buffer too small for a packet whose size no route
-reports. A consumer could receive a packet of a length it already knew, and no other.
-
-### Previous ABI 0.35.0
-
-The ABI was **0.35.0**: `next` at 0.33.0 (`RRC-015`) merged into
-`feature/gamer-services-server`, whose own line had reached 0.34.0 (`GS-009f`, `GS-011b`). The two
-lines had each used 0.33.0 for a different change, so the merged ABI takes a number neither used. It
-holds all three changes described below, one route fewer than 0.36.0; nothing else changes. A binding
-built against either earlier 0.33.0 or against 0.34.0 must rebuild against these headers.
-
-### A correction within 0.35.0 (BINDFIX-048)
-
-`CNA_CNB_SOUND_EFFECT_SCHEMA_VERSION` said `1` while the library had read and written `SoundEffect`
-schema `2` (8-bit PCM) since `XNASWEEP-197` (2026-09-10); it now says `2`. The baseline records this
-as a changed constant. No version moved: every 0.35.0 library already behaves as schema 2, so the
-old value could only make a consumer refuse files CNA itself wrote. The policy below asks for an
-approved break; the owner approved it on 2026-09-30 as a correction within 0.35.0.
-
-### 0.34.0 on `feature/gamer-services-server`
-
-The ABI was **0.34.0** (`GS-011b`) on this line. It removed the two Guide setters that XNA
-keeps internal: `cna_guide_set_is_visible` (a no-op, since the Guide is visible exactly while one of
-its screens is up) and `cna_guide_set_is_trial_mode` (CNA titles are fully licensed, so trial mode
-follows `cna_guide_set_simulate_trial_mode` alone). Two fewer exports than 0.33.0; no structure,
-constant or other route changes. A binding that calls either route no longer links.
-
-### 0.33.0 on `feature/gamer-services-server`
-
-The ABI was **0.33.0** (`GS-009f`) on this line. The standard avatar types now behave as
-real avatars (`docs/avatars.md`): a random description reports its body type and height, a preset
-animation has a length and moving bones, and a renderer loads (`LOADING` -> `READY`), reads its
-bind pose once ready and draws through initialized gamer services. The Avatar real-rendering
-extension that stood in for them is **removed**: `cna_avatar_appearance_init_ext` and the
-`CNA_AvatarAppearanceEXT` value, `cna_avatar_renderer_enable_real_rendering_ext`,
-`cna_avatar_renderer_set_appearance_ext`, `cna_avatar_renderer_draw_real_ext`, the three
-`cna_avatar_animation_*_real_clip_name_ext` routes and the four preset clip-name / body-type
-content-name routes (eleven fewer exports and one structure). In
-`CNA_AvatarRendererInfo` the `is_real_rendering_enabled` byte becomes part of `reserved[3]`, so the
-structure keeps its size and every other offset. A binding that names a removed route or field no
-longer compiles; that incompatible change takes this minor increment, these notes and an updated
-baseline under the `0.x` rule below.
-
-### 0.33.0 on `next`
-
-The ABI was **0.33.0** (`RRC-015`) on `next`. It **retired four public renderer
-identities** -- `HTML_DOM` (`18`), `OPENGL4` (`33`), `GDI` (`40`) and `SVG_DOM` (`44`) -- together
-with the four `CNA_GRAPHICS_RENDERER_*` constants that named them, and moves
-`CNA_GRAPHICS_RENDERER_MAXIMUM` from `44` (`SVG_DOM`) to `43` (`FNA3D`, the highest surviving
-identity). CNA now has 18 public renderer identities (`docs/removed-renderers.md`). No route,
-structure, field, capability bit or exported symbol changes, and no surviving identity is
-renumbered. What breaks is a binding that names one of the four removed constants (it no longer
-compiles), passes one of their integers (every route now refuses it with
-`CNA_RESULT_INVALID_ARGUMENT`), or compares against `CNA_GRAPHICS_RENDERER_MAXIMUM`. The four values
-join the permanently reserved set, which is now `7`, `10`, `16`, `18`--`21`, `23`--`30`, `32`--`41`
-and `44`--`51`; a future identity still takes **`52`**.
-
-### Previous ABI 0.32.0
-
-The ABI was **0.32.0** (`GS-005b`). It added caller-buffer picture copy
-routes for achievements and gamer profiles, releases temporary stream ownership in both size
-routes, and makes the existing Guide/Dispatcher routes reflect configured service availability
-and real authentication. Unconfigured social/sign-in calls now refuse, duplicate initialization
-reports invalid-state, and initialization fabricates zero gamers. No structure layout or numeric
-identity changes. The minor increment records these corrected behavioral/error rules while 0.x
-is experimental. Service/account/protocol objects remain private. Online picture and pure-C client
-coverage are measured separately from historical API shape.
-
-### Previous ABI 0.31.0
-
-The ABI was **0.31.0** (`RRC-012`). It **retires three public renderer identities** -- `DIRECT2D`
-(`16`), `FREEDIRECT` (`21`) and `PORTABLEGL` (`46`) -- together with the three
-`CNA_GRAPHICS_RENDERER_*` constants that named them, and moves `CNA_GRAPHICS_RENDERER_MAXIMUM` from
-`46` (`PORTABLEGL`) to `44` (`SVG_DOM`, the highest surviving identity). CNA now has 22 public
-renderer identities (`docs/removed-renderers.md`). No route, structure, field, capability bit or
-exported symbol changes, and no surviving identity is renumbered: a binding that passes
-`CNA_GRAPHICS_RENDERER_VULKAN` (`8`) or `CNA_GRAPHICS_RENDERER_GDI` (`40`) passes the same integer
-as before. What breaks is a binding that names one of the three removed constants (it no longer
-compiles), passes one of their integers (every route now refuses it with
-`CNA_RESULT_INVALID_ARGUMENT`), or compares against `CNA_GRAPHICS_RENDERER_MAXIMUM` (the ceiling
-moved down). The three values join the permanently reserved set, which is now `7`, `10`, `16`,
-`19`--`21`, `23`--`30`, `32`, `34`--`39`, `41` and `45`--`51`; a future identity still takes
-**`52`**. That is an incompatible change, which under the `0.x` rule below takes this minor
-increment, these release notes and an updated baseline.
-
-### Previous ABI 0.30.0
-
-The ABI was **0.30.0** (`MOD-RETIRE-1`). This alpha-stage breaking
-reduction removes `engine_layer.h`, its pipeline, post-process, clustered-lighting, shadow,
-probe and optional PBR-material routes, along with their handles, enums and value layouts.
-`graphics_ext.h` retains ASCII, CRT, colour-depth and DebugDraw routes. Core Effect, PBR,
-ShaderEffect, glTF, CNB/CNJ and content routes remain. The ABI baseline records the exact
-removed symbols and layouts; the historical removal checkpoint is recorded in Git and its ABI baseline. Bindings must target
-the new header and version.
-
-### Previous ABI 0.29.0
-
-The ABI is `0.29.0`. It **removes the SpriteBatch 2D mesh route**: the function
-`cna_sprite_batch_draw_mesh_ext` and the versioned structure `CNA_SpriteMeshEXT` it took (64 bytes,
-8-byte aligned) are gone, together with the C++ surface behind them --
-`Microsoft::Xna::Framework::Graphics::SpriteBatch::DrawMeshEXT` and
-`CNA::Internal::Renderers::ISpriteBatchRenderer::DrawMeshEXT`. That historical checkpoint removed one route and reduced its measured struct count by one.
-
-Nothing else changes: no other route, constant, structure, field, error rule or ownership rule is
-touched, no renderer identity is renumbered, and no enum value, capability bit or dispatch member
-was involved -- mesh submission never had a capability flag, which is part of why it went.
-
-That is an incompatible change, which under the `0.x` rule below requires exactly this
-minor-version increment, these release notes and an updated baseline.
-
-**Why it was removed rather than kept refusing.** The route existed for one renderer's mesh ABI:
-Skia's bounded `SkVertices`/SkSL submission (`SKIA-144`--`157`). Skia was retired in 2026-08, and
-after the 2026-09-17 curation to 25 identities **no renderer in the tree implemented it** -- the
-`ISpriteBatchRenderer` base threw `std::runtime_error` for every renderer, which
-`cna_sprite_batch_draw_mesh_ext` converted into `CNA_RESULT_NOT_SUPPORTED`. A C caller could
-therefore reach it, but never succeed on any supported renderer. Keeping a route that every renderer
-refuses is a permanently dead branch of the ABI, so while the ABI is still `0.x` and experimental
-the surface was deleted instead of fossilized (`RRC-009`). There is no replacement route and no
-compatibility stub: a caller that used it was already getting `CNA_RESULT_NOT_SUPPORTED` from every
-renderer, so no working program loses behaviour -- what breaks is compilation of a binding that
-names the function or the struct.
-
-`0.28.0` **retired twenty-five public renderer identities** -- `BGFX`, `MAGNUM`,
-`BLEND2D`, `DIRECTX1`, `DIRECTX2`, `DIRECTX3`, `DIRECTX5`, `DIRECTX6`, `DIRECTX7`, `DIRECTX8`,
-`DIRECTX10`, `OPENGLES1`, `OPENGL1`, `OPENGL2`, `WICKED`, `SOKOL`, `DILIGENT`, `GLIDE`, `LLGL`,
-`OPENVG`, `TINYGL`, `IGL`, `PIXIJS`, `NANOVG` and `RLGL` -- together with the twenty-five
-`CNA_GRAPHICS_RENDERER_*` constants that named them, and it moves `CNA_GRAPHICS_RENDERER_MAXIMUM`
-from `51` to `46` (`PORTABLEGL`, the highest surviving identity). CNA now has 25 public renderer
-identities (`docs/removed-renderers.md`). That too was an incompatible change and took its own
-minor increment, release notes and regenerated baseline. The retirement decisions it recorded are
-unchanged by `0.29.0`: the 25 surviving identities keep their values and the retired ones stay
-reserved.
-
-No surviving identity is renumbered: every one of the 25 keeps the value it had, so a binding that
-passes `CNA_GRAPHICS_RENDERER_VULKAN` (`8`) or `CNA_GRAPHICS_RENDERER_PORTABLEGL` (`46`) passes the
-same integer as before. What breaks is a binding that names one of the removed constants (it no
-longer compiles), passes one of their integers (every route now refuses it with
-`CNA_RESULT_INVALID_ARGUMENT`), or compares against `CNA_GRAPHICS_RENDERER_MAXIMUM` (the ceiling
-moved down).
-
-The retired values are **permanently reserved** and are never assigned to another renderer:
-`7`, `10`, `19`, `20`, `23`--`30`, `32`, `34`--`39`, `41`, `45` and `47`--`51`. Because several of them
-lie above the new `MAXIMUM`, a future identity takes the next never-assigned value, **`52`**, not
-`MAXIMUM + 1`. `scripts/check_renderer_identities.py` fails the build if a retired value or name is
-reused, and `docs/removed-renderers.md` records each identity, its value, what it proved and the
-pinned dependency it wrapped.
-
-`0.27.0` appended the `CNA_GRAPHICS_RENDERER_RLGL` renderer identity at value `51` and moved
-`CNA_GRAPHICS_RENDERER_MAXIMUM` from `50` to `51`. Existing renderer values were unchanged; value
-`19` remained retired. The minor incremented because the closed enumerable renderer range changed,
-allowing consumers to require the first ABI that can select and report RLGL.
-
-`0.26.0` appended **one detailed renderer-feature identity**,
-`CNA_RENDERER_FEATURE_BASE_INSTANCE_DRAWING` (`31`). The answer is supported only when the
-renderer consumes a caller-selected first logical instance through the CNAEXT instanced-draw
-route; older renderers inherit the explicit unsupported default. Existing feature identities keep
-values `0` through `30`, and only `CNA_RENDERER_FEATURE_MAXIMUM` moves from `30` to `31`.
-
-The minor increments because the closed enumerable feature range changed. A caller built against
-`0.25.0` is unchanged; a caller iterating the new maximum sees the additional answer and can gate
-the operation without inferring support from the renderer name.
-
-`0.25.0` appended **one shader-payload identity**,
-`CNA_SHADER_DIALECT_SPIRV` (`7`), for renderers that require already-compiled SPIR-V bytecode
-rather than Vulkan GLSL source. The distinction is observable: native CNA Vulkan consumes SPIR-V
-words, while IGL's Vulkan renderer path compiled GLSL source, and both previously reported
-`CNA_SHADER_DIALECT_GLSL_VULKAN`. Existing identities retain values `0` through `6`; only
-`CNA_SHADER_DIALECT_MAXIMUM` moves from `6` to `7`. The minor increments because the closed
-enumerable range changed, and `VULKAN-264` recorded the renderer-side contract and tests (the
-VULKAN renderer and its plan were retired on 2026-10-13).
-
-A caller that handles `0.24.0` dialects by name is unchanged. A caller that iterates through
-`CNA_SHADER_DIALECT_MAXIMUM` sees one additional identity and can now choose the correct payload
-without inferring it from a renderer name.
-
-`0.24.0` added **one detailed renderer-feature identity**,
-`CNA_RENDERER_FEATURE_TEXTURE_3D_SAMPLING` (`30`), which asks whether a `Texture3D` bound to a
-custom effect is actually **sampled** by that shader. `CNA_RENDERER_FEATURE_TEXTURE_3D_STORAGE`
-answers only that a volume can be uploaded and read back, and the two came apart in practice: the
-Vulkan renderer carried `Texture3D` data faithfully for a long time with no `sampler3D` path at
-all, so a caller asking the storage question got `supported` and a shader reading the volume got
-nothing (`VULKAN-164`, finding `F-31`). No existing identity changes
-meaning; appending this one moves `CNA_RENDERER_FEATURE_MAXIMUM` from `29` to `30`, which is why
-the minor increments rather than the patch -- the same reason `0.8.0` gives for the five
-engine-layer capability identities it appended.
-
-A caller that iterates `0 .. CNA_RENDERER_FEATURE_MAXIMUM` sees one more entry than it did under
-`0.23.0`; one that names the identities it asks about sees no change at all.
-
-`0.23.0` added **one route**, `cna_decal_pass_is_supported`, and is otherwise
-identical to `0.22.0`. The addition closes a gap the language bindings recorded as
-`BINDFIX-018` in [`xna-fna-behavior-decisions.md`](../xna-fna-behavior-decisions.md): a
-decal pass is its own handle kind, so `cna_post_process_pass_is_supported` refuses it with
-`CNA_RESULT_INVALID_HANDLE`, and `cna_decal_pass_create` succeeds on a renderer that cannot run
-the pass -- which left a caller told to ask a question no route would answer. The header used to
-name that route anyway, so a caller who followed it also leaked the pass through
-`cna_post_process_pass_destroy`, which refuses the kind for the same reason.
-
-The change is purely additive: no existing route, constant, structure field or error rule moves.
-The minor increments because that is what this project does for every additive generation, and
-because a consumer needs a number to require.
-
-`0.22.0` **restored ten public renderer identities** -- `LLGL`, `SOKOL`,
-`DILIGENT`, `IGL`, `WICKED`, `MAGNUM`, `BLEND2D`, `NANOVG`, `OPENVG` and `TINYGL` -- together
-with the ten `CNA_GRAPHICS_RENDERER_*` constants that name them, and it moves
-`CNA_GRAPHICS_RENDERER_MAXIMUM` back from `49` to `50`. Every restored constant carries the
-same integer it had before `0.20.0` retired it, so a binding built against `0.19.0` or earlier
-sees the values it always saw; a binding built against `0.20.0`/`0.21.0` gains ten constants and
-a higher ceiling. `SKIA` alone stays retired, which leaves its number (`19`) a permanent gap in
-the identity range -- the reason `CNA_GRAPHICS_RENDERER_MAXIMUM` still may not be read as "every
-value below this names a live renderer".
-
-`0.21.0` added the small public-API tail introduced by SAMPLE-060/061, from
-C API task `CBIND-124`: `cna_environment_get_device_type` with its two fixed device
-identities, and the count/copy pair for an object dictionary's retained logical managed type name.
-All three routes are additive. The type-name pair matters because a content-loaded model tag can
-now preserve a closed generic identity such as `Dictionary<string, List<Vector3>>`; it is not the
-toolchain-dependent diagnostic spelling of an individual entry.
-
-`0.20.0` **removed eleven public renderer identities** -- `LLGL`, `SKIA`,
-`SOKOL`, `DILIGENT`, `IGL`, `WICKED`, `MAGNUM`, `BLEND2D`, `NANOVG`, `OPENVG` and `TINYGL` --
-together with the eleven `CNA_GRAPHICS_RENDERER_*` constants that named them, and it moves
-`CNA_GRAPHICS_RENDERER_MAXIMUM` from `50` to `49`. That is an incompatible change, which under
-the `0.x` rule below requires exactly this minor-version increment, these release notes and a
-regenerated baseline.
-
-The retired numbers are **not reused**: every surviving identity keeps the value it had, so a
-binding that passes `CNA_GRAPHICS_RENDERER_VULKAN` still passes the same integer. What breaks is
-a binding that names one of the eleven removed constants (it no longer compiles) or that compares
-against `CNA_GRAPHICS_RENDERER_MAXIMUM` (the ceiling moved). `docs/removed-renderers.md` records
-each identity, its retired number, what it proved and the pinned dependency it wrapped.
-
-`0.19.0` added **`Load<Model>`** and the **`Tag` its processor wrote**, from
-C API task `CBIND-118`: three routes and no new structures or handle kinds. This is the
-version that makes every other model route reachable for content -- before it a C game could build a
-model but never open one -- and with it `TrianglePickingSample`'s shape works end to end: load the
-model, take `cna_model_get_content_tag_dictionary_ext`, read the `BoundingSphere` and the
-`Vector3[]` of triangle vertices.
-
-It also narrows a boundary `0.18.0` had to state as unreachable. `Model.Tag` is the container that
-dispatches on a reflective reader's shape, so a type registered with
-`cna_reflective_type_reader_builder_register` rather than `..._register_shared` now fails the load
-with `CNA_RESULT_IO` instead of differing only cosmetically.
-
-`0.18.0` added the **`Dictionary<string, object>` a content processor writes** and
-the **reference-shaped reflective reader**, from C API task `CBIND-116`: fifteen routes
-over one new handle kind (`CNA_ObjectDictionaryHandle`), the `CNA_ObjectDictionaryValueKind`
-identity and one versioned structure (`CNA_ObjectDictionaryEntry`). With it a C application reads
-the side data a custom `ContentProcessor` ships beside an asset -- a `BoundingSphere`, a
-`Vector3[]`, or a type the application itself declared -- each entry keeping the type its own reader
-produced.
-
-Two boundaries this version states rather than implies. In C++ such a dictionary is reached through
-`Model.Tag`, and **no route in this ABI loads a `Model` from content**; it is reached here from an
-asset whose root object is the dictionary instead. And
-`cna_reflective_type_reader_builder_register_shared` differs from its value-shaped twin only in the
-C++ type an entry ends up holding on the paths C can reach, because a dictionary value is read
-through type-erased dispatch either way -- the container that refuses the wrong shape is
-`ModelReader`'s tag path, which C cannot reach.
-
-`0.17.0` added the **reflective content readers** from C API task
-`CBIND-105`: ten routes over one new handle kind (`CNA_ReflectiveTypeReaderBuilderHandle`), the
-`CNA_ContentFieldKind` identity and two callback types. With it a game can declare a reflectively
-serialized `.xnb` type's field list from C and have CNA read it.
-
-`0.16.0` added the **graphics tail** from C API task `CBIND-104`: five
-routes — the options-carrying raw vertex upload in both its whole-buffer and windowed forms, the
-`EffectMaterial` retained-texture pair, and the flag that says whether an occlusion query's pixel
-count is a tally or a boolean. No new structures and no new handle kinds.
-
-`0.15.0` added the `.cnb` **loader registry and the two compilation front ends** from
-C API task `CBIND-111`: twenty-eight `cna_cnb_*` routes over two new handle kinds
-(`CNA_CnbLoaderHandle`, `CNA_CnjToCnbResultHandle`), the `CNA_CnbLoaderCallback` extension point by
-which a game teaches CNA about an asset type CNA does not know, and one versioned structure. **With
-it a C application is a content compiler**: image, DDS, WAV and `.cnj` in, `.cnb` out.
-
-`0.14.0` added the `.cnb` **sprite-font, sound-effect, song, video, curve and
-animation-clip** schemas from C API task `CBIND-110`: forty-one `cna_cnb_*` routes over
-three new handle kinds (`CNA_CnbSpriteFontDataHandle`, `CNA_CnbSoundEffectDataHandle`,
-`CNA_CnbAnimationClipHandle`), the `CNA_CnbAudioFormat` identity with its six frozen wire values,
-three versioned structures, and the four schemas' chunk identifiers and strides. Three of the six
-schemas are bound to C values other families already publish -- `CNA_SpriteFontGlyph`,
-`CNA_CurveHandle` and `CNA_AnimationClipEXTDescriptor` -- rather than to parallel types of their own.
-
-`0.13.0` added the `.cnb` **model** schema from `CBIND-109`:
-seventy-one `cna_cnb_*` routes over two new handle kinds (`CNA_CnbModelDataHandle` and
-`CNA_CnbModelFromCnjHandle`), the `CNA_CnbEffectKind` identity with its six frozen wire values, four
-more selector identities (`CNA_CnbMaterialTextureSlot`, `CNA_CnbMorphDeltaStream`,
-`CNA_CnbMorphKeyStream`, `CNA_CnbSkeletonMatrixSet`), three unversioned value structures
-(`CNA_CnbTextureTransform`, `CNA_CnbSamplerState`, `CNA_CnbModelLight`) and eight versioned ones.
-
-`0.12.0` added the `.cnb` texture pixel formats and the `Texture2D`, `TextureCube`
-and `Texture3D` schemas from `CBIND-108`: twenty-eight `cna_cnb_*` routes,
-the `CNA_CnbTextureFormat` identity with its 27 frozen wire values, the `CNA_CnbTextureDataHandle`
-and the versioned `CNA_CnbTextureInfo`.
-
-`0.11.0` added the `.cnb` document, its bounded cursor and the two writers from `CBIND-107`: eighty
-routes over four new handle kinds (`CNA_CnbDocumentHandle`, `CNA_CnbReaderHandle`,
-`CNA_CnbByteWriterHandle`, `CNA_CnbWriterHandle`) and three new versioned structures
-(`CNA_CnbChunkEntry`, `CNA_CnbExternalReference`, `CNA_CnbMetadata`).
-
-`0.10.0` added the container itself, from `CBIND-106`: twenty-four routes over its identities,
-checksums, whole-file arithmetic, read limits and chunk compression, the `CNA_CnbChunkId` and
-`CNA_CnbCompression` identities, the versioned `CNA_CnbReadLimits` structure, and the format's
-byte-level constants.
-
-**All eight generations are purely additive** -- no existing route, constant, structure field or error
-rule changed, and the four evolution paths below are the ones taken. The minor moves anyway,
-because that is what this project has done for every additive generation since `0.4.0`: a consumer
-needs a number it can require, and `find_package(CNA 0.17 CONFIG)` is what asks for these routes.
-
-A C application can now compile source files into `.cnb`, build and parse a container, read its
-chunks, encode and decode every asset schema the format defines, and register a loader for an asset
-type of its own. The one thing still missing is the `ContentManager` hook that reaches the registry
-during an ordinary `Load` -- a C-registered loader is invoked directly rather than through a
-manager; `docs/c-api/CNB.md` says exactly where that line falls.
-
-`0.9.0` added the owned-`GraphicsDevice` routes
-(`cna_graphics_device_create`/`_destroy`), the render-target ContentLost subscription
-(`cna_render_target_subscribe_content_lost`/`_unsubscribe_content_lost` and the
-`CNA_RenderTargetEventRegistrationHandle` they hand back), and the frame-identity route
-`cna_video_player_get_frame_ext` with its `CNA_VideoFrameEXT` descriptor and
-`CNA_VIDEO_FRAME_EXT_STRUCT_VERSION`.
-
-Those `0.9.0` additions alone would have been additive. Its minor moved because `0.9.0` also
-**changed seven documented contracts**. A consumer that read the `0.8.0` headers was told something other than what
-now happens in each case, so each is worth reading before adopting this generation:
-
-- **`SoundEffectInstance.Apply3D` refuses on a playing instance that was never positioned.** This
-  is the one most likely to be hit, and the only one that turns a succeeding call into a failing
-  one: it returns `CNA_RESULT_INVALID_STATE`. Starting playback fixes the choice between 3D and
-  pan, which is the reference behaviour -- the packet is submitted on the first play. Position the
-  instance first and then play it, or stop it, position it, and play again.
-- **`SoundEffectInstance.Apply3D` accepts any positive listener count.** It previously refused every
-  count but one. The reference implementation has no count restriction; where several listeners are
-  given, the nearest to the emitter decides the applied attenuation, pan and Doppler, because this
-  runtime's mixer has a single stereo gain pair and no per-listener output matrices.
-- **Non-finite sprite values are accepted.** NaN and the infinities in a position, rotation,
-  origin, scale, layer depth or transform component were refused with
-  `CNA_RESULT_INVALID_ARGUMENT`; they are now carried into the vertex path, which is what the
-  reference implementation does -- it validates none of them. The Int32 destination range check is
-  unchanged and still refuses a finite value too large to be a representable destination.
-  `cna_sprite_batch_draw_mesh_ext` kept its own finiteness check, having no reference counterpart
-  (that route was removed in `0.29.0`).
-- **An unnamed `SpriteSortMode` value is accepted.** Values outside the named set previously came
-  back as `CNA_RESULT_INVALID_ARGUMENT`; they now pass through and run as `Deferred`, which is what
-  the reference implementation does.
-- **ContentLost is raised.** Through `0.8.0` the dynamic vertex- and index-buffer headers stated
-  that CNA never raises the event and that registration existed only to preserve the shape of the
-  public contract. It is now raised for real on the renderers whose API can lose a device
-  (DirectX9, Direct2D, Skia). A consumer that registered a callback expecting it to be dead will
-  now see it called.
-- **A render target's ContentLost flag is cleared again.** It was set on a device reset and never
-  cleared, so a target that lost its content reported `IsContentLost` for the rest of its life.
-  Binding it as a render target now clears it; see the note under that route for exactly when.
-- **A video frame generation is never restarted.** The counter is monotonic for the lifetime of the
-  player. `Play` and `Stop` previously reset it, which gave the first frame of every playback the
-  same generation and so defeated the one comparison the value exists to support.
-
-Four of those seven -- the two `Apply3D` changes, the sort mode and the layer-depth half of the
-non-finite change -- landed while the version still read `0.8.0` and so were briefly unversioned. That is the defect this bump repairs: `0.9.0` is the
-first version number a consumer can use to tell any of them apart.
-
-`0.8.0` added the NanoVG renderer identity and the five engine-layer capability identities for
-float and half-float render targets, half-float texture filtering, compute shaders, and indirect
-drawing. Appending those identities moves the two public `MAXIMUM` sentinels, so it too was a
-reviewed incompatible change rather than an additive patch to `0.7.0`.
-
-`0.7.0` added the six PBR and morph-target routes from `CBIND-078`; `0.6.0` standardized empty
-shader-source refusal in `CBIND-075`; `0.5.0` added the portable native-window handle routes from
-`CBIND-072`; and `0.4.0` added `cna_content_manager_register_cnj_loader_ext`. `0.1.0` was the
-initial version, while `0.2.0` added the routes recorded in C API tasks CBIND-054 through
-CBIND-058, every one of them additive. `0.3.0` was **not** additive and that is why the minor moved:
-`CBIND-067` made all 94 routes taking a `CNA_Bool` refuse a byte outside {0, 1}, where 66 of them
-used to accept one. A caller that passed only `CNA_FALSE` and `CNA_TRUE` -- what this document has
-always required -- is unaffected. A caller that passed anything else was already getting a value
-read as true in some routes and false in others, so there was no consistent behaviour to preserve.
+Every generation moves the minor, additive ones included, so a consumer has a number to require.
+Kinds: *additive* (new names only); *range* (a closed enumerable range grew, so its `MAXIMUM`
+moved); *rule* (an existing route's behaviour or error rule changed); *break* (a name, value,
+layout or export was removed or changed). The task IDs are decoded in
+[`../task-id-index.md`](../task-id-index.md).
+
+| ABI | Change | Kind |
+|---|---|---|
+| 0.59–0.55 | The families listed under *ABI identity*: native closure routes (0.59), content (0.58), service (0.57), and the graphics, shader, sampler and CNB families before them | Additive; 0.59 also corrects two rules (above) |
+| 0.54.0 | Gamepad value strings; packed-vector and display-mode hash/strings; graphics-device-information equality/hash; `CNA_GraphicsDeviceTypeEXT` with adapter queries; `cna_graphics_device_get_logical_size_ext`; input-emulation switches; `cna_project_graphics_profile_{get,set}_ext` | Additive |
+| 0.53.0 | Static profile-legality queries `cna_texture_is_{,cube_,render_target_}format_allowed_by_profile_ext`: explicit profile and format, no device, any thread | Additive |
+| 0.52.0 | `cna_content_manager_load_video`: an independently owned Video from `ContentManager.Load<Video>` | Additive |
+| 0.51.0 | Renderer identity `SDL_GPU` renamed `SDLGPU`; `CNA_GRAPHICS_RENDERER_SDLGPU` keeps value `31`, the old name is not an alias and the textual `SDL_GPU` selector is rejected | Break (source) |
+| 0.50.0 | Skinned-model part diffuse colour routes; `CNA_DisplayColorSpace` types the three display-colour-space routes again (same `uint32_t` signatures); CNB model cameras (`CNA_CNB_MODEL_CHUNK_CAMERAS`, `CNA_CnbModelCamera`, five routes); renderer features `32`--`36`, `CNA_RENDERER_FEATURE_MAXIMUM` `36` | Additive, range |
+| 0.49.0 | The renderer classification surface uses the renderer vocabulary: `CNA_GraphicsRenderer{Category,Maturity}`, `CNA_GRAPHICS_RENDERER_{CATEGORY,MATURITY}_*` and eight `cna_graphics_renderer_*` routes replace the former names; values, signatures and answers unchanged, no aliases | Break (source and binary) |
+| 0.48.0 | Renderer identities `SDL_RENDERER` (`1`), `VULKAN` (`8`), `DIRECTX11` (`14`) and `METAL` (`42`) retired; their values are reserved and refused | Break (source) |
+| 0.47.0 | The retired modern GPU layer's C surface removed: compute/indirect capabilities, renderer features `18`--`20` and `23`, compute/storage/timer limits, storage format-usage bits, indirect-draw structures and routes, compute work-group queries; surviving numbers unchanged, retired ones reserved | Break |
+| 0.46.0 | `CNA_NATIVE_WINDOW_SYSTEM_UIKIT` (`9`): iOS/iPadOS report SDL's `UIWindow*` | Range |
+| 0.45.0 | Renderer identities `OPENGLES2` (`2`), `WEBGL1` (`5`), `DIRECTX12` (`15`) and `CANVAS` (`17`) retired | Break (source) |
+| 0.44.0 | The activated/deactivated handlers run inside a callback scope and can borrow the game's device | Rule |
+| 0.43.0 | `cna_sound_effect_play` and `_play_with_settings` answer on any thread, as XNA's `SoundEffect.Play` did | Rule |
+| 0.42.0 | `cna_game_get_graphics_device` lends the device before the run begins, on the creating thread | Rule |
+| 0.41.0 | `cna_game_run_foreign_thread_calls_ext`: run queued foreign-thread calls now | Additive |
+| 0.40.0 | The twelve `cna_graphics_adapter_*` routes also accept the active game's own handle | Rule |
+| 0.39.0 | `cna_game_set_foreign_thread_calls_ext`: opt-in queuing of other threads' calls to the game thread | Additive |
+| 0.38.0 | `cna_game_run_frame_ext`: a host-driven run, one frame per call, that begins and ends the run | Additive |
+| 0.37.0 | Four routes naming the .NET exception type and parameter behind a thread's last failure | Additive |
+| 0.36.0 | `cna_packet_reader_copy_data_ext` | Additive |
+| 0.35.0 | `next`'s 0.33.0 merged with the gamer-services line's 0.34.0 under a number neither used; within 0.35.0, `CNA_CNB_SOUND_EFFECT_SCHEMA_VERSION` was corrected from `1` to `2` (the schema the library already wrote; owner-approved, BINDFIX-048) | Rebuild |
+| 0.34.0 (gamer-services line) | `cna_guide_set_is_visible` and `cna_guide_set_is_trial_mode` removed (XNA keeps them internal) | Break |
+| 0.33.0 (gamer-services line) | The standard avatar types render for real; the Avatar real-rendering extension (eleven routes, one structure) removed; `CNA_AvatarRendererInfo` keeps its size | Break |
+| 0.33.0 (`next`) | Renderer identities `HTML_DOM` (`18`), `OPENGL4` (`33`), `GDI` (`40`) and `SVG_DOM` (`44`) retired; `CNA_GRAPHICS_RENDERER_MAXIMUM` `43` | Break (source) |
+| 0.32.0 | Achievement and gamer-profile picture copy routes; Guide/Dispatcher routes reflect configured service availability and real authentication | Additive, rule |
+| 0.31.0 | Renderer identities `DIRECT2D` (`16`), `FREEDIRECT` (`21`) and `PORTABLEGL` (`46`) retired; maximum `44` | Break (source) |
+| 0.30.0 | `engine_layer.h` with its routes, handles, enums and layouts removed; `graphics_ext.h` keeps ASCII, CRT, colour-depth and DebugDraw | Break |
+| 0.29.0 | The SpriteBatch 2D mesh route and its versioned structure removed: no renderer implemented it, so every caller already got `CNA_RESULT_NOT_SUPPORTED` | Break |
+| 0.28.0 | Twenty-five renderer identities retired; maximum `46` | Break (source) |
+| 0.27.0 | `CNA_GRAPHICS_RENDERER_RLGL` (`51`) | Range |
+| 0.26.0 | `CNA_RENDERER_FEATURE_BASE_INSTANCE_DRAWING` (`31`) | Range |
+| 0.25.0 | `CNA_SHADER_DIALECT_SPIRV` (`7`): already-compiled SPIR-V distinguished from Vulkan GLSL source | Range |
+| 0.24.0 | `CNA_RENDERER_FEATURE_TEXTURE_3D_SAMPLING` (`30`), separate from volume storage | Range |
+| 0.23.0 | `cna_decal_pass_is_supported` | Additive |
+| 0.22.0 | Ten renderer identities restored with their former values | Range |
+| 0.21.0 | `cna_environment_get_device_type`; object-dictionary logical type-name pair | Additive |
+| 0.20.0 | Eleven renderer identities removed; their values are not reused | Break (source) |
+| 0.19.0 | `Load<Model>` and the content `Tag` its processor wrote (three routes) | Additive |
+| 0.18.0 | The content-processor `Dictionary<string, object>` (`CNA_ObjectDictionaryHandle`) and the reference-shaped reflective reader | Additive |
+| 0.17.0 | Reflective content readers (`CNA_ReflectiveTypeReaderBuilderHandle`) | Additive |
+| 0.16.0 | Options-carrying raw vertex uploads, the `EffectMaterial` retained-texture pair, the occlusion-query precision flag | Additive |
+| 0.15.0–0.10.0 | The `.cnb` container (0.10), document, cursor and writers (0.11), texture (0.12), model (0.13) and sprite-font/audio/curve/animation schemas (0.14), loader registry and compilation front ends (0.15) | Additive |
+| 0.9.0 | Owned GraphicsDevice routes, render-target ContentLost subscription and video frame identity; contract changes: `Apply3D` refuses on a playing instance never positioned and accepts any positive listener count, non-finite sprite values and unnamed `SpriteSortMode` values are accepted (the latter run as `Deferred`), ContentLost is raised, video frame generations never restart | Additive, rule |
+| 0.8.0 | NanoVG identity and five engine-layer capability identities | Range |
+| 0.7.0 | Six PBR and morph-target routes | Additive |
+| 0.6.0 | Empty shader source refused uniformly | Rule |
+| 0.5.0 | Portable native-window handle routes | Additive |
+| 0.4.0 | `cna_content_manager_register_cnj_loader_ext` | Additive |
+| 0.3.0 | Every route taking a `CNA_Bool` refuses a byte outside {0, 1} | Break |
+| 0.2.0 | Routes of CBIND-054..058 | Additive |
+| 0.1.0 | Initial version | — |
+
+A retired renderer identity's value is permanently reserved and never assigned to another renderer;
+a new identity takes the next never-assigned value, **`52`**, not `MAXIMUM + 1`.
+`scripts/check_renderer_identities.py` fails the build if a retired value or name is reused, and
+[`../removed-renderers.md`](../removed-renderers.md) lists every retired identity and its value.
 
 ## Version encoding and compatibility
 
@@ -782,16 +188,10 @@ a new ABI major.
 surface a given build compiled out answers `CNA_RESULT_NOT_SUPPORTED` instead, because refusing an
 argument to a route that does not exist there would be the wrong answer.
 
-That is `0.3.0` behaviour and it was not always so. `CBIND-066` measured the previous state: of the
-94 routes taking a `CNA_Bool` by value, 28 refused a non-canonical byte and **66 accepted one** --
-then disagreed about what they had accepted, since the implementation read the flag as
-`!= CNA_FALSE` in 97 places and as `== CNA_TRUE` in 77. A byte of `9` therefore meant **true** in
-one route and **false** in another. `CBIND-067` made all 94 uniform.
-
+Before `0.3.0` some routes read a non-canonical byte as true and others as false (`CBIND-066`).
 The guarantee is held by a **generated** test rather than by a hand-maintained route list
 (`tools/c-api/generate_bool_contract_test.py`, run as `CApi_BoolContractSmoke`), so a route declared
-with a new flag parameter is covered the moment it is declared. The current test covers **98**
-routes; the 94 above is the historical `0.3.0` measurement. The generator errors on a by-value
+with a new flag parameter is covered the moment it is declared. The generator errors on a by-value
 parameter type it has no stand-in for rather than dropping that route, so the covered set cannot
 shrink quietly.
 
@@ -908,12 +308,11 @@ Two gates run it:
 - `CApiAbiBaseline` adds the two halves only a built library can answer — its own ABI version and
   its export list — and runs for native ELF and Mach-O C API libraries.
 
-Until CBIND-159 the probe skipped every macro whose value opens with a parenthesis, so the
-capability and format-usage flag bits and `CNA_RENDERER_FORMAT_USAGE_ALL` were not
-recorded, and floating constants were recorded truncated (`CNA_MATH_PI` as `3`). Both are now
-measured, and `tools/c-api/test_generate_abi_baseline.py` (`CApiAbiBaselineTests`) proves that a
-moved or removed flag and a changed mask are reported as breaks, and that no value macro of the
-public headers goes unmeasured.
+The probe measures parenthesized macros (flag bits and masks such as
+`CNA_RENDERER_FORMAT_USAGE_ALL`) and floating constants at full precision (CBIND-159);
+`tools/c-api/test_generate_abi_baseline.py` (`CApiAbiBaselineTests`) proves that a moved or removed
+flag and a changed mask are reported as breaks, and that no value macro of the public headers goes
+unmeasured.
 
 What one cannot see, it skips **by name**: a header-only run reports the export list and the
 runtime version as skipped rather than passing over them in silence.

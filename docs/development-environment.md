@@ -1,14 +1,14 @@
 # CNA development environment — Debian 13
 
 What a fresh Debian 13 ("trixie") machine, desktop or headless, needs to build CNA natively and
-run its tests. This is a host/configuration recipe, reconciled on 2026-11-01, not a claim that
-every target or the entire test matrix runs after one package install. Current CMake probes and
+run its tests. This is a host/configuration recipe, not a claim that every target or the entire
+test matrix runs after one package install. Current CMake probes and
 feature messages define the selected dependency set; optional missing tools can disable/skip
 checks, while required dependencies fail configuration.
 
 Install the baseline, fetch the sibling checkouts and submodules, then add only the optional
 groups you need. The build commands themselves are in the repository
-[`README.md`](../README.md), *Getting Started*.
+[`README.md`](../README.md), *Building and running tests*.
 
 ## Baseline
 
@@ -66,9 +66,9 @@ the record of the install it uses, so an interrupted rebuild there makes its nex
 Directories under `manifests/` that no tree uses any more, after a pin or compiler change, can be
 deleted by hand.
 
-The isolation fix is `dcac546f3`; `7ddf4c44e` exercises real lock/publication and
-interrupted-install recovery with a fake SDL producer, without modifying the SDL submodule.
-On Linux with Python 3, CMake, a native compiler and a configured test tree:
+`CnaSdlPrebuiltState` and `CnaSdlPrebuiltPublication` exercise real lock/publication and
+interrupted-install recovery with a fake SDL producer, without modifying the SDL submodule. On
+Linux with Python 3, CMake, a native compiler and a configured test tree:
 
 ```bash
 ctest --test-dir cmake-build-debug --no-tests=error \
@@ -121,6 +121,17 @@ git submodule update --init
   submodules and Draco's test dependencies, which CNA's configuration builds none of, so the plain
   `git submodule update --init` suffices for the normal CNA configuration. Upstream test/codec
   configurations can require additional nested sources.
+- GitHub's "Download ZIP" and release archives do not include submodule contents. With an empty
+  `third_party/SDL` the configure stops (`Missing vendored 'SDL' ... Run: git submodule update
+  --init`, from `cmake/ThirdPartySDL.cmake`). Clone with Git and run the command above, or use
+  system SDL (below).
+- `-DCNA_USE_SYSTEM_SDL=ON` links system-installed SDL3 and SDL3_mixer instead of the vendored
+  submodules: it calls `find_package(SDL3 REQUIRED)` and `find_package(SDL3_mixer REQUIRED)`, so
+  both packages must be installed.
+
+  ```bash
+  cmake -S . -B build -DCNA_USE_SYSTEM_SDL=ON -DCNA_GRAPHICS_RENDERER=OPENGLES3
+  ```
 - Some renderer dependencies are downloaded at configure time instead: the pinned wgpu-native
   release for `WEBGPU` (`CNA_WEBGPU_ROOT` for an offline build), FNA3D and MojoShader -- CNA's
   forks libcna/FNA3D and libcna/mojoshader, see `docs/fna3d-renderer.md` -- for `FNA3D` and the
@@ -252,10 +263,8 @@ sudo apt-get install -y mesa-utils vulkan-tools vulkan-validationlayers apitrace
 
 ## Verification boundary
 
-The 2026-11-01 audit checks current CMake/CI scripts, all 40 package names in the installation
-blocks against the host's apt index, and Debian's CMake/Doxygen/Draco/DXVK package metadata.
-Existing native builds/probes run during the documentation campaign use this host; no clean
-machine installation, package upgrade, new Wine-prefix setup or cross-toolchain provisioning was
-performed. Respect the eight-job build limit and use the private runner for every GPU/window test.
-All nine focused dependency/cache/patch/header/deployment configuration checks pass in the existing
-multi tree through the private runner; this does not replace a fresh-system installation test.
+The package names above were checked against Debian's apt index and package metadata, and the
+focused dependency/cache/patch/header/deployment configuration checks passed through the private
+runner. No clean-machine installation, package upgrade, new Wine-prefix setup or cross-toolchain
+provisioning has been recorded; that remains a fresh-system installation test. Respect the
+eight-job build limit and use the private runner for every GPU/window test.

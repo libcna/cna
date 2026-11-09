@@ -1,6 +1,6 @@
 # Documentation index
 
-Reconciled 2026-11-01. This is the topical index of the top-level pages in `docs/`; the
+This is the topical index of the top-level pages in `docs/`; the
 [C API index](c-api/README.md) covers its nested contract pages.
 
 The 2026-10-31 to 2026-11-01 review checked the pages against their owning sources, tests and
@@ -33,7 +33,7 @@ their stated metadata/source checks, rather than proving complete behavioral par
 ## Build, architecture and release
 
 - [development-environment.md](development-environment.md) — Debian/Linux dependencies, sibling
-  checkouts, submodules and optional feature groups.
+  checkouts, submodules, optional feature groups, and system-SDL and source-archive builds.
 - [windows-visual-studio.md](windows-visual-studio.md) — Native Windows presets, Visual Studio/VS
   Code, MSVC runtime consistency, deployment and CI evidence.
 - [installed-cpp-sdk.md](installed-cpp-sdk.md) — Opt-in installed C++ SDK, exported modules,
@@ -297,9 +297,7 @@ their stated metadata/source checks, rather than proving complete behavioral par
 ## Diagnostics and inspection
 
 - [diagnostics.md](diagnostics.md) — OFF/STATS/FULL profiler architecture, metrics, event/trace
-  formats and provider boundaries.
-- [diagnostics-benchmark.md](diagnostics-benchmark.md) — Dated diagnostics microbenchmarks and
-  methodology.
+  formats, provider boundaries and the instrumentation overhead benchmark.
 - [inspector.md](inspector.md) — Optional authenticated out-of-process Inspector, protocol/UI and
   capabilities.
 
