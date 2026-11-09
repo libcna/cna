@@ -1,0 +1,149 @@
+Signature = XACT3;
+Version = 18;
+Content Version = 46;
+Release = February 2010;
+Options
+{
+Verbose Report = 1;
+Generate C/C++ Headers = 0;
+}
+Global Settings
+{
+Windows File = shapes.xgs;
+Exclude Category Names = 0;
+Exclude Variable Names = 0;
+Category
+{
+Name = Default;
+Public = 1;
+Volume = 0;
+
+}
+Variable
+{
+Name = Branch;
+Public = 1;
+Global = 1;
+Internal = 0;
+Read Only = 0;
+Time = 0;
+Value = 0;
+Initial Value = 0;
+Min = 0;
+Max = 1;
+}
+
+}
+Wave Bank
+{
+Name = ShapeA;
+Windows File = A.xwb;
+Streaming = 0;
+Alignment = 2048;
+Entry Names = 1;
+Wave
+{
+Name = A0;
+File = a0.wav;
+}
+Wave
+{
+Name = A1;
+File = a1.wav;
+}
+
+}
+Wave Bank
+{
+Name = ShapeB;
+Windows File = B.xwb;
+Streaming = 0;
+Alignment = 2048;
+Entry Names = 1;
+Wave
+{
+Name = B0;
+File = b0.wav;
+}
+
+}
+Sound Bank
+{
+Name = ShapeSounds;
+Windows File = shapes.xsb;
+Exclude Cue Names = 0;
+Sound
+{
+Name = SoundA;
+Volume = 0;
+Pitch = 0;
+Priority = 0;
+Category Entry
+{
+Name = Default;
+}
+Track
+{
+Volume = 0;
+Play Wave Event
+{
+Loop Count = 4;
+Event Header
+{
+Timestamp = 0;
+Relative = 0;
+}
+Variation
+{
+Variation Type = 0;
+Variation Table Type = 0;
+New Variation On Loop = 0;
+}
+Wave Entry
+{
+Entry Name = A0;
+Entry Index = 0;
+Bank Name = ShapeA;
+Bank Index = 0;
+Weight = 255;
+Weight Min = 0;
+}
+Wave Entry
+{
+Entry Name = A1;
+Entry Index = 1;
+Bank Name = ShapeA;
+Bank Index = 0;
+Weight = 255;
+Weight Min = 0;
+}
+
+}
+Marker Event
+{
+Data = 11;
+Event Header
+{
+Timestamp = 250;
+Relative = 0;
+}
+
+}
+
+}
+
+}
+Cue
+{
+Name = ShapeCue;
+Sound Entry
+{
+Name = SoundA;
+Index = 0;
+Weight Min = 0;
+Weight Max = 255;
+}
+
+}
+
+}

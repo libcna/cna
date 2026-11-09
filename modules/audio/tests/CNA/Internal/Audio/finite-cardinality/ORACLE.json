@@ -1,0 +1,447 @@
+{
+ "task": "HND-XACT-05",
+ "source": "Refresh-selected genuine Microsoft XACT3.6 x86 and x64, native-v6-cardinality cells (PROVENANCE.json)",
+ "rule": [
+  "A play-wave event with raw loop byte n (0..4 measured) plays its wave n+1 times; the track properties report loopCount n and duration (n+1) x the wave length.",
+  "PlayWaveTrackVariation with NEW_ON_LOOP (variation bit 22): every pass is a separate complete wave (n+1 PREPARED/PLAY/STOP/DESTROY), each the next ordered candidate.",
+  "PlayWave, or PlayWaveTrackVariation without NEW_ON_LOOP: one wave (the first ordered candidate) is held for n+1 passes; a single PREPARED/PLAY/STOP/DESTROY.",
+  "The play-wave flags byte (0x0c versus 0x00: Use Center Speaker 0x04, New Speaker Position On Loop 0x08) changes nothing."
+ ],
+ "measured_on": [
+  "event types 1 and 3, ordered track variation with two candidates in one resident bank",
+  "flags 0x0c and 0x00",
+  "raw loop bytes 0,1,2,3,4",
+  "one-second waves without a loop region",
+  "x86 and x64, lookahead 250 ms, two repeats of the type-3 NEW_ON_LOOP sweep"
+ ],
+ "not_measured": [
+  "event types 4 and 6 (effect variations) and their effect NEW_ON_LOOP bits",
+  "waves with a loop region (what the delegated wave loop repeats)",
+  "random/shuffle track variations",
+  "raw bytes 5..254; 255 keeps CNA's owner-approved policy",
+  "streaming banks, cross-bank candidates and Microsoft PCM/gain"
+ ],
+ "pass_unit": "a pass is one hold of the same architecture's one-wave resident control (about 660-700 ms under Wine's XAudio2)",
+ "variants": {
+  "base/raw0": {
+   "event_type": 3,
+   "flags": 12,
+   "loop_count": 0,
+   "track_new_on_loop": true,
+   "activations": 1,
+   "play_order": [
+    0
+   ],
+   "passes_per_activation": [
+    1
+   ],
+   "track_properties": {
+    "loop_count": 0,
+    "duration_ms": 1000
+   },
+   "markers": [
+    11
+   ]
+  },
+  "base/raw1": {
+   "event_type": 3,
+   "flags": 12,
+   "loop_count": 1,
+   "track_new_on_loop": true,
+   "activations": 2,
+   "play_order": [
+    0,
+    1
+   ],
+   "passes_per_activation": [
+    1
+   ],
+   "track_properties": {
+    "loop_count": 1,
+    "duration_ms": 2000
+   },
+   "markers": [
+    11
+   ]
+  },
+  "base/raw2": {
+   "event_type": 3,
+   "flags": 12,
+   "loop_count": 2,
+   "track_new_on_loop": true,
+   "activations": 3,
+   "play_order": [
+    0,
+    1,
+    0
+   ],
+   "passes_per_activation": [
+    1
+   ],
+   "track_properties": {
+    "loop_count": 2,
+    "duration_ms": 3000
+   },
+   "markers": [
+    11
+   ]
+  },
+  "base/raw3": {
+   "event_type": 3,
+   "flags": 12,
+   "loop_count": 3,
+   "track_new_on_loop": true,
+   "activations": 4,
+   "play_order": [
+    0,
+    1,
+    0,
+    1
+   ],
+   "passes_per_activation": [
+    1
+   ],
+   "track_properties": {
+    "loop_count": 3,
+    "duration_ms": 4000
+   },
+   "markers": [
+    11
+   ]
+  },
+  "base/raw4": {
+   "event_type": 3,
+   "flags": 12,
+   "loop_count": 4,
+   "track_new_on_loop": true,
+   "activations": 5,
+   "play_order": [
+    0,
+    1,
+    0,
+    1,
+    0
+   ],
+   "passes_per_activation": [
+    1
+   ],
+   "track_properties": {
+    "loop_count": 4,
+    "duration_ms": 5000
+   },
+   "markers": [
+    11
+   ]
+  },
+  "flags0/raw0": {
+   "event_type": 3,
+   "flags": 0,
+   "loop_count": 0,
+   "track_new_on_loop": true,
+   "activations": 1,
+   "play_order": [
+    0
+   ],
+   "passes_per_activation": [
+    1
+   ],
+   "track_properties": {
+    "loop_count": 0,
+    "duration_ms": 1000
+   },
+   "markers": [
+    11
+   ]
+  },
+  "flags0/raw1": {
+   "event_type": 3,
+   "flags": 0,
+   "loop_count": 1,
+   "track_new_on_loop": true,
+   "activations": 2,
+   "play_order": [
+    0,
+    1
+   ],
+   "passes_per_activation": [
+    1
+   ],
+   "track_properties": {
+    "loop_count": 1,
+    "duration_ms": 2000
+   },
+   "markers": [
+    11
+   ]
+  },
+  "flags0/raw2": {
+   "event_type": 3,
+   "flags": 0,
+   "loop_count": 2,
+   "track_new_on_loop": true,
+   "activations": 3,
+   "play_order": [
+    0,
+    1,
+    0
+   ],
+   "passes_per_activation": [
+    1
+   ],
+   "track_properties": {
+    "loop_count": 2,
+    "duration_ms": 3000
+   },
+   "markers": [
+    11
+   ]
+  },
+  "flags0/raw3": {
+   "event_type": 3,
+   "flags": 0,
+   "loop_count": 3,
+   "track_new_on_loop": true,
+   "activations": 4,
+   "play_order": [
+    0,
+    1,
+    0,
+    1
+   ],
+   "passes_per_activation": [
+    1
+   ],
+   "track_properties": {
+    "loop_count": 3,
+    "duration_ms": 4000
+   },
+   "markers": [
+    11
+   ]
+  },
+  "flags0/raw4": {
+   "event_type": 3,
+   "flags": 0,
+   "loop_count": 4,
+   "track_new_on_loop": true,
+   "activations": 5,
+   "play_order": [
+    0,
+    1,
+    0,
+    1,
+    0
+   ],
+   "passes_per_activation": [
+    1
+   ],
+   "track_properties": {
+    "loop_count": 4,
+    "duration_ms": 5000
+   },
+   "markers": [
+    11
+   ]
+  },
+  "nol0/raw0": {
+   "event_type": 3,
+   "flags": 12,
+   "loop_count": 0,
+   "track_new_on_loop": false,
+   "activations": 1,
+   "play_order": [
+    0
+   ],
+   "passes_per_activation": [
+    1
+   ],
+   "track_properties": {
+    "loop_count": 0,
+    "duration_ms": 1000
+   },
+   "markers": [
+    11
+   ]
+  },
+  "nol0/raw1": {
+   "event_type": 3,
+   "flags": 12,
+   "loop_count": 1,
+   "track_new_on_loop": false,
+   "activations": 1,
+   "play_order": [
+    0
+   ],
+   "passes_per_activation": [
+    2
+   ],
+   "track_properties": {
+    "loop_count": 1,
+    "duration_ms": 2000
+   },
+   "markers": [
+    11
+   ]
+  },
+  "nol0/raw2": {
+   "event_type": 3,
+   "flags": 12,
+   "loop_count": 2,
+   "track_new_on_loop": false,
+   "activations": 1,
+   "play_order": [
+    0
+   ],
+   "passes_per_activation": [
+    3
+   ],
+   "track_properties": {
+    "loop_count": 2,
+    "duration_ms": 3000
+   },
+   "markers": [
+    11
+   ]
+  },
+  "nol0/raw3": {
+   "event_type": 3,
+   "flags": 12,
+   "loop_count": 3,
+   "track_new_on_loop": false,
+   "activations": 1,
+   "play_order": [
+    0
+   ],
+   "passes_per_activation": [
+    4
+   ],
+   "track_properties": {
+    "loop_count": 3,
+    "duration_ms": 4000
+   },
+   "markers": [
+    11
+   ]
+  },
+  "nol0/raw4": {
+   "event_type": 3,
+   "flags": 12,
+   "loop_count": 4,
+   "track_new_on_loop": false,
+   "activations": 1,
+   "play_order": [
+    0
+   ],
+   "passes_per_activation": [
+    5
+   ],
+   "track_properties": {
+    "loop_count": 4,
+    "duration_ms": 5000
+   },
+   "markers": [
+    11
+   ]
+  },
+  "type1/raw0": {
+   "event_type": 1,
+   "flags": 12,
+   "loop_count": 0,
+   "track_new_on_loop": false,
+   "activations": 1,
+   "play_order": [
+    0
+   ],
+   "passes_per_activation": [
+    1
+   ],
+   "track_properties": {
+    "loop_count": 0,
+    "duration_ms": 1000
+   },
+   "markers": [
+    11
+   ]
+  },
+  "type1/raw1": {
+   "event_type": 1,
+   "flags": 12,
+   "loop_count": 1,
+   "track_new_on_loop": false,
+   "activations": 1,
+   "play_order": [
+    0
+   ],
+   "passes_per_activation": [
+    2
+   ],
+   "track_properties": {
+    "loop_count": 1,
+    "duration_ms": 2000
+   },
+   "markers": [
+    11
+   ]
+  },
+  "type1/raw2": {
+   "event_type": 1,
+   "flags": 12,
+   "loop_count": 2,
+   "track_new_on_loop": false,
+   "activations": 1,
+   "play_order": [
+    0
+   ],
+   "passes_per_activation": [
+    3
+   ],
+   "track_properties": {
+    "loop_count": 2,
+    "duration_ms": 3000
+   },
+   "markers": [
+    11
+   ]
+  },
+  "type1/raw3": {
+   "event_type": 1,
+   "flags": 12,
+   "loop_count": 3,
+   "track_new_on_loop": false,
+   "activations": 1,
+   "play_order": [
+    0
+   ],
+   "passes_per_activation": [
+    4
+   ],
+   "track_properties": {
+    "loop_count": 3,
+    "duration_ms": 4000
+   },
+   "markers": [
+    11
+   ]
+  },
+  "type1/raw4": {
+   "event_type": 1,
+   "flags": 12,
+   "loop_count": 4,
+   "track_new_on_loop": false,
+   "activations": 1,
+   "play_order": [
+    0
+   ],
+   "passes_per_activation": [
+    5
+   ],
+   "track_properties": {
+    "loop_count": 4,
+    "duration_ms": 5000
+   },
+   "markers": [
+    11
+   ]
+  }
+ }
+}
