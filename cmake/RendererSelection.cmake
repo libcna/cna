@@ -192,6 +192,13 @@ if(CNA_GRAPHICS_RENDERER STREQUAL "OPENGLES3" OR CNA_GRAPHICS_RENDERER STREQUAL 
             set(EASYGL_EMSCRIPTEN_EXCEPTION_MODEL "JS" CACHE STRING
                 "Exception ABI used by easy-gl when embedded in CNA" FORCE)
         endif()
+        # easy-gl's own suite defaults ON. A CNA build that builds no tests (a consumer such as a
+        # template or a demo) must not register easy-gl tests nobody builds, which a plain ctest
+        # then reports as "Not Run". An explicit EASYGL_BUILD_TESTS still wins.
+        if(NOT DEFINED EASYGL_BUILD_TESTS)
+            set(EASYGL_BUILD_TESTS ${CNA_BUILD_TESTS} CACHE BOOL
+                "Build easy-gl's own tests (defaults to CNA_BUILD_TESTS when CNA adds easy-gl)")
+        endif()
         add_subdirectory("${CNA_EASYGL_ROOT}" easy-gl)
         set(_cna_easygl_subdir_added TRUE)
         # cmake/DependencyVersions.cmake: easy-gl and the meta-gl it adds from its own
