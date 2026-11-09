@@ -507,6 +507,16 @@ These are current decisions, not open defects:
 - **SpriteEffect's MatrixTransform follows FNA, including M33 = -1** (owner decision 2026-11-04,
   TQ-035). XNA has no public SpriteEffect; its internal SpriteBatch matrix has M33 = +1
   (`SpriteBatch.SetRenderState` IL_0104-0188). CNA's public class is FNA's and is marked CNAEXT.
+- **Disposing the GraphicsDevice disposes its children, and the back buffer stays stable** (owner
+  decision 2026-11-09, HND-TQ-47 R1/R2, HND-TQ-49 D3). XNA's `!GraphicsDevice` IL_0012-0020 ->
+  `ReleaseAllDeviceResources` IL_009e-00a7 only releases each child's native object (the children stay
+  `IsDisposed == false` and raise no events), and its back buffer is cleared lazily after construction,
+  Reset and Present (`Present` IL_009e-00a5, `GetBackBufferData` IL_0066-006f/01da-01ee) to
+  RGBA(68,34,136,255) on the next draw or read. Both were implemented and pinned on branch
+  `work/hnd-gfx` (56239f345, e8d5ecd69; evidence `cnaplan/evidence/rev002/hnd-gfx/`) but not integrated:
+  together they broke 114 EasyGL example programs in cmake-build-multi alone (99 read the back buffer
+  repeatedly, about 15 use resources across device disposal). CNA keeps its cascade and its eagerly
+  retained back buffer.
 - **A game with no IGraphicsDeviceService still loads its content** (owner decision 2026-11-09,
   HND-TQ-19). XNA's `Game.Initialize` IL_0032-0048 calls `LoadContent` only through a service that has
   a device, and its `HookDeviceEvents` (IL_0001) runs before the components initialize. CNA gives a
