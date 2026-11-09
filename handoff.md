@@ -44,8 +44,9 @@ After the sweep (2026-11-09): HND-TQ-03 (WebGPU descriptor/compiled depth-stenci
 cmake-build-webgpu now has CNA_CNAEXT and CNA_WEBGPU_COMPILED_EFFECTS ON so it builds both routes) and
 CNA-FIX-L49 (generated `.x` normals in the file's own space, measured on genuine XNA; evidence
 `cnaplan/evidence/rev002/hnd-l49-generated-normals/`). The two feasible rows of the reconciled queue are
-therefore closed. Still open: the finite-loop cardinality question below, a confirming sweep on the final
-source, the `.x` vertex-order observation in 5.1, and FNA3D-8 (`docs/fna3d-dependency-defects.md`): fork
+therefore closed. The confirming full sweep 16 on bc5e629ab has no failure in any of the seven trees
+(section 0.3). Still open: the finite-loop cardinality question below, the `.x` vertex-order observation
+in 5.1, and FNA3D-8 (`docs/fna3d-dependency-defects.md`): fork
 4ff109a already converts OpenGL presentation rectangles, so its OpenGL half needs a native rerun of
 `Gap08PresentedPixels` before CNA's FNA3D non-default-Present refusal can be reconsidered; the SDLGPU half
 (DONT_CARE swapchain load) still needs a fork repair.
@@ -239,36 +240,33 @@ if publication is later authorized. No current remote execution is implied by lo
 
 ### 0.3 Stable full sweep and remaining failures
 
-Latest full seven-tree sweep (sweep 15): `cnaplan/evidence/rev002/sweep15-d335682d0/`
+Latest full seven-tree sweep (sweep 16, the confirming run): `cnaplan/evidence/rev002/sweep16-bc5e629ab/`
 (`receipt.json`, `summary.txt`, identities, seven build and CTest logs, JUnit). Start and end HEAD
-`d335682d07c21552970b9ed1a7ccca44c0c00d22`, tracked dirty zero; FNA3D 4ff109a, MojoShader c6397f8,
-sharp-runtime b6e72bad. All seven builds succeeded (six cores); suites ran through the private runner
-with `ctest -j4 --timeout 1500` and `SDL_ASSERT=abort`; counts include explicit skips.
+`bc5e629ab1b1ddc3eef55e15c3df72d9e7bc809b`, tracked dirty zero; FNA3D 0bfbe7f, MojoShader 6f1e91b,
+sharp-runtime b6e72bad; 2026-11-09 04:41-06:40. All seven builds succeeded (six cores); suites ran
+through the private runner with `ctest -j4 --timeout 1500` and `SDL_ASSERT=abort`; counts include
+explicit skips. **No failure in any tree** (102,012 cases).
 
 | Tree | Registered cases | Failed | Explicit skips | CTest exit |
 |---|---:|---:|---:|---:|
-| multi | 15,449 | 1 | 482 | 8 |
-| sdlgpu | 14,789 | 1 | 498 | 8 |
-| webgpu | 14,366 | 1 | 500 | 8 |
-| fna3d | 14,263 | 2 | 618 | 8 |
-| software | 14,306 | 1 | 237 | 8 |
-| headless | 13,232 | 0 | 907 | 0 |
-| opengl33 | 15,385 | 2 | 267 | 8 |
+| multi | 15,458 | 0 | 488 | 0 |
+| sdlgpu | 14,792 | 0 | 498 | 0 |
+| webgpu | 14,566 | 0 | 417 | 0 |
+| fna3d | 14,266 | 0 | 618 | 0 |
+| software | 14,309 | 0 | 237 | 0 |
+| headless | 13,233 | 0 | 907 | 0 |
+| opengl33 | 15,388 | 0 | 267 | 0 |
 
-Every failure is fixed with its own commit after the sweep (no second full sweep yet):
-- `CnaXactFiniteLoopTests` in every SDL3 tree: the native 22050 Hz XACT captures were rendered at
-  44100 Hz, and SDL3_mixer's sinc resampler is not DC-exact. HND-SWEEP15-01 (22feaea09) runs those
-  suites in their own process at 22050 Hz (`CnaXactFiniteLoop*NativeRateTests`).
-- `Fna3d_AllocationFailure` (OpenGL): since the faux back buffer of 4ff109a, a renderer created after
-  another one drew no sprite against uncleared radeonsi depth/HiZ memory. HND-SWEEP15-03 (26e3e7cae)
-  clears depth, as the other draw witnesses do.
-- `CompiledEffectTruncationSweepTest` (opengl33, aborted): a truncated effect reached MojoShader's
-  small-object assertion. Fork fix TQ-FORK-EFFECT-TRUNC-01 (MojoShader 6f1e91b, FNA3D 0bfbe7f,
-  published 2026-11-09), CNA pin TQ-FORK-PIN-05 (fa2b47a34).
-- general-tests-ci on d335682d0 also failed `WaveBankTest.IsInUseTrueWhilePausedNotJustWhilePlaying`:
-  its 100-frame wave could finish before Pause. HND-SWEEP15-02 (28e19c60c) plays a four-second entry.
-Sweep 14 (`sweep14-restart-b7ab4afa4/`) is superseded; its four multi Gap13/SDLGPU failures, the GpuPresentPixels
-observer failures and the genuine-runtime teardown fault were green in sweep 15.
+webgpu's skips fell from 500 because that tree now builds CNA_CNAEXT and CNA_WEBGPU_COMPILED_EFFECTS
+(HND-TQ-03). Commits after bc5e629ab are qualified by their own focused gates only.
+
+Sweep 15 (`sweep15-d335682d0/`, HEAD d335682d0) had one or two failures in six trees; each was fixed
+with its own commit before sweep 16: `CnaXactFiniteLoopTests` (native 22050 Hz captures rendered at
+44100 Hz; HND-SWEEP15-01 22feaea09 runs them in their own process at 22050 Hz),
+`Fna3d_AllocationFailure` on OpenGL (uncleared faux-back-buffer depth; HND-SWEEP15-03 26e3e7cae),
+`CompiledEffectTruncationSweepTest` (MojoShader small-object assertion; TQ-FORK-EFFECT-TRUNC-01,
+pin TQ-FORK-PIN-05 fa2b47a34), and general-tests-ci's
+`WaveBankTest.IsInUseTrueWhilePausedNotJustWhilePlaying` (HND-SWEEP15-02 28e19c60c).
 
 ### 0.4 Unpublished fork repairs and their integration order
 
