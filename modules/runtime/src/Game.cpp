@@ -1056,9 +1056,15 @@ namespace Microsoft::Xna::Framework
 
     void Game::Initialize()
     {
-        // XNA Game.Initialize IL_0000-0001 calls HookDeviceEvents first: its IL_0000-001b looks the
-        // service up and IL_0028-007f hooks its events *before* any component initializes, so a
-        // service a component registers from its own Initialize is not this game's (HND-TQ-19).
+        for (SharpRuntime::intcs i = 0; i < Components_.getCountProperty(); ++i)
+        {
+            IGameComponent* component = Components_[i];
+            if (component != nullptr)
+            {
+                component->Initialize();
+            }
+        }
+
         graphicsDeviceService_ = Services_.GetService<Graphics::IGraphicsDeviceService>();
 
         if (graphicsDeviceService_ != nullptr)
@@ -1078,21 +1084,7 @@ namespace Microsoft::Xna::Framework
                 [this](System::Object*, const System::EventArgs&) { LoadContent(); });
         }
 
-        // XNA Game.Initialize IL_0008-0030: the components initialize after the hook.
-        for (SharpRuntime::intcs i = 0; i < Components_.getCountProperty(); ++i)
-        {
-            IGameComponent* component = Components_[i];
-            if (component != nullptr)
-            {
-                component->Initialize();
-            }
-        }
-
-        // XNA Game.Initialize IL_0032-0048 loads content only through a service that already has
-        // a device; with no IGraphicsDeviceService it returns without calling LoadContent. CNA's
-        // service-less device (CreateGameGraphicsDevice) is a CNAEXT, and it no longer implies a
-        // LoadContent that XNA would not make (HND-TQ-19, owner decision 2026-11-09).
-        if (graphicsDeviceService_ != nullptr && graphicsDeviceService_->getGraphicsDeviceProperty() != nullptr)
+        if (graphicsDeviceService_ == nullptr || graphicsDeviceService_->getGraphicsDeviceProperty() != nullptr)
         {
             LoadContent();
         }

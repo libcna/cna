@@ -326,13 +326,7 @@ namespace Microsoft::Xna::Framework
         /** @brief Unloads graphics and content resources. */
         virtual void UnloadContent();
 
-        /**
-         * @brief Initializes the game and current components.
-         *
-         * Hooks the registered IGraphicsDeviceService first, then initializes the components, then
-         * calls LoadContent -- only when that service already has a device. A game with no
-         * IGraphicsDeviceService (no GraphicsDeviceManager) is not loaded, as in XNA.
-         */
+        /** @brief Initializes the game and current components. */
         virtual void Initialize();
 
         /**
