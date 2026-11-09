@@ -9,7 +9,7 @@ Use [`graphics-renderer-feature-matrix.md`](graphics-renderer-feature-matrix.md)
 with other renderer families. For a particular device and graphics profile, the live
 `GraphicsDevice::GetRendererCapabilityProfileEXT()`, `SupportsCapability()` and per-format
 queries remain authoritative. Current defects live only in
-[`handoff.md` §5](../handoff.md#5-known-bugs-and-limitations).
+[KNOWN_ISSUES.md](../KNOWN_ISSUES.md).
 
 ## Build and test
 
@@ -206,7 +206,7 @@ Software's `Experimental` maturity is deliberate. The active tests cover its pub
 resource, state, lifecycle and optional compiled-effect contracts, but a CPU reference renderer
 is not a claim of production throughput or GPU-driver equivalence. Shared pixel-center and
 hardware-observation uncertainties are recorded in
-[`handoff.md` §5](../handoff.md#5-known-bugs-and-limitations), not duplicated here.
+[KNOWN_ISSUES.md](../KNOWN_ISSUES.md), not duplicated here.
 
 The completed `SOFTWARE-1` through `SOFTWARE-485` implementation campaign is historical. Its
 EasyGL comparison evidence map is

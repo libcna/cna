@@ -37,7 +37,7 @@ that two objects belong to one process.
 Family adapters enforce parent retention, release guards and native disposal; the handle registry
 itself does not encode a universal parent graph. Do not assume that every child is deep-copied,
 that a parent token remains valid while native state is retained, or that every view blocks parent
-release. Current exceptions and defects are recorded in [handoff.md §5](../../handoff.md#5-known-bugs-and-limitations).
+release. Current exceptions and defects are recorded in [KNOWN_ISSUES.md](../../KNOWN_ISSUES.md).
 
 Representative rules are:
 

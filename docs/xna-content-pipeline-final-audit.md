@@ -19,7 +19,7 @@ Use `--configured-inventory configured.json` for registration candidates, and re
 
 **Runtime qualification: not established by this audit**, even with passing execution. CTest does not count assertions or prove semantic acceptance: an empty test body can pass. Missing assertion evidence stays unknown, never a zero-assertion qualification. The helper gates, declarations and recorded status flags remain metadata; the self-audit is excluded from required execution to avoid circular evidence. Without optional artifacts, registration and execution are not established. Retained captures are historical observations, not proof that current binaries were rebuilt or that dirty source bytes are unchanged.
 
-GPU/window runs must use the private runner described in [content-pipeline.md](content-pipeline.md). Current defects and external qualification limits remain in [handoff.md](../handoff.md), [the pipeline guide](content-pipeline.md) and [the media evidence](xna-content-pipeline-media.md). A green table does not close them.
+GPU/window runs must use the private runner described in [content-pipeline.md](content-pipeline.md). Current defects and external qualification limits remain in [KNOWN_ISSUES.md](../KNOWN_ISSUES.md), [the pipeline guide](content-pipeline.md) and [the media evidence](xna-content-pipeline-media.md). A green table does not close them.
 
 ## Recorded acceptance conditions and their witnesses
 

@@ -903,7 +903,7 @@ def markdown(report: dict, type_total: int, type_represented: int, baseline: boo
             "> This page renders [the retained JSON snapshot](xna-4-runtime-member-coverage-baseline.json).",
             "> Its missing-member counts, tier assignments and implementation advice describe that",
             "> pre-fix checkout, not the current backlog. Use [current coverage](xna-4-runtime-member-coverage.md)",
-            "> and [handoff](../handoff.md) §5 for the current surface and known defects.",
+            "> and [KNOWN_ISSUES.md](../KNOWN_ISSUES.md) for the current surface and known defects.",
             "> Preserve the baseline JSON; do not run `--baseline --write-reports` against today's headers",
             "> to refresh historical evidence. Prose can be regenerated from the retained JSON using",
             "> `tools/xna_runtime_members.py::markdown(..., baseline=True)`.", ""]
@@ -1023,5 +1023,5 @@ def markdown(report: dict, type_total: int, type_represented: int, baseline: boo
             "`--types-only` checks type presence without running the member audit.",
             "Inspect the member classifications, AST errors and JSON findings as well as the process status.",
             "The audit does not certify the per-method unit-test completion required by CHECKLIST.md.",
-            "Current behaviour/qualification gaps remain in [handoff](../handoff.md) §5 and subsystem guides.", ""]
+            "Current behaviour/qualification gaps remain in [KNOWN_ISSUES.md](../KNOWN_ISSUES.md) and subsystem guides.", ""]
     return "\n".join(lines)

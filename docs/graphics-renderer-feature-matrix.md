@@ -16,7 +16,7 @@ build, graphics profile, adapter and driver, use
 queries documented in [`renderer-capability-profiles.md`](renderer-capability-profiles.md). A broad
 feature cell does not promise every `SurfaceFormat`, every feature combination or every platform.
 The renderer's own document supplies the exact boundary, and current defects live only in
-[`handoff.md` §5](../handoff.md#5-known-bugs-and-limitations).
+[KNOWN_ISSUES.md](../KNOWN_ISSUES.md).
 
 Legend:
 
@@ -201,4 +201,4 @@ backbuffer readback alone does not qualify the actual presented destination or s
 
 Historical campaign matrices, fixed follow-up lists and dated test-count snapshots were removed
 from this page during the 2026-10-31 reconciliation. They remain available in Git history; current
-limitations belong in renderer documents or `handoff.md` §5 rather than being copied here.
+limitations belong in renderer documents or `KNOWN_ISSUES.md` rather than being copied here.

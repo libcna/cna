@@ -9,7 +9,7 @@ This page owns that selection and fallback contract. CNA has **10 public rendere
 **8 implementation families**; their canonical inventory is
 [`renderer-registry.md`](renderer-registry.md). Renderer capabilities belong in the live
 `RendererCapabilityProfile` and the renderer-specific pages; current defects belong only in
-[`handoff.md` section 5](../handoff.md#5-known-bugs-and-limitations). The completed `RTR-P0`–`P14`
+[KNOWN_ISSUES.md](../KNOWN_ISSUES.md). The completed `RTR-P0`–`P14`
 campaign, retired-renderer transcripts and old binary-size measurements are historical evidence in
 Git, not current configuration guidance.
 

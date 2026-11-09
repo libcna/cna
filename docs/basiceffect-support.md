@@ -16,7 +16,7 @@ tasks.
 | Measured Microsoft XNA disagreements | [`xna-fna-behavior-decisions.md`](xna-fna-behavior-decisions.md) |
 | Shared rendered evidence | [`cross-renderer-parity-fixtures.md`](cross-renderer-parity-fixtures.md) and `modules/graphics/examples/parity/ParityFixtures.cmake` |
 | Renderer capability boundary | [`graphics-renderer-feature-matrix.md`](graphics-renderer-feature-matrix.md) and each renderer's own page |
-| Current defects and limitations | [`handoff.md`](../handoff.md) section 5 |
+| Current defects and limitations | [KNOWN_ISSUES.md](../KNOWN_ISSUES.md) |
 
 The generated XNA runtime-member report answers whether the public API exists. This page answers how
 the effect behaves; it deliberately avoids fixed test totals, which become stale whenever coverage

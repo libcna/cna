@@ -15,7 +15,7 @@ its content for the selected CNA configuration.
 |---|---|
 | Is a documented XNA runtime member represented? | [`xna-4-runtime-member-coverage.md`](xna-4-runtime-member-coverage.md) |
 | How does an accepted C++ mapping differ from C# or FNA? | [`CHECKLIST.md`](../CHECKLIST.md) |
-| What is broken or limited now? | [`handoff.md` section 5](../handoff.md#5-known-bugs-and-limitations) |
+| What is broken or limited now? | [KNOWN_ISSUES.md](../KNOWN_ISSUES.md) |
 | Which renderer identities exist? | [`renderer-registry.md`](renderer-registry.md) |
 | What does each renderer support? | [`graphics-renderer-feature-matrix.md`](graphics-renderer-feature-matrix.md), then the renderer's own page and live capability profile |
 | What can CNA load from an existing `.xnb`? | [`xnb-content-pipeline-support.md`](xnb-content-pipeline-support.md) |
@@ -211,7 +211,7 @@ Several common surprises are compatibility behavior rather than CNA draw-order d
 - Texture and render-target support is per `SurfaceFormat` and usage. Query the live format profile
   instead of treating successful `Color` storage as proof for compressed, float, filterable,
   blendable or multisampled storage.
-- Use `handoff.md` section 5 for current defects. Historical task notes and fixed-item lists are
+- Use `KNOWN_ISSUES.md` for current defects. Historical task notes and fixed-item lists are
   not an additional backlog.
 
 ## 7. Port in verifiable slices
@@ -232,7 +232,7 @@ Several common surprises are compatibility behavior rather than CNA draw-order d
    ```
 
 8. Compare remaining failures with the generated member report, the relevant subsystem page and
-   `handoff.md` section 5. If none owns the behavior, treat it as a new compatibility finding.
+   `KNOWN_ISSUES.md`. If none owns the behavior, treat it as a new compatibility finding.
 
 For an intentional change to a CNA pixel fixture, `CNA_UPDATE_GOLDEN=1` may regenerate that
 fixture's PNG, but the image must be reviewed before it is accepted. Regenerating a golden is not a

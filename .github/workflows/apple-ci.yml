@@ -11,7 +11,7 @@ name: Apple platforms (macOS + iOS)
 #                   backend: device, swapchain, drawing and read-back through a focused smoke set
 #                   (scripts/ci/run-sdlgpu-smoke.sh). A gate (RRC-051): before it, CI built the
 #                   retired METAL renderer here and SDLGPU nowhere on Apple. It is a smoke set,
-#                   not the full SDLGPU Apple qualification (handoff.md section 5.2).
+#                   not the full SDLGPU Apple qualification (KNOWN_ISSUES.md, Limitations).
 #   ios-device    — cross-compile and final-link a real arm64 iPhone/iPad application bundle.
 #   ios-simulator — build the same application for arm64 Simulator, install it, launch one CNA
 #                   frame, and require its success marker. See docs/apple-platforms.md for the

@@ -17,7 +17,7 @@ cmake --build build
 tools/platform/run_gpu_tests_private.sh build --output-on-failure   # private display, never the desktop
 ```
 
-Current state, known bugs and the maintained build/test commands: [`handoff.md`](handoff.md).
+Current state and known bugs: [KNOWN_ISSUES.md](KNOWN_ISSUES.md). Building and testing: section 9 below.
 
 ### Version
 
@@ -39,13 +39,13 @@ Native Windows developers should start with the shared Visual Studio/VS Code pre
 [`docs/windows-visual-studio.md`](docs/windows-visual-studio.md).
 
 > **Looking for a specific doc?** See [`docs/README.md`](docs/README.md) for an index of what's
-> current vs. historical. **Current state, known bugs and limitations:** [`handoff.md`](handoff.md) (§5 is
-> the one authoritative bug list). Every implementation plan has been retired; what a task ID
+> current vs. historical. **Current state, known bugs and limitations:** [KNOWN_ISSUES.md](KNOWN_ISSUES.md) (the one
+> authoritative bug list). Every implementation plan has been retired; what a task ID
 > in a comment belonged to is [`docs/task-id-index.md`](docs/task-id-index.md).
 
 ### Project Status
 
-- **`Microsoft::Xna::Framework::Graphics`:** every major Graphics class is present, implemented and tested; what each renderer supports is in [`docs/graphics-renderer-feature-matrix.md`](docs/graphics-renderer-feature-matrix.md), and the remaining known defects are in [`handoff.md`](handoff.md) §5.
+- **`Microsoft::Xna::Framework::Graphics`:** every major Graphics class is present, implemented and tested; what each renderer supports is in [`docs/graphics-renderer-feature-matrix.md`](docs/graphics-renderer-feature-matrix.md), and the remaining known defects are in [KNOWN_ISSUES.md](KNOWN_ISSUES.md).
 - **Documented XNA 4.0 runtime API surface:** every public type and every documented member of the Microsoft reference corpus is represented in CNA. The [member audit](docs/xna-4-runtime-member-coverage.md) holds the current counts and classifications; its [JSON report](docs/xna-4-runtime-member-coverage.json) records every reference member. Run `python3 tools/audit_xna_runtime_surface.py --write-reports`. API representation does not establish behavioral compatibility; the Content Pipeline is measured separately.
 - **Compiled XNA effects:** `Effect(GraphicsDevice&, byte[])` and the canonical XNB `EffectReader`
   execute XNA/FNA Direct3D 9 Effect Framework bytecode on `FNA3D` unconditionally, and behind
@@ -610,7 +610,7 @@ int main()
 ## 12. 🛣 Direction
 
 CNA is moving from feature expansion to long-term maintenance by a human C++ developer. The work
-ahead is fixing the defects listed in [`handoff.md`](handoff.md) §5, keeping behaviour faithful to XNA
+ahead is fixing the defects listed in [KNOWN_ISSUES.md](KNOWN_ISSUES.md), keeping behaviour faithful to XNA
 4.0, and keeping validation deterministic. The renderer set (10 identities), the platform layer and
 the content formats are deliberately kept as they are; new renderers, asset formats or subsystems
 are not planned.

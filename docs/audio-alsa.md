@@ -87,7 +87,7 @@ with a valid, representable sample rate. Open failures propagate, rejected sessi
 and a failed start leaves the microphone stopped so it can be retried. See the
 [XNA failure-contract evidence](xna-fna-behavior-decisions.md#measured-xna-over-fna-decisions).
 Successful provider enumeration alone does not prove that capture started; physical-device
-qualification limits remain in [handoff.md §5](../handoff.md#5-known-bugs-and-limitations).
+qualification limits remain in [KNOWN_ISSUES.md](../KNOWN_ISSUES.md).
 
 ## Mixer behavior
 

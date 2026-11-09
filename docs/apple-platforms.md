@@ -30,7 +30,7 @@ and a final device bundle at `49bdf63b8`. The recorded iOS multi-frame pixel pro
 (AM4-120) used the retired METAL renderer. It does not qualify SOFTWARE or SDLGPU pixels today.
 The repository currently records SOFTWARE simulator smoke evidence, while full surviving-renderer
 Apple requalification and SDLGPU on iOS remain open in
-[handoff.md §5.2](../handoff.md#52-limitations).
+[KNOWN_ISSUES.md](../KNOWN_ISSUES.md#limitations).
 
 The workflow definitions below describe what CI attempts and whether a failure gates the workflow.
 They are not a live report of the latest remote workflow result.
@@ -204,4 +204,4 @@ neither has iOS notch/home-indicator evidence.
 Run `scripts/check-apple-platform-cmake.sh` on a non-Apple host for the mechanical layer.
 It passes in the 2026-11-01 documentation audit. That source/workflow review did not build with
 Xcode, run an Apple application or establish a new remote CI result. Renderer-specific current
-limits remain in [handoff.md §5](../handoff.md#5-known-bugs-and-limitations) and their renderer pages.
+limits remain in [KNOWN_ISSUES.md](../KNOWN_ISSUES.md) and their renderer pages.

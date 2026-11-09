@@ -209,4 +209,4 @@ fog-factor and final-stage checks. See
 
 Phase 45 and all follow-up work named on this page are closed. Current renderer-wide capability
 status belongs in `graphics-renderer-feature-matrix.md`; unresolved defects belong in
-`handoff.md` section 5.
+`KNOWN_ISSUES.md`.

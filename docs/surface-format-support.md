@@ -216,4 +216,4 @@ suites are:
   `EasyGL_Pbr_SrgbTransfer` — standalone renderer integration coverage.
 
 For a cross-renderer view, use `graphics-renderer-feature-matrix.md`. Current unresolved defects,
-rather than completed implementation history, belong in `handoff.md` section 5.
+rather than completed implementation history, belong in `KNOWN_ISSUES.md`.

@@ -261,7 +261,7 @@ def build_report(inventory, pmap, inputs):
     w("The current limitations, regressions and platform qualifications are documented in the")
     w("[API guide](xna-content-pipeline-compat-api.md), [native pipeline guide](content-pipeline.md),")
     w("[media evidence](xna-content-pipeline-media.md), [XML reference](xna-intermediate-xml-format.md)")
-    w("and [handoff](../handoff.md) §5. Statuses do not supersede those boundaries.")
+    w("and [KNOWN_ISSUES.md](../KNOWN_ISSUES.md). Statuses do not supersede those boundaries.")
     w("")
     w("## 1. Coverage summary")
     w("")

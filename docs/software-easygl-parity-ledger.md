@@ -3,7 +3,7 @@
 This page routes the evidence from the completed `SOFTWARE-*` campaign to current contracts,
 fixtures and historical records. The maintained rendering contract is
 [`software-renderer.md`](software-renderer.md); current defects and qualification gaps are in
-[`handoff.md`](../handoff.md) §5. Software remains an **Experimental** renderer identity.
+[KNOWN_ISSUES.md](../KNOWN_ISSUES.md). Software remains an **Experimental** renderer identity.
 
 The authority order is measured Microsoft XNA 4.0/IL, the local FNA reference, then CNA's
 implementations and their prose. EasyGL supplies a comparison implementation. A matching picture,
@@ -28,7 +28,7 @@ The 2026-09-13 reconciliation recorded verdict **B — parity with documented la
 boundaries**, 160 Software-labelled CTests, a compiled-effect-enabled Software graphics run with
 2,640 passes/48 skips out of 2,688, and an EasyGL compiled family of 679 passes. These are the
 snapshot's dated results, not today's registration counts or universal release criteria. Its
-then-open unrelated native/Sharp Runtime findings must be checked against the current handoff.
+then-open unrelated native/Sharp Runtime findings must be checked against `KNOWN_ISSUES.md`.
 
 ## Reading the old classifications
 
@@ -39,7 +39,7 @@ then-open unrelated native/Sharp Runtime findings must be checked against the cu
 | `DEFERRED-CNAEXT` | Outside that campaign's denominator; this does not mean the feature is absent today. |
 | `NOT-APPLICABLE-SOFTWARE` | A physical window/GPU/driver operation without a CPU-renderer counterpart; related shared state can still require tests. |
 | `ALREADY-PARITY` / `PARITY` | The named witnesses supported the campaign verdict at that point. |
-| `REAL-GAP` / repaired finding | A contemporaneous defect and its recorded disposition; consult the handoff before treating it as still open. |
+| `REAL-GAP` / repaired finding | A contemporaneous defect and its recorded disposition; consult `KNOWN_ISSUES.md` before treating it as still open. |
 
 Scope and verdict were separate columns. Later corrections superseded some early green rows,
 including invalid shader operands and programs whose old executables had not been relinked.

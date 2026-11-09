@@ -152,7 +152,7 @@ OBSOLETE_RENDERER_VOCABULARY = re.compile(
 VOCABULARY_ROOTS = ("modules", "cmake", "scripts", "tools", "tests", "examples", "spikes", "docs",
                     ".github")
 VOCABULARY_ROOT_FILES = ("CMakeLists.txt", "CMakePresets.json", "Doxyfile", "README.md",
-                         "CLAUDE.md", "AGENTS.md", "CHECKLIST.md", "handoff.md",
+                         "CLAUDE.md", "AGENTS.md", "CHECKLIST.md", "KNOWN_ISSUES.md",
                          "THIRD_PARTY_NOTICES.md", "NOTICE.md")
 VOCABULARY_SUFFIXES = {".hpp", ".h", ".cpp", ".c", ".cc", ".inc", ".mm", ".m", ".py", ".cmake",
                        ".txt", ".json", ".toml", ".yml", ".yaml", ".sh", ".md", ".js", ".mjs",

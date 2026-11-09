@@ -166,4 +166,4 @@ The pure-C suites divide the contract by responsibility:
 correctness. Rendering claims therefore require a real-renderer observation in addition to the
 HEADLESS route. Current C API coverage is in [`COVERAGE.md`](COVERAGE.md), and current defects and
 platform qualification gaps belong only in
-[`handoff.md` section 5](../../handoff.md#5-known-bugs-and-limitations).
+[KNOWN_ISSUES.md](../../KNOWN_ISSUES.md).

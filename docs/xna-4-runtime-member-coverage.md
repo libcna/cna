@@ -262,4 +262,4 @@ The full CLI audit exits nonzero for missing types, missing or unreviewed member
 `--types-only` checks type presence without running the member audit.
 Inspect the member classifications, AST errors and JSON findings as well as the process status.
 The audit does not certify the per-method unit-test completion required by CHECKLIST.md.
-Current behaviour/qualification gaps remain in [handoff](../handoff.md) §5 and subsystem guides.
+Current behaviour/qualification gaps remain in [KNOWN_ISSUES.md](../KNOWN_ISSUES.md) and subsystem guides.

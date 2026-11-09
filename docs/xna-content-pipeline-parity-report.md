@@ -11,7 +11,7 @@ captured assembly inventory. They do not measure passing tests or universal beha
 The current limitations, regressions and platform qualifications are documented in the
 [API guide](xna-content-pipeline-compat-api.md), [native pipeline guide](content-pipeline.md),
 [media evidence](xna-content-pipeline-media.md), [XML reference](xna-intermediate-xml-format.md)
-and [handoff](../handoff.md) §5. Statuses do not supersede those boundaries.
+and [KNOWN_ISSUES.md](../KNOWN_ISSUES.md). Statuses do not supersede those boundaries.
 
 ## 1. Coverage summary
 

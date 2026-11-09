@@ -174,5 +174,5 @@ The complete C-facing renderer-selection and borrowed-handle contract is in
   compares reported LOD bias, PBR/skinned-PBR shading, multisample-mask and render-target-readback
   answers with observed output or deterministic refusal in multi-renderer builds.
 
-Current defects belong only in [`handoff.md` section 5](../handoff.md#5-known-bugs-and-limitations);
+Current defects belong only in [KNOWN_ISSUES.md](../KNOWN_ISSUES.md);
 finished implementation history remains in Git.

@@ -11,7 +11,7 @@ not by itself pin every helper/codec/fixture byte or reproduce the host environm
 Task history is XNAPP-201/202/220/136/043/332. Current native routes are in
 [content-pipeline.md](content-pipeline.md), XNB output scope in
 [xnb-interoperability.md](xnb-interoperability.md), and unresolved issues in
-[handoff.md](../handoff.md). Missing Windows Media facilities under Wine do not define valid-file
+[KNOWN_ISSUES.md](../KNOWN_ISSUES.md). Missing Windows Media facilities under Wine do not define valid-file
 refusal behaviour on native Windows.
 
 ## 1. What the three importers declare

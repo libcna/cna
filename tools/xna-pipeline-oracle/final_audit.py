@@ -259,7 +259,7 @@ def render(answers):
              " dirty source bytes are unchanged.\n",
              "GPU/window runs must use the private"
              " runner described in [content-pipeline.md](content-pipeline.md). Current defects and"
-             " external qualification limits remain in [handoff.md](../handoff.md),"
+             " external qualification limits remain in [KNOWN_ISSUES.md](../KNOWN_ISSUES.md),"
              " [the pipeline guide](content-pipeline.md) and"
              " [the media evidence](xna-content-pipeline-media.md). A green table does not close them.\n",
              "## Recorded acceptance conditions and their witnesses\n",

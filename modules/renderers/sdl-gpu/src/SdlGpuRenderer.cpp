@@ -2312,7 +2312,7 @@ namespace CNA::Internal::Renderers::SdlGpu
     {
         // Public SetData is chronological with queued draws, as RenderTarget2D's already is: XNA
         // issues a draw before the SetData that follows it, so an Immediate SpriteBatch sprite
-        // keeps the contents its texture had at its Draw (handoff.md 5.1). This renderer replays
+        // keeps the contents its texture had at its Draw. This renderer replays
         // the frame at submission while an upload goes out at once, so a draw queued before the
         // upload is submitted first. Every queued command that samples a texture holds a copy of
         // its state; an upload to a texture nothing has queued submits nothing.

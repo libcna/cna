@@ -238,4 +238,4 @@ The remaining qualification and implementation limits are:
 The [retained XNA probe](../../tests/reference/xna40/microphone-start-failure/PROVENANCE.json)
 confirms start-error propagation for an invalid native token; it does not open hardware or measure
 XNA's state after that failure. The playback-device-loss limitation remains in
-[`handoff.md`](../../handoff.md) section 5.
+[KNOWN_ISSUES.md](../../KNOWN_ISSUES.md).

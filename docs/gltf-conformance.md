@@ -7,7 +7,7 @@ oracle harness (`GLTF-003` … `GLTF-006`, `GLTF-041`). Its milestones are proje
 over named witnesses, not Khronos certification or exhaustive proof for every legal input.
 
 Current importer boundaries are in [gltf-limitations.md](gltf-limitations.md) and
-[gltf-conventions.md](gltf-conventions.md); newly found defects are in [handoff.md §5](../handoff.md#5-known-bugs-and-limitations).
+[gltf-conventions.md](gltf-conventions.md); newly found defects are in [KNOWN_ISSUES.md](../KNOWN_ISSUES.md).
 The retained framebuffer reports below describe their recorded revisions/environments. A current
 metadata/hash check does not rerun those captures or qualify a newer renderer binary.
 

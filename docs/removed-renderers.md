@@ -37,7 +37,7 @@ the identities named there as covering a retired renderer (`DIRECTX11`, `DIRECTX
 `METAL`, `SDL_RENDERER`, `GDI`, `CANVAS`, `OPENGLES2`, `WEBGL1`, `OPENGL4`, ...) were retired
 themselves later. The current set and implementation mapping belong to
 [`renderer-registry.md`](renderer-registry.md); current platform coverage and qualification belong
-to that renderer's document and `handoff.md`, not to the dated coverage columns below.
+to that renderer's document and `KNOWN_ISSUES.md`, not to the dated coverage columns below.
 `plans/plan_renderer_cleanup.md`, which the older sections cite for their `RRC-` task records, was
 deleted on 2026-10-11 and survives in Git history; the 2026-10-13 retirement's ledger is
 preserved below and in the report snapshot at commit `a37bb07ba`.
@@ -132,7 +132,7 @@ implementation families, and the retirement had advanced the C ABI to 0.48.0.
 |---|---:|---|---|
 | `VULKAN` | 8 | A second, hand-written native Vulkan backend beside SDLGPU's. | `SDLGPU` (SDL's Vulkan backend on Linux and Android), `WEBGPU` (wgpu's), `FNA3D` through SDLGPU. |
 | `DIRECTX11` | 14 | A native Direct3D 11 backend, with the shared `D3DCommon` core and its offline HLSL. | `SDLGPU` (SDL's Direct3D 12 backend), `DIRECTX9`, `FNA3D` (its own D3D11 and SDLGPU drivers). |
-| `METAL` | 42 | A native Metal backend for macOS and iOS (Objective-C++). | `SDLGPU` (SDL's Metal backend); current qualification is tracked in `handoff.md` §5.2. |
+| `METAL` | 42 | A native Metal backend for macOS and iOS (Objective-C++). | `SDLGPU` (SDL's Metal backend); current qualification is tracked in `KNOWN_ISSUES.md` (Limitations). |
 | `SDL_RENDERER` | 1 | SDL's 2D API: 2D-only, it refused every 3D call. | `SDLGPU`, `OPENGLES3`/`OPENGL33`, `SOFTWARE`. |
 
 **What went with them.** `modules/renderers/{vulkan,directx11,metal,sdl-renderer}` and
@@ -169,7 +169,7 @@ current suite counts.
 renderer; XNA behaviour not covered elsewhere became renderer-neutral conformance programs
 (`modules/graphics/examples/conformance/`, registered for EasyGL, SDLGPU, WebGPU, SOFTWARE, FNA3D
 and HEADLESS as `<Renderer>_Conformance_*`) or CnaTests cases. Current defects and limitations are
-recorded only in `handoff.md` §5.
+recorded only in `KNOWN_ISSUES.md`.
 
 **Kept on purpose.** SDL's own Vulkan/D3D12 patches and the `run-wine-vkd3d*.sh` launchers
 (`SDLGPU`); MojoShader's D3D11 and Metal patches (`FNA3D`'s own drivers); SPIRV-Cross for
@@ -185,7 +185,7 @@ under node and two demos with `WEBGPU` and with `WEBGL2` in headless Chrome; on 
 emulator the C API's identity checks passed and `OPENGLES3` ran the C API lifecycle smoke to exit 0;
 the MinGW cross build ran the C API, the `DIRECTX9` suite and `SDLGPU`'s Direct3D 12 backend under
 Wine. The complete dated matrix and intermediate failure counts remain in Git history at commit
-`a37bb07ba`. Current platform qualification work is tracked only in `handoff.md` §5.2.
+`a37bb07ba`. Current platform qualification work is tracked only in `KNOWN_ISSUES.md` (Limitations).
 
 ## The 2026-10-06 retirement
 

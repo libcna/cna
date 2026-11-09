@@ -7,7 +7,7 @@ second name for any of those CNA renderer identities.
 
 This page is the current renderer contract. The dated XNA image comparison is in
 [`fna3d-parity-report.md`](fna3d-parity-report.md), retired `FNA3D-0`..`63` task evidence is in
-Git history, and the authoritative list of current defects is [`handoff.md` §5](../handoff.md#5-known-bugs-and-limitations).
+Git history, and the authoritative list of current defects is [KNOWN_ISSUES.md](../KNOWN_ISSUES.md).
 
 ## Build and test
 
@@ -243,12 +243,12 @@ Important current boundaries are deliberately not expanded into a second defect 
   it as a one-element per-instance stream. `Fna3d_PbrVertexContract` (configured driver) and
   `Fna3d_PbrVertexContract_SdlGpuDriver` pin that a mesh with and without tangents draws alike.
 - Same-frame update visibility for cube, volume and mipped 2D textures follows FNA3D's SDL_GPU
-  driver ordering, which differs from XNA in the cases listed in `handoff.md`.
+  driver ordering, which differs from XNA in the cases listed in `KNOWN_ISSUES.md`.
 - Integer pixel-centre correction is established for ordinary triangles. Lines and points remain
   at the host driver's centers, and native Direct3D 9 behavior for those primitives remains an
   external measurement boundary.
 
-Consult [`handoff.md` §5](../handoff.md#5-known-bugs-and-limitations) for the
+Consult [KNOWN_ISSUES.md](../KNOWN_ISSUES.md) for the
 current MojoShader profile gaps, readback costs and restrictions, trace/device limitation,
 D3D11-driver findings and every other open item.
 

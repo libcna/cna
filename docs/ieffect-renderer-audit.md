@@ -155,7 +155,7 @@ compiler diagnostics are outside ordinary draw loops.
 - `modules/renderers/easygl/examples/easygl_shader_effect_spritebatch_uniform_test.cpp`: extend
   the existing pixel test with two programs, pre-Apply texture assignment, rendered/uploaded row
   transitions, preservation of the other program, and an unchanged-texture repeat.
-- This audit document; `handoff.md` links the remaining performance/lifecycle limitations.
+- This audit document; `KNOWN_ISSUES.md` links the remaining performance/lifecycle limitations.
 
 No cache was introduced, so there is no new invalidation state. Existing program ownership,
 uniform arrays, XNA APIs, CNA extensions and other renderer implementations are unchanged.

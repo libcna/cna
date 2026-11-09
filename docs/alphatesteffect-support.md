@@ -15,7 +15,7 @@ It is not a chronology of the implementation campaign that established the behav
 | Measured Microsoft XNA disagreements | [`xna-fna-behavior-decisions.md`](xna-fna-behavior-decisions.md) |
 | Shared rendered evidence | [`cross-renderer-parity-fixtures.md`](cross-renderer-parity-fixtures.md) and `modules/graphics/examples/parity/ParityFixtures.cmake` |
 | Renderer capability boundary | [`graphics-renderer-feature-matrix.md`](graphics-renderer-feature-matrix.md) and each renderer's own page |
-| Current defects and limitations | [`handoff.md`](../handoff.md) section 5 |
+| Current defects and limitations | [KNOWN_ISSUES.md](../KNOWN_ISSUES.md) |
 
 The generated XNA runtime-member report owns API presence. This page owns the behavioral contract
 and deliberately avoids fixed test totals, which drift whenever coverage grows.

@@ -204,4 +204,4 @@ supplement these semantic tests.
 Renderer-dependent branches accept their documented refusal, so a passing C smoke test does not
 establish every state's visual effect or target pixels. HEADLESS is a lifecycle/refusal control;
 real rendering evidence belongs to the native subsystem tests. Current defects are recorded only
-in [`handoff.md` §5](../../handoff.md#5-known-bugs-and-limitations).
+in [KNOWN_ISSUES.md](../../KNOWN_ISSUES.md).

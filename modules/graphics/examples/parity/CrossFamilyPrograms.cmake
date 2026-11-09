@@ -26,7 +26,7 @@
 #
 # A program that a family cannot execute for a stated capability reason exits 77 itself; an entry
 # is never dropped from a family because it fails there -- a failure is a defect, recorded in
-# handoff.md §5.1.
+# KNOWN_ISSUES.md.
 
 set(CNA_CROSS_FAMILY_PROGRAM_DIR "${CMAKE_CURRENT_LIST_DIR}")
 

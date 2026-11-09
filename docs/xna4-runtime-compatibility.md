@@ -4,7 +4,7 @@
 This page describes exception diagnostic selection at the XNA Game host boundary. General API
 representation is tracked separately in
 [`xna-4-runtime-member-coverage.md`](xna-4-runtime-member-coverage.md); current defects and platform
-qualification gaps are in [`handoff.md`](../handoff.md) §5.
+qualification gaps are in [KNOWN_ISSUES.md](../KNOWN_ISSUES.md).
 
 ## Message profile
 

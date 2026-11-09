@@ -337,7 +337,7 @@ elements. A round-trip rejection must not be interpreted as a failed read.
 
 The following mappings, aligned behaviours and remaining limits explain the current contract.
 They are not an exhaustive defect inventory; current open findings belong in
-[`handoff.md`](../handoff.md) §5. Corpus regression tests live in
+[KNOWN_ISSUES.md](../KNOWN_ISSUES.md). Corpus regression tests live in
 [`XnaIntermediateSerializerTests.cpp`](../modules/content-pipeline/tests/Microsoft/Xna/Framework/Content/Pipeline/Serialization/Intermediate/XnaIntermediateSerializerTests.cpp),
 with separate initialization, registry, owner-isolation, section and external-alias suites beside it.
 

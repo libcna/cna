@@ -146,7 +146,7 @@ PCM uses hand-derived values at injected update times; off-update getter behavio
 native asynchronous scheduling equivalence are not established. A separate native
 pause-only probe exercises no sound playback or RPC evaluation;
 no native Windows XACT execution is claimed. Reverb routing and its reference boundary are
-described in [the reverb guide](xact-reverb.md) and `handoff.md` §5.1.
+described in [the reverb guide](xact-reverb.md).
 Prepared-cue counting and its native qualification are described in
 [the instance-limit guide](xact-instance-limits.md).
 Native repeat cardinality and its current CNA differences are described in

@@ -176,7 +176,7 @@ set(CNA_CONFORMANCE_FIXTURES
     # from sdlrenderer_texture2d_partial_rect/startindex_test.cpp (Tasks 679/680): partial SetData
     # (rectangle, startIndex/elementCount, after first use) reaches the sampled GPU texture.
     texture2d_partial_setdata
-    # handoff.md 5.1: a Texture2D and a TextureCube changed between two draws of one frame keep
+    # A Texture2D and a TextureCube changed between two draws of one frame keep
     # their old contents in the first draw, on renderers that replay the frame after the upload.
     texture_setdata_after_draw
     # from sdlrenderer_presentationparameters_resize_test.cpp (Task 711): Reset to a larger back

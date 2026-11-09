@@ -187,5 +187,5 @@ provide runtime evidence. Current qualification is Chrome-centric. Firefox/Safar
 physical-GPU/device matrix are not continuous gates, so compatibility claims must stay within the
 measured boundary.
 
-Current product defects remain centralized in [`handoff.md` section 5](../handoff.md#5-known-bugs-and-limitations).
+Current product defects remain centralized in [KNOWN_ISSUES.md](../KNOWN_ISSUES.md).
 This page records deliberate browser-platform constraints; it is not a second defect ledger.

@@ -21,7 +21,7 @@ or track zero's pre-dispatch mutable event-instance origin for sound codes.
 `ReleaseTime` is nonzero only during RPC release.
 Globals with those names retain their stored values. Intrinsics bypass authored variable
 bounds, with or without PUBLIC. Send clocks retain CNA's existing pause-freezing policy;
-the native pause discrepancy remains in `handoff.md` §5.1.
+the native pause behaviour and FAudio's difference are in [xact-pause-clock.md](xact-pause-clock.md).
 Native FAudio accumulates `rpcReverbSend` but leaves its routing unimplemented
 (`FACT_internal.c:1601`). CNA's send conversion and wet routing are the approved CNA policy.
 Engine-global RPCs with targets 5–26 update the corresponding preset parameter (target minus5),

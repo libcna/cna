@@ -24,7 +24,7 @@ Use these sources in this order:
    what existed, not proof that behavior is correct.
 
 The current project state and its one live defect/limitation list are in
-[`handoff.md`](../handoff.md), especially §5. [`task-id-index.md`](task-id-index.md) maps historical
+[KNOWN_ISSUES.md](../KNOWN_ISSUES.md). [`task-id-index.md`](task-id-index.md) maps historical
 task IDs to their surviving code or documentation. Completed plans live in Git history and must not
 be used as current backlogs.
 
@@ -67,7 +67,7 @@ Each topic follows the same evidence loop:
    Move only durable contracts, reproduced defects and reusable evidence into CNA.
 
 When a change is warranted, finish the whole bounded task: implementation, public documentation,
-tests, maintained subsystem document and `handoff.md` when its current-state record changes. Follow
+tests, maintained subsystem document and `KNOWN_ISSUES.md` when its current-state record changes. Follow
 [`AGENTS.md`](../AGENTS.md) for build, test, staging and commit rules.
 
 ## Questions for each file or coherent group

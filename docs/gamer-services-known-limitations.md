@@ -4,7 +4,7 @@ This is the subsystem register of what CNA's GamerServices, Net, Guide and Avata
 does **not** do, does only in part, does differently from XNA on Xbox 360 by design, or has not been
 able to verify. Source review was refreshed on 2026-11-01; the dated software baselines below
 state what was executed. GSH-01..GSH-22 is the historical hardening campaign, not a proof of every
-current claim. Current defects also belong in [handoff §5](../handoff.md#5-known-bugs-and-limitations).
+current claim. Current defects also belong in [KNOWN_ISSUES.md](../KNOWN_ISSUES.md).
 When code changes one of these entries, change it here in the same commit.
 
 CNA provides a **CNA-owned, XNA/Xbox-like** GamerServices implementation: CNA's own protocol,

@@ -126,7 +126,7 @@ once; evidence in `cnaplan/evidence/safe007/long-campaign/`) found, and the repa
   `ArgumentNullException` from Serialize, `NullReferenceException` for `Null="true"` on a value
   type; both measured in `tests/reference/xna40/intermediate/manifest.json`).
 
-Two remain open in `handoff.md` §5.1, so the weekly job fails until they are repaired: ill-formed
+Two were open defects when this page was written (check `KNOWN_ISSUES.md` for their current state), and the weekly job fails while they are: ill-formed
 UTF-8 accepted by sharp-runtime's `XmlReader` and refused by its writer (`xna-intermediate`), and
 MojoShader leaking a compiled shader, string or sampler name when two small-object records name
 the same object (`compiled-effect`, LeakSanitizer).

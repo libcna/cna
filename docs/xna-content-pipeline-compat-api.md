@@ -9,7 +9,7 @@ proof of every runtime behaviour or feature combination.
 The native coordinator/CLI contract is [content-pipeline.md](content-pipeline.md).
 These are build-time C++ components; native extension interfaces are experimental, and existing
 content-format/version contracts remain separate. Current defects and qualification limits are
-in [handoff.md](../handoff.md).
+in [KNOWN_ISSUES.md](../KNOWN_ISSUES.md).
 
 ## 1. One engine and canonical writers
 

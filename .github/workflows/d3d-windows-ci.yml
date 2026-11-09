@@ -16,7 +16,7 @@
 # video driver and its Direct3D 12 backend, on whatever Direct3D 12 adapter the hosted runner
 # offers -- and fails unless every program exits 0, so a runner on which the device cannot be created
 # fails the leg instead of skipping. It is a smoke set; the full native-Windows SDLGPU (Direct3D
-# 12) qualification is a separate campaign (handoff.md section 5.2).
+# 12) qualification is a separate campaign (KNOWN_ISSUES.md, Limitations).
 
 name: Windows graphics CI (D3D9 + SDLGPU, MSVC)
 

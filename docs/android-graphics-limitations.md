@@ -21,8 +21,8 @@ historical evidence at their recorded revisions, not a full qualification of the
 an external consumer's current release.
 
 The later dependency audit recorded SDL/platform cross-compilation at `aa3139087e69`;
-[handoff.md](../handoff.md) explicitly records that Android was not rebuilt at the final
-`10f650b9d0f6` audit pin. Preserve that distinction between a platform build, a full CNA/C API
+Android was not rebuilt at the final `10f650b9d0f6` audit pin (recorded in the former
+`handoff.md`, now Git history). Preserve that distinction between a platform build, a full CNA/C API
 build and an application run.
 
 No physical Android device qualification is recorded. `SDLGPU` remains unqualified on Android,

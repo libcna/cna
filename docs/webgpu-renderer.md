@@ -42,7 +42,7 @@ delegates moving inventories and shared contracts:
 - [`sampler-state-support.md`](sampler-state-support.md),
   [`occlusionquery-support.md`](occlusionquery-support.md) and the render-target documents own the
   corresponding shared XNA contracts.
-- [`handoff.md` section 5](../handoff.md#5-known-bugs-and-limitations) is the sole current defect
+- [KNOWN_ISSUES.md](../KNOWN_ISSUES.md) is the sole current defect
   ledger. A historical WebGPU paragraph must not override it.
 
 The implementation lives in `modules/renderers/webgpu/`; native dependency discovery is

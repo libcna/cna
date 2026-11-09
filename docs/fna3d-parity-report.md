@@ -2,7 +2,7 @@
 
 **Historical measurement: 2026-08-11.** This is retained evidence, not the current renderer
 status or a live defect list. Use [`fna3d-renderer.md`](fna3d-renderer.md) for the current contract
-and [`handoff.md` §5](../handoff.md#5-known-bugs-and-limitations) for current limitations.
+and [KNOWN_ISSUES.md](../KNOWN_ISSUES.md) for current limitations.
 
 The run used the same 39-scene corpus (`tools/xna-oracle/scenes/*.scene`), same checked-in
 real XNA 4.0 reference images (`tools/xna-oracle/reference/*.png`), same `scripts/xna-diff.py`

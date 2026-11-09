@@ -646,7 +646,7 @@ namespace CNA::Internal::Renderers::WebGPU
 
     namespace
     {
-        // handoff.md 5.1: copies every level of @p from but @p skipLevel (-1 copies all) into
+        // Copies every level of @p from but @p skipLevel (-1 copies all) into
         // @p to, a texture of the same size, format and level count, on a command submitted before
         // this returns -- so the copy reads @p from ahead of the queue write that follows. A
         // cube's six layers go with their level and a volume's slices shrink with it. A
@@ -833,8 +833,8 @@ namespace CNA::Internal::Renderers::WebGPU
             throw std::invalid_argument("CNA WebGPU: invalid mip upload");
         // ...and ahead of the commands queued but not yet encoded, which this renderer replays at
         // the bind cycle's end. XNA issues a draw before the SetData that follows it, so an
-        // Immediate SpriteBatch sprite keeps the contents its texture had at its Draw
-        // (handoff.md 5.1): while a queued command samples this texture, the write goes to a
+        // Immediate SpriteBatch sprite keeps the contents its texture had at its Draw:
+        // while a queued command samples this texture, the write goes to a
         // fresh one and the command keeps the old -- the texture twin of STREETPERF-0004's buffer
         // storage. A use count cannot tell here, because the binding cache holds the same
         // reference as the commands, so Sampled() stamps the queue it was resolved in.

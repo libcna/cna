@@ -4,7 +4,7 @@
 > This page renders [the retained JSON snapshot](xna-4-runtime-member-coverage-baseline.json).
 > Its missing-member counts, tier assignments and implementation advice describe that
 > pre-fix checkout, not the current backlog. Use [current coverage](xna-4-runtime-member-coverage.md)
-> and [handoff](../handoff.md) §5 for the current surface and known defects.
+> and [KNOWN_ISSUES.md](../KNOWN_ISSUES.md) for the current surface and known defects.
 > Preserve the baseline JSON; do not run `--baseline --write-reports` against today's headers
 > to refresh historical evidence. Prose can be regenerated from the retained JSON using
 > `tools/xna_runtime_members.py::markdown(..., baseline=True)`.

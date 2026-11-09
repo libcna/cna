@@ -5,7 +5,7 @@ and [`libcna/mojoshader`](https://github.com/libcna/mojoshader) (pins in
 [`fna3d-renderer.md`](fna3d-renderer.md#dependency-and-source-pin)). The owner authorized AI fork changes
 on 2026-11-06 for the commissioned repair lanes; CNA configure never patches either checkout.
 This page records defects, fixed repairs, reproducers and remaining qualification. It is the hand-over list for whoever
-maintains the forks; `handoff.md` §5.1/§5.3 keeps the short CNA-side entry for each.
+maintains the forks; `KNOWN_ISSUES.md` keeps the short CNA-side entry for each.
 
 Each entry says how far the attribution is established. "Confirmed" means the faulty code path was
 read and a CNA test reproduces the symptom on the GPU; "probable" means the symptom is reproduced but
@@ -95,7 +95,7 @@ documents as reserved (`src/FNA3D_Driver_SDL.c` ~1640-1650 at the pin), so the m
   rather than silently ignore a non-full mask.
 
 
-### Other FNA3D behaviour recorded in `handoff.md` §5.3
+### Other FNA3D behaviour recorded in `KNOWN_ISSUES.md` (External and driver limitations)
 
 `SkinnedEffect.VertexColorEnabled` is ignored outright and saturates before the fold; the back buffer
 keeps a 3, 5 or 7 sample request unrounded while render targets round it down;
@@ -287,7 +287,7 @@ pass. CNA's BEM pixel witness, SPIR-V policy and missing-sampled-texture control
 
 The fork changes the owner authorized on 2026-10-26 (SDLGPU device-array and vertex-binding cache
 leaks, the MojoShader SPIR-V attribute-fixup, dumpspirv and trace-lock leaks) are listed in
-`handoff.md` §5.3 under the LeakSanitizer entry.
+`KNOWN_ISSUES.md` (External and driver limitations) under the LeakSanitizer entry.
 
 
 ### FNA3D-1: OpenGL two-sided stencil follows a stale front face when culling is off

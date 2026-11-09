@@ -187,4 +187,4 @@ Legend: ✅ verified working.
 EasyGL owns the original focused programs; SDLGPU reuses the same Phase 46 and follow-up sources
 through the cross-family corpus. Phase 46 and all follow-up work named on this page are closed.
 Current renderer-wide capability status belongs in `graphics-renderer-feature-matrix.md`;
-unresolved defects belong in `handoff.md` section 5.
+unresolved defects belong in `KNOWN_ISSUES.md`.

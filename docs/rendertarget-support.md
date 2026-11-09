@@ -184,6 +184,6 @@ Legend: ✅ verified working · ❌ confirmed broken/gap.
   plural bindings, explicit bound disposal is rejected, and destruction cannot leave a dangling
   native target.
 - Current repository-wide renderer defects and intentional capability limits live in
-  `handoff.md` §5; none of the historical open items on this page remains one of them.
+  `KNOWN_ISSUES.md`; none of the historical open items on this page remains one of them.
 
 This closes Phase 39 (graphics Tasks 331–340) in full.

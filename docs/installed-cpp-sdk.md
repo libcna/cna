@@ -236,6 +236,6 @@ moved prefix holds archives plus the vendored SDL3 DSOs only, consumers need no 
 its consumer CTest cases ran under Node only.
 MinGW's export/configure graph (DirectX9 and SDL_shadercross/SPIRV-Cross
 included) is checked, but a relocated Windows SDK runtime has not yet been tested.
-These open validations are listed in `handoff.md` §5.2. The SDK was
+These open validations are listed in `KNOWN_ISSUES.md` (Limitations). The SDK was
 built for cna-engine UP-001; its 2026-10-22 checkpoints are in Git history
 (`git show 9c2b3e2d4:CNA_ENGINE_REPAIR_HANDOFF.md`).

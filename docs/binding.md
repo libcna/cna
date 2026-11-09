@@ -25,7 +25,7 @@ met. Passing the gate checker means the recorded verdict is consistent, not that
 Ready.
 
 External language consumers own their ABI admission, public API, packaging and platform evidence.
-The [handoff](../handoff.md) contains historical consumer pins and measured findings. Consult each
+Historical consumer pins and measured findings are in Git history (`git show bdf18a7d5:handoff.md`). Consult each
 consumer's own checkout/release evidence for its current status; CNA's native documentation cannot
 certify an external repository's latest compatibility.
 
@@ -73,7 +73,7 @@ runtime-handle create/destroy API or generic retain/release/kind-query operation
 A non-null C pointer still has to reference valid storage of the claimed capacity. Result codes,
 generation checks and exception translation cannot validate freed caller memory or recover from
 every native/driver process failure. Current reproduced implementation defects remain visible in
-[handoff.md §5](../handoff.md#5-known-bugs-and-limitations).
+[KNOWN_ISSUES.md](../KNOWN_ISSUES.md).
 
 ## Native types, streams and completion
 

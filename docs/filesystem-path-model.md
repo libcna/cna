@@ -117,7 +117,7 @@ Each library has its own contract, verified against its source rather than assum
 | zlib, Draco, dr_flac, dr_mp3, stb_vorbis | no path crosses — memory APIs only | nothing to do; keep it that way |
 | shaderc | the `filename` argument is a diagnostic label, never opened | nothing to do |
 | C runtime environment (`std::getenv`) | **ANSI** — the narrow environment is in the process code page | read a path-valued variable through `System::Environment::GetEnvironmentVariable`, which reads the wide environment and answers UTF-8 |
-| googletest (test binaries only) | **ANSI** — stream capture and death tests create files with `GetTempFileNameA` in `GetTempPathA` | nothing CNA can change: a `TEMP` with a character outside the ANSI code page aborts the test binary itself (handoff §5.2) |
+| googletest (test binaries only) | **ANSI** — stream capture and death tests create files with `GetTempFileNameA` in `GetTempPathA` | nothing CNA can change: a `TEMP` with a character outside the ANSI code page aborts the test binary itself (KNOWN_ISSUES.md (Limitations)) |
 
 ---
 

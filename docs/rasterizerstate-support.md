@@ -161,4 +161,4 @@ The current contract is pinned at several layers:
 
 The broader renderer capability overview remains
 `graphics-renderer-feature-matrix.md`; renderer-specific device/build restrictions remain in each
-renderer page and in `handoff.md` section 5.
+renderer page and in `KNOWN_ISSUES.md`.

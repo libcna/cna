@@ -1,23 +1,20 @@
 # Documentation index
 
 Reconciled 2026-11-01. This is the topical index of the top-level pages in `docs/`; the
-[C API index](c-api/README.md) covers its nested contract pages. The complete file-by-file review
-status is in [documents.md](../documents.md).
+[C API index](c-api/README.md) covers its nested contract pages.
 
 The 2026-10-31 to 2026-11-01 review checked the pages against their owning sources, tests and
 recorded evidence. Historical measurements, frozen baselines, proposals and qualification limits
 remain explicitly identified; a review date does not turn them into new runtime or device results.
-For current defects use [handoff.md §5](../handoff.md#5-known-bugs-and-limitations), and for renderer
+For current defects use [KNOWN_ISSUES.md](../KNOWN_ISSUES.md), and for renderer
 support use the [feature matrix](graphics-renderer-feature-matrix.md) together with the selected
 build/device's [capability profile](renderer-capability-profiles.md). Generated reports describe
 their stated metadata/source checks, rather than proving complete behavioral parity.
 
 ## Start here
 
-- [../handoff.md](../handoff.md) — Current project state; §5 is the authoritative current defect and
+- [KNOWN_ISSUES.md](../KNOWN_ISSUES.md) — Current project state and the authoritative current defect and
   limitation register.
-- [../documents.md](../documents.md) — Complete review inventory for all tracked Markdown files
-  under `docs/`.
 - [maintainer-study-guide.md](maintainer-study-guide.md) — Evidence-driven study and change
   workflow, module dependencies and a rolling study cycle.
 - [migration-guide.md](migration-guide.md) — Porting an XNA/FNA game: C++ API conventions, content,
@@ -307,7 +304,7 @@ their stated metadata/source checks, rather than proving complete behavioral par
 - [browser-network-readiness.md](browser-network-readiness.md) — Browser networking refusals,
   retained modules and qualification prerequisites.
 - [gamer-services-known-limitations.md](gamer-services-known-limitations.md) —
-  GamerServices/Net/Guide/Avatar subsystem boundaries and evidence; handoff §5 owns the consolidated
+  GamerServices/Net/Guide/Avatar subsystem boundaries and evidence; KNOWN_ISSUES.md owns the consolidated
   defect list.
 - [gamer-services-server.md](gamer-services-server.md) — Server deployment, protocol/configuration
   and operational boundaries.

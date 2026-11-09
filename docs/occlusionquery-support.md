@@ -6,7 +6,7 @@ renderer implementation families and their focused tests on **2026-10-31**.
 This page is the focused source of truth for
 `Microsoft::Xna::Framework::Graphics::OcclusionQuery`. The cross-renderer summary remains
 [`graphics-renderer-feature-matrix.md`](graphics-renderer-feature-matrix.md); current defects belong
-only in [`handoff.md` §5](../handoff.md#5-known-bugs-and-limitations).
+only in [KNOWN_ISSUES.md](../KNOWN_ISSUES.md).
 
 ## Public XNA contract
 

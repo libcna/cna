@@ -38856,7 +38856,7 @@
         "operator": false,
         "assembly": "Microsoft.Xna.Framework",
         "xna_signature": "Microsoft.Xna.Framework.Content.ContentLoadException.#ctor(System.String,System.Exception)",
-        "cna_symbol": "modules/content/include/Microsoft/Xna/Framework/Content/ContentLoadException.hpp::ContentLoadException(const std::string &, const std::exception &)",
+        "cna_symbol": "modules/content/include/Microsoft/Xna/Framework/Content/ContentLoadException.hpp::ContentLoadException(const std::string &, std::exception_ptr)",
         "notes": "",
         "metadata": {
           "kind": "constructor",
@@ -122405,7 +122405,7 @@
         "operator": false,
         "assembly": "Microsoft.Xna.Framework.Input.Touch",
         "xna_signature": "Microsoft.Xna.Framework.Input.Touch.TouchCollection.Item(System.Int32)",
-        "cna_symbol": "modules/input/include/Microsoft/Xna/Framework/Input/Touch/TouchCollection.hpp::operator[](std::size_t)/operator[](std::size_t)",
+        "cna_symbol": "modules/input/include/Microsoft/Xna/Framework/Input/Touch/TouchCollection.hpp::operator[](std::size_t)/setItemProperty(std::size_t, const TouchLocation &)",
         "notes": "XNA property represented by CNA accessor convention.",
         "metadata": {
           "kind": "property",

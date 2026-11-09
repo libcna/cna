@@ -154,4 +154,4 @@ from either custom-shader contract to a stock effect.
   model.
 - [`fx-compiled-effects.md`](fx-compiled-effects.md) owns compiled-effect runtime details.
 - Each renderer page owns its platform, driver and build restrictions; current defects live only
-  in [`handoff.md` §5](../handoff.md#5-known-bugs-and-limitations).
+  in [KNOWN_ISSUES.md](../KNOWN_ISSUES.md).

@@ -551,7 +551,7 @@ on this repository's Linux host, never on the owner's live desktop.
 
 The parity report records mapped member status and intentional differences. Its absence of
 `MISSING` rows is an inventory gate, not proof that all behaviour matches or that every defect is
-known. Current defects and qualification gaps live in [`handoff.md`](../handoff.md) §5; consult
+known. Current defects and qualification gaps live in [KNOWN_ISSUES.md](../KNOWN_ISSUES.md); consult
 the subsystem guides and dated evidence for the scope of each claim.
 
 ## Verification of this guide

@@ -88,7 +88,7 @@ Additional platform gates are intentional and fail during configuration:
 Passing a build gate means the family can be compiled for that target. It does not prove that a
 specific native driver, adapter or platform has been qualified. Current platform evidence belongs
 in each renderer's document and current gaps belong in
-[`handoff.md` section 5](../handoff.md#5-known-bugs-and-limitations).
+[KNOWN_ISSUES.md](../KNOWN_ISSUES.md).
 
 ## Categories and maturity
 

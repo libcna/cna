@@ -59,7 +59,7 @@ Parity covers the ordinary XNA surface only, not the CNAEXT graphics extensions.
 with CNA-FIX-D24's genuine-XNA One/Zero blend-function witness: the colour/alpha equations remain
 independent, and Min/Max with those factors are refused. The shortcut is corrected in EasyGL,
 Software and CNA's FNA3D adapter. Any current renderer defect is recorded in
-[`handoff.md`](../handoff.md) §5; an EasyGL comparison is not an independent Microsoft oracle.
+[KNOWN_ISSUES.md](../KNOWN_ISSUES.md); an EasyGL comparison is not an independent Microsoft oracle.
 
 ## Platform evidence
 

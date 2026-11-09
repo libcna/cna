@@ -417,7 +417,7 @@ SDL_AUDIODRIVER=dummy ./cmake-build-devices-ubsan/CnaDevicesTests
 
 Run `CnaDevicesExtTests` as an additional target through the private GPU runner when a
 change touches `modules/devices-ext/`. Historical sanitizer findings belong in Git
-history or the current defect handoff, not as fixed test counts in this command guide.
+history or `KNOWN_ISSUES.md`, not as fixed test counts in this command guide.
 
 ## 7. Decided against: a native Android vibration backend (devices plan Task DEVICES-0031, 2026-07-05)
 
