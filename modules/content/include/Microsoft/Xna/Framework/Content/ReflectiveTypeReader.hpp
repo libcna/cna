@@ -711,6 +711,13 @@ namespace Microsoft::Xna::Framework::Content
                 if (!input.ReadBoolean()) return TMember{};
                 return TMember{ReadMember<typename TMember::value_type>(input)};
             }
+            else if constexpr (!CNA::Internal::Xnb::Detail::IsSerializedReferenceType<TMember>::value)
+                // HND-TQ-22: any other value type -- a game's own struct, DateTime, Decimal -- is read
+                // the same way, raw through its own registered reader: the member helper resolves
+                // the member type's reader (ReflectiveReaderMemberHelper..ctor IL_0006-000f) and
+                // ReadObject<object>(typeReader, null) (Read IL_0061-006e) reads a value type
+                // without an index.
+                return input.template ReadRawObject<TMember>();
             else
                 // Everything else is a .NET reference type -- a string, a nested object, a list --
                 // and XNA writes those with their own type-reader index in front.
