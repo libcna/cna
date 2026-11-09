@@ -2,6 +2,7 @@
 
 #include <gtest/gtest.h>
 #include "Microsoft/Xna/Framework/FrameworkDispatcher.hpp"
+#include "CNA/Internal/FrameworkNotifications.hpp"
 #include "Microsoft/Xna/Framework/Audio/DynamicSoundEffectInstance.hpp"
 #include "Microsoft/Xna/Framework/Audio/AudioChannels.hpp"
 #include "System/Environment.hpp"
@@ -25,6 +26,28 @@ TEST(FrameworkDispatcherTest, UpdateDoesNotThrowWithNoStreams)
     FrameworkDispatcher::ActiveSongChanged = false;
     FrameworkDispatcher::MediaStateChanged = false;
     EXPECT_NO_THROW(FrameworkDispatcher::Update());
+}
+
+namespace
+{
+    int storagePolls = 0;
+    void CountStoragePoll() { ++storagePolls; }
+}
+
+// HND-TQ-04: XNA FrameworkDispatcher.Update IL_00ec-00f1 delivers storage-device notifications.
+// The storage module installs its poll in a core slot; the dispatcher runs whatever is installed,
+// once per Update, without linking storage itself.
+TEST(FrameworkDispatcherTest, UpdateRunsTheInstalledStoragePollOncePerCall)
+{
+    auto& slot = CNA::Internal::FrameworkNotifications::StorageDevices;
+    void (*const previous)() = slot.exchange(&CountStoragePoll);
+    storagePolls = 0;
+    Microsoft::Xna::Framework::FrameworkDispatcher::Update();
+    Microsoft::Xna::Framework::FrameworkDispatcher::Update();
+    slot.store(previous);
+    EXPECT_EQ(storagePolls, 2);
+    Microsoft::Xna::Framework::FrameworkDispatcher::Update();
+    EXPECT_EQ(storagePolls, 2);
 }
 
 TEST(FrameworkDispatcherTest, InitialStateIsEmpty)

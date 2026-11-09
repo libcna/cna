@@ -52,7 +52,14 @@ namespace Microsoft::Xna::Framework::Storage
 
         // ---- Events ----
 
-        /** @brief Raised when the set of available storage devices changes. */
+        /**
+         * @brief Raised when the set of available storage devices changes.
+         *
+         * Delivered by FrameworkDispatcher::Update() with a null sender. CNA's devices are the
+         * file system, so a change is the volume holding the storage root arriving or leaving --
+         * one event per transition; directories created or deleted on that volume and a change of
+         * the root itself are not device changes.
+         */
         static System::EventHandler<System::EventArgs> DeviceChanged;
 
         // ---- OpenContainer ----
@@ -215,6 +222,13 @@ namespace Microsoft::Xna::Framework::Storage
 
         static std::string ResolveStorageRoot();
         static const std::string& EnsureStorageRoot();
+
+        /** @brief FrameworkDispatcher's per-frame poll of the storage root's volume (HND-TQ-04). */
+        static void PollVolume();
+        /** @brief Installs PollVolume with the framework dispatcher, as XNA's type initializer does. */
+        static bool InstallVolumePoll() noexcept;
+        /** @brief Set once by InstallVolumePoll when this module is linked. */
+        static const bool volumePollInstalled_;
     };
 
 } // namespace Microsoft::Xna::Framework::Storage

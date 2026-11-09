@@ -9,7 +9,9 @@
 #include <filesystem>
 #include <stdexcept>
 
+#include <cstdint>
 #include <cstdlib>
+#include <mutex>
 #include <optional>
 
 #if defined(__EMSCRIPTEN__)
@@ -30,8 +32,11 @@ static int CnaBrowserStorageReady()
 #  define WIN32_LEAN_AND_MEAN
 #  define NOMINMAX
 #  include <windows.h>
+#else
+#  include <sys/stat.h>
 #endif
 
+#include "CNA/Internal/FrameworkNotifications.hpp"
 #include "CNA/Internal/PathUtf8.hpp"
 #include "System/Threading/EventWaitHandle.hpp"
 #include "System/ArgumentException.hpp"
@@ -410,6 +415,90 @@ namespace Microsoft::Xna::Framework::Storage
     std::string StorageDevice::GetStorageRootEXT()
     {
         return EnsureStorageRoot();
+    }
+
+    // -------------------------------------------------------------------------
+    // DeviceChanged producer (HND-TQ-04, owner decision 2026-11-09, option 1)
+    // -------------------------------------------------------------------------
+
+    namespace
+    {
+        // The volume that holds a storage root: the device of its deepest existing ancestor. A
+        // volume mounted at or above the root arriving or leaving changes it; deleting or
+        // recreating directories on one volume does not.
+        std::optional<std::uint64_t> VolumeOf(const fs::path& root)
+        {
+            std::error_code error;
+            fs::path existing = root;
+            while (!existing.empty() && !fs::exists(existing, error)) existing = existing.parent_path();
+            if (existing.empty()) return std::nullopt;
+#if defined(_WIN32)
+            wchar_t mountPoint[MAX_PATH + 1] = {};
+            if (!::GetVolumePathNameW(existing.c_str(), mountPoint, MAX_PATH + 1)) return std::nullopt;
+            DWORD serial = 0;
+            if (!::GetVolumeInformationW(mountPoint, nullptr, 0, &serial, nullptr, nullptr, nullptr, 0))
+                return std::nullopt;
+            return static_cast<std::uint64_t>(serial);
+#else
+            struct stat status {};
+            if (::stat(existing.c_str(), &status) != 0) return std::nullopt;
+            return static_cast<std::uint64_t>(status.st_dev);
+#endif
+        }
+
+        struct PolledVolume
+        {
+            std::mutex mutex;
+            std::string root;
+            std::optional<std::uint64_t> volume;
+            bool baseline = false;
+        };
+
+        PolledVolume& Polled()
+        {
+            static PolledVolume polled;
+            return polled;
+        }
+    }
+
+    // XNA StorageDevice..cctor IL_0000-000c registers OnDeviceChanged with the framework as the
+    // type initializes; linking this translation unit installs the poll the same way.
+    const bool StorageDevice::volumePollInstalled_ = StorageDevice::InstallVolumePoll();
+
+    bool StorageDevice::InstallVolumePoll() noexcept
+    {
+        CNA::Internal::FrameworkNotifications::StorageDevices.store(&StorageDevice::PollVolume,
+                                                                   std::memory_order_release);
+        return true;
+    }
+
+    void StorageDevice::PollVolume()
+    {
+        // Nothing to watch until the game has resolved its storage root; the poll never resolves
+        // it itself, so a game that does not use storage costs one branch per frame.
+        if (!storageRootInitialized_) return;
+        bool changed = false;
+        {
+            PolledVolume& polled = Polled();
+            std::lock_guard<std::mutex> lock(polled.mutex);
+            const std::optional<std::uint64_t> volume = VolumeOf(CNA::Internal::PathFromUtf8(storageRoot_));
+            // A different root (SetAppNameEXT, another XDG/HOME resolution) is a new baseline, not
+            // a device change: the owner's option 1 counts volume arrival and removal only.
+            if (!polled.baseline || polled.root != storageRoot_)
+            {
+                polled.root = storageRoot_;
+                polled.volume = volume;
+                polled.baseline = true;
+                return;
+            }
+            if (volume != polled.volume)
+            {
+                polled.volume = volume;
+                changed = true;
+            }
+        }
+        // XNA OnDeviceChanged IL_0000-000c: Invoke(null, args), outside any storage lock.
+        if (changed) DeviceChanged.Raise(nullptr, System::EventArgs::Empty);
     }
 
 } // namespace Microsoft::Xna::Framework::Storage

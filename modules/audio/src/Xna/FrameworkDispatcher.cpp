@@ -3,6 +3,7 @@
 #include "Microsoft/Xna/Framework/FrameworkDispatcher.hpp"
 
 #include "CNA/Internal/Audio/FrameworkUpdates.hpp"
+#include "CNA/Internal/FrameworkNotifications.hpp"
 
 #include <array>
 #include <atomic>
@@ -33,6 +34,14 @@ namespace Microsoft::Xna::Framework
             {
                 run();
             }
+        }
+
+        // A storage-device notification (XNA Update IL_00ec-00f1 -> StorageDevice.DeviceChanged),
+        // when the storage module is linked (FrameworkNotifications.hpp).
+        if (auto* const poll =
+                CNA::Internal::FrameworkNotifications::StorageDevices.load(std::memory_order_acquire))
+        {
+            poll();
         }
 
         if (Input::Touch::TouchPanel::getTouchDeviceExistsProperty())
