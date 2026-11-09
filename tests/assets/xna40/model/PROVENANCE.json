@@ -740,6 +740,34 @@
    "generator": "tools/xna-pipeline-oracle/model/make_generated_normal_probes.py",
    "note": "Twenty-four triangles of integer coordinates up to 20,000: the differences are exact and every product in the cross rounds (XNASWEEP-231).",
    "thirdParty": false
+  },
+  {
+   "file": "x_generated_normal_space_source.x",
+   "origin": "generated",
+   "generator": "tools/xna-pipeline-oracle/model/make_generated_normal_space_probes.py",
+   "note": "One triangle whose face normal is (0, -1, 0): the genuine importer answers (+0, -1, -0), which only generation in the file's own space followed by the basis change gives (CNA-FIX-L49). Measured on the same geometry with other mesh names and comments; cnaplan/evidence/rev002/hnd-l49-generated-normals.",
+   "thirdParty": false
+  },
+  {
+   "file": "x_generated_normal_space_seed.x",
+   "origin": "generated",
+   "generator": "tools/xna-pipeline-oracle/model/make_generated_normal_space_probes.py",
+   "note": "One triangle whose face normal is (0, +1, 0): the genuine importer answers (+0, +1, +0), which rules out an accumulator that starts at -0 (CNA-FIX-L49). Measured on the same geometry with other mesh names and comments; cnaplan/evidence/rev002/hnd-l49-generated-normals.",
+   "thirdParty": false
+  },
+  {
+   "file": "x_generated_normal_space_control.x",
+   "origin": "generated",
+   "generator": "tools/xna-pipeline-oracle/model/make_generated_normal_space_probes.py",
+   "note": "One triangle whose face normal is (0, 0, -1), on which every candidate agrees (CNA-FIX-L49). Measured on the same geometry with other mesh names and comments; cnaplan/evidence/rev002/hnd-l49-generated-normals.",
+   "thirdParty": false
+  },
+  {
+   "file": "x_generated_normal_space_rounding.x",
+   "origin": "generated",
+   "generator": "tools/xna-pipeline-oracle/model/make_generated_normal_space_probes.py",
+   "note": "Two oblique triangles sharing two corners: the shared corners answer the basis change of the twice-normalized sum, not a basis change normalized again (CNA-FIX-L49). Measured on the same geometry with other mesh names and comments; cnaplan/evidence/rev002/hnd-l49-generated-normals.",
+   "thirdParty": false
   }
  ]
 }

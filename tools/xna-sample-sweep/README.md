@@ -123,10 +123,7 @@ The 815 accepted differences have seven reasons, each audited field by field:
 * **Not reachable from here:** the 1,797 sample-defined components (building one means running the
   sample's own code), the 815 accepted differences (four are unpublished Microsoft encoders or
   rasterizers), the 9 environment gaps and the 21 removed references.
-* **Reachable and small**, none visible in the corpus: the sign of a zero in a generated `.x`
-  normal (13 of 1,291 probe normals and one fixture normal; `XNASWEEP-231` names the basis matrix
-  as the likely cause, and generating in the file's own space would move every generated normal's
-  rounding, so it waits for a probe that separates the two orders on magnitudes); the FBX bone
+* **Reachable and small**, none visible in the corpus: the FBX bone
   ulp residue (SAMPLE-142's thirteen models went from 3,049 differing bone elements to 597, all
   within tolerance; what remains accumulates with depth). `MeshHelper.OptimizeForCache` is no
   longer on this list: since round six of `tools/xna-pipeline-oracle/optimize/README.md` it is

@@ -117,12 +117,14 @@ namespace Microsoft::Xna::Framework::Content::Pipeline
          * A position is neither transformed this way nor normalized: `0.855686` stays
          * `0x3F5B0E3D` (`XNASWEEP-170`).
          */
+        [[nodiscard]] Vector3 ConvertNormalBasis(const Vector3 value);
+
         [[nodiscard]] Vector3 ConvertNormal(const Vector3 value)
         {
-            static constexpr float kNegativeZero = -0.0f;
-            const float x = ((value.X * 1.0f) + (value.Y * 0.0f)) + (value.Z * kNegativeZero);
-            const float y = ((value.X * 0.0f) + (value.Y * 1.0f)) + (value.Z * 0.0f);
-            const float z = ((value.X * kNegativeZero) + (value.Y * 0.0f)) + (value.Z * -1.0f);
+            const Vector3 basis = ConvertNormalBasis(value);
+            const float x = basis.X;
+            const float y = basis.Y;
+            const float z = basis.Z;
             const double wide = (static_cast<double>(x) * static_cast<double>(x)) +
                                 (static_cast<double>(y) * static_cast<double>(y)) +
                                 (static_cast<double>(z) * static_cast<double>(z));
@@ -132,6 +134,21 @@ namespace Microsoft::Xna::Framework::Content::Pipeline
                 return Vector3(0.0f, 0.0f, 0.0f);
             }
             return Vector3(x / length, y / length, z / length);
+        }
+
+        /**
+         * @brief ConvertNormal's basis change alone, without its normalization.
+         *
+         * A generated normal is finished in the source's left-handed space and then only
+         * transformed: the 1-ulp-short `04_rounding.x` corner the genuine importer answers is the
+         * unnormalized form (`CNA-FIX-L49`).
+         */
+        [[nodiscard]] Vector3 ConvertNormalBasis(const Vector3 value)
+        {
+            static constexpr float kNegativeZero = -0.0f;
+            return Vector3(((value.X * 1.0f) + (value.Y * 0.0f)) + (value.Z * kNegativeZero),
+                           ((value.X * 0.0f) + (value.Y * 1.0f)) + (value.Z * 0.0f),
+                           ((value.X * kNegativeZero) + (value.Y * 0.0f)) + (value.Z * -1.0f));
         }
 
         /** @brief The left-handed source vector as the right-handed pipeline holds it. */
@@ -414,10 +431,14 @@ namespace Microsoft::Xna::Framework::Content::Pipeline
             std::size_t at = 0u;
             const std::size_t vertexCount = Count(object, at++);
             std::vector<Vector3> positions;
+            // Normals a mesh does not declare are generated in the file's own space (CNA-FIX-L49).
+            std::vector<Vector3> sourcePositions;
             positions.reserve(vertexCount);
+            sourcePositions.reserve(vertexCount);
             for (std::size_t i = 0; i < vertexCount; ++i)
             {
-                positions.push_back(Convert(Vector3(At(object, at), At(object, at + 1), At(object, at + 2))));
+                sourcePositions.emplace_back(At(object, at), At(object, at + 1), At(object, at + 2));
+                positions.push_back(Convert(sourcePositions.back()));
                 at += 3u;
             }
             // A mesh's positions are the *distinct* ones, and the order is the order the
@@ -543,18 +564,25 @@ namespace Microsoft::Xna::Framework::Content::Pipeline
              * committed `.x` fixtures and SAMPLE-141's `xwing.x`, whose 1,293 positions it answers
              * bit for bit (`XNASWEEP-231`).
              *
-             * **What is left.** Thirteen of those 1,291 probe normals and one of the 76 fixture
-             * ones differ in the *sign of a zero* and in nothing else -- the genuine importer
-             * answers `-0` in Z where a sum that starts at `+0` cannot. No corpus reference
-             * carries one.
+             * **The space.** All of this happens in the file's own left-handed space, and the
+             * finished normal is then only basis-changed (`ConvertNormalBasis`, not normalized
+             * again). The reflection reverses handedness, so the source-space cross product is
+             * negated. Only the sign of a zero tells the spaces apart: one triangle whose face
+             * normal is `(0, -1, 0)` answers `(+0, -1, -0)` from the genuine importer, which a
+             * sum over converted positions (`+0` in Z) cannot give, and one at `(0, +1, 0)`
+             * answers `(+0, +1, +0)`, which a `-0` seed cannot; a shared corner of two oblique
+             * triangles answers the unnormalized basis bits, one ulp above a normalized basis
+             * (`CNA-FIX-L49`, probes and genuine bits in cnaplan/evidence/rev002/hnd-l49-generated-normals).
              *
-             * @param positions The mesh's positions, as imported.
+             * @param positions The mesh's positions, as imported; they key the accumulation.
+             * @param sourcePositions The same positions before the basis change.
              * @param faces The mesh's faces, as vertex indices.
              * @return One normal per vertex.
              */
             const auto generateNormals =
                 [&normalizeStep, &normalizeTimes](
                     const std::vector<Vector3>& positions,
+                    const std::vector<Vector3>& sourcePositions,
                     const std::vector<std::vector<std::size_t>>& faces)
             {
                 // The bucket a vertex accumulates into is its *position*, by the same exact-bits
@@ -576,18 +604,19 @@ namespace Microsoft::Xna::Framework::Content::Pipeline
                     for (std::size_t corner = 1u; corner + 1u < face.size(); ++corner)
                     {
                         const std::size_t triangle[3] = {face[0], face[corner], face[corner + 1u]};
-                        const Vector3& p0 = positions[triangle[0]];
-                        const Vector3& p1 = positions[triangle[1]];
-                        const Vector3& p2 = positions[triangle[2]];
+                        const Vector3& p0 = sourcePositions[triangle[0]];
+                        const Vector3& p1 = sourcePositions[triangle[1]];
+                        const Vector3& p2 = sourcePositions[triangle[2]];
                         const float ux = p0.X - p1.X, uy = p0.Y - p1.Y, uz = p0.Z - p1.Z;
                         const float wx = p2.X - p1.X, wy = p2.Y - p1.Y, wz = p2.Z - p1.Z;
+                        // Negated after narrowing: the left-handed source reverses the winding.
                         const Vector3 face_normal(
-                            static_cast<float>(static_cast<double>(uy) * wz -
-                                               static_cast<double>(uz) * wy),
-                            static_cast<float>(static_cast<double>(uz) * wx -
-                                               static_cast<double>(ux) * wz),
-                            static_cast<float>(static_cast<double>(ux) * wy -
-                                               static_cast<double>(uy) * wx));
+                            -static_cast<float>(static_cast<double>(uy) * wz -
+                                                static_cast<double>(uz) * wy),
+                            -static_cast<float>(static_cast<double>(uz) * wx -
+                                                static_cast<double>(ux) * wz),
+                            -static_cast<float>(static_cast<double>(ux) * wy -
+                                                static_cast<double>(uy) * wx));
                         const Vector3 unit = normalizeStep(face_normal);
                         for (const std::size_t vertex : triangle)
                         {
@@ -604,7 +633,7 @@ namespace Microsoft::Xna::Framework::Content::Pipeline
                     const auto found = accumulated.find(keyOf(vertex));
                     const Vector3 sum =
                         found == accumulated.end() ? Vector3(0.0f, 0.0f, 0.0f) : found->second;
-                    const Vector3 answer = normalizeTimes(sum, 2);
+                    const Vector3 answer = ConvertNormalBasis(normalizeTimes(sum, 2));
                     // A vertex whose faces cancel out has no answer this has measured; the
                     // constant is what CNA answered everywhere before and is kept for it alone.
                     generated[vertex] =
@@ -671,7 +700,8 @@ namespace Microsoft::Xna::Framework::Content::Pipeline
                 }
             }
             const std::vector<Vector3> generated =
-                normals.empty() ? generateNormals(positions, faces) : std::vector<Vector3>{};
+                normals.empty() ? generateNormals(positions, sourcePositions, faces)
+                                : std::vector<Vector3>{};
             std::vector<Vector2> textureCoordinates;
             if (const Canon::DirectXFileObject* object2 = Find(object, "MeshTextureCoords");
                 object2 != nullptr)

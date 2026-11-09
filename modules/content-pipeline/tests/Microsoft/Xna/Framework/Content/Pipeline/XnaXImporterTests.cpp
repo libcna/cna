@@ -675,6 +675,76 @@ TEST(XnaXImporter, AGeneratedNormalIsTheUnitFaceNormalSummedByPosition)
     EXPECT_EQ(wideNormals.at(6)[2], 0xBF4898BEu);
 }
 
+// CNA-FIX-L49: a generated `.x` normal is computed in the file's own left-handed space and then
+// only basis-changed. The bits are the genuine importer's, read with `CNA_MODEL_ORACLE_BITS=1` on
+// the same geometry (cnaplan/evidence/rev002/hnd-l49-generated-normals): a sum over the imported
+// positions answers `+0` in the first file's Z, a `-0` accumulator `-0` in the second's, and a
+// basis change normalized once more `0x3F0526E5,0x3F0A6D9D,0x3F293EF8` at the fourth's shared
+// corners.
+TEST(XnaXImporter, AGeneratedNormalIsFinishedInTheFilesOwnSpace)
+{
+    using Bits = std::array<std::uint32_t, 3>;
+    const auto normalsOf = [](const std::string& fixture)
+    {
+        ImporterContext context;
+        XImporter importer;
+        const std::shared_ptr<Graphics::NodeContent> root =
+            importer.Import(CNA::Internal::PathToUtf8(Fixture(fixture)), context);
+        std::map<int, Bits> found;
+        if (root == nullptr || root->getChildrenProperty().getCountProperty() != 1) { return found; }
+        const auto mesh = std::dynamic_pointer_cast<Graphics::MeshContent>(
+            std::shared_ptr<Graphics::NodeContent>(root->getChildrenProperty()[0]));
+        if (mesh == nullptr) { return found; }
+        for (SharpRuntime::intcs batch = 0;
+             batch < mesh->getGeometryProperty().getCountProperty(); ++batch)
+        {
+            const std::shared_ptr<Graphics::GeometryContent> geometry =
+                mesh->getGeometryProperty()[batch];
+            const auto& channels = geometry->getVerticesProperty().getChannelsProperty();
+            const auto& mapped = geometry->getVerticesProperty().getPositionIndicesProperty();
+            for (SharpRuntime::intcs at = 0; at < channels.getCountProperty(); ++at)
+            {
+                const std::shared_ptr<Graphics::VertexChannelBase>& channel = channels[at];
+                if (channel == nullptr || channel->getNameProperty() != "Normal0") { continue; }
+                for (SharpRuntime::intcs index = 0; index < channel->getCountProperty(); ++index)
+                {
+                    const Vector3 normal = Xna::Unbox<Vector3>((*channel)[index]);
+                    Bits raw{};
+                    std::memcpy(&raw[0], &normal.X, sizeof(float));
+                    std::memcpy(&raw[1], &normal.Y, sizeof(float));
+                    std::memcpy(&raw[2], &normal.Z, sizeof(float));
+                    found[static_cast<int>(Xna::Unbox<SharpRuntime::intcs>(mapped[index]))] = raw;
+                }
+            }
+        }
+        return found;
+    };
+    const auto expectAll = [](const std::map<int, Bits>& found, const std::size_t count,
+                              const Bits& expected)
+    {
+        ASSERT_EQ(found.size(), count);
+        for (const auto& [position, bits] : found)
+        {
+            SCOPED_TRACE(position);
+            EXPECT_EQ(bits, expected);
+        }
+    };
+
+    expectAll(normalsOf("x_generated_normal_space_source.x"), 3u,
+              Bits{0x00000000u, 0xBF800000u, 0x80000000u});
+    expectAll(normalsOf("x_generated_normal_space_seed.x"), 3u,
+              Bits{0x00000000u, 0x3F800000u, 0x00000000u});
+    expectAll(normalsOf("x_generated_normal_space_control.x"), 3u,
+              Bits{0x00000000u, 0x00000000u, 0xBF800000u});
+
+    const std::map<int, Bits> rounding = normalsOf("x_generated_normal_space_rounding.x");
+    ASSERT_EQ(rounding.size(), 4u);
+    EXPECT_EQ(rounding.at(0), (Bits{0x3F0526E6u, 0x3F0A6D9Eu, 0x3F293EF9u}));
+    EXPECT_EQ(rounding.at(1), (Bits{0x3F6BB9F6u, 0xBCE24C1Fu, 0xBEC73056u}));
+    EXPECT_EQ(rounding.at(2), (Bits{0x3F0526E6u, 0x3F0A6D9Eu, 0x3F293EF9u}));
+    EXPECT_EQ(rounding.at(3), (Bits{0xBF34A7EBu, 0x3E80A61Fu, 0x3F2997D1u}));
+}
+
 // XNASWEEP-181: the sign of a zero in a `.x` normal, which the
 // committed oracle cannot carry -- .NET Framework's `ToString` writes a negative zero as `0`.
 // These are the bits the genuine importer answered for the same file, read with the oracle's
