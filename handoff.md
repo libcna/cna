@@ -40,7 +40,15 @@ S1 are fixed. Lane workspaces, reports and integrator logs: `/rv/tmp/cna-hnd-202
 receipts under `cnaplan/evidence/rev002/`. Galaxy Eggbert's upstream_bugs.md has no open CNA item.
 XACT question 4 (lifetimes) was captured and integrated (HND-XACT-04). The full seven-tree sweep ran on
 d335682d0 (section 0.3); its four failures and one CI failure are fixed (HND-SWEEP15-01..03, TQ-FORK-PIN-05).
-Still open from 8.0: the finite-loop cardinality question below and a confirming sweep on the final source.
+After the sweep (2026-11-09): HND-TQ-03 (WebGPU descriptor/compiled depth-stencil state and pipeline keys;
+cmake-build-webgpu now has CNA_CNAEXT and CNA_WEBGPU_COMPILED_EFFECTS ON so it builds both routes) and
+CNA-FIX-L49 (generated `.x` normals in the file's own space, measured on genuine XNA; evidence
+`cnaplan/evidence/rev002/hnd-l49-generated-normals/`). The two feasible rows of the reconciled queue are
+therefore closed. Still open: the finite-loop cardinality question below, a confirming sweep on the final
+source, the `.x` vertex-order observation in 5.1, and FNA3D-8 (`docs/fna3d-dependency-defects.md`): fork
+4ff109a already converts OpenGL presentation rectangles, so its OpenGL half needs a native rerun of
+`Gap08PresentedPixels` before CNA's FNA3D non-default-Present refusal can be reconsidered; the SDLGPU half
+(DONT_CARE swapchain load) still needs a fork repair.
 
 ### Owner questions recorded during the night (not implemented, owner rule)
 
@@ -589,8 +597,23 @@ queue labels alone neither establish a current defect nor close one.
   (feded6a8a..7f0ef4f07) and the pin follows the published pair. In cmake-build-multi all ten
   `Gap13_` tests (eight policies, both exact 44-case corpora), the shared BEM contract and the new
   full-image TEXREG2AR/GB/RGB/TEXDP3/TEXDP3TEX witnesses pass privately on SDLGPU, WEBGPU and both
-  FNA3D drivers (evidence: cnaplan/evidence/rev002/fork-pin-01/). TEXM3X2DEPTH stays
-  refused by name at this pin; its fork implementation is TQ-TEXM3X2DEPTH-01.
+  FNA3D drivers (evidence: cnaplan/evidence/rev002/fork-pin-01/). TEXM3X2DEPTH was implemented
+  later the same night (TQ-TEXM3X2DEPTH-01, MojoShader 0dc4f2e) and is admitted at the current pin.
+- **`.x` vertex order with declared normals over degenerate faces (observed 2026-11-09, not fixed).**
+  A genuine bits-mode run over the committed corpus (CNA-FIX-L49 evidence, `corpus-compare-final.txt`)
+  shows `x_face_degenerate_normals.x`'s two vertices at position 3 carrying their normals in the opposite
+  order from XNA (XNA vertex 3 `(0,1,0)` and 5 `(1,0,0)`; CNA the reverse); positions, indices and
+  positionIndices agree, and the committed text-reference test does not see it. Identical before and after
+  L49. Next: reproduce with a probe that separates the vertex-creation orders, then fix with a bits
+  regression.
+- **`.x` VertexDuplicationIndices window disagrees with genuine XNA on its own fixture (observed
+  2026-11-09, not fixed).** For `x_vertex_duplication.x` (map `0,1,2,3,3,3`; faces `(0,1,2) (0,4,5)
+  (1,3,4) (1,2,3)`) CNA's XNASWEEP-198 rule drops both faces naming two vertices of group 3 and answers
+  4 positions / 6 indices, as the fixture's generator comment expects; the genuine importer answers 6
+  positions / 9 indices (one face dropped), both in today's bits run and in the committed reference
+  `tests/reference/xna40/model/model-import-oracle.json`. No test checks this fixture. The rule was
+  measured on `target.x` and is documented as not understood outside that window; re-measure with
+  per-face probes before changing it.
 - **Genuine-XNA native teardown fault (TQ-SWEEP14-02), unattributed.** The harness ownership gap is
   repaired (2026-11-08, §0.3); the one-off Wine fault of sweep 14 did not reproduce with the old or the
   new harness. If it recurs, capture `+loaddll,+seh` and a WineDbg stack as INTEGRATOR_COMMANDS.md in the
