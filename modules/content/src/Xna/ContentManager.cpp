@@ -101,12 +101,19 @@ namespace Microsoft::Xna::Framework::Content
         // An override may delegate to the base, replace its exception, or recursively load
         // another asset. Record the identity of only this call's base missing-file exception;
         // neither exception type nor message alone can distinguish a deliberate override error.
+        //
+        // That identity is the exception's cause, not the ContentLoadException object itself:
+        // std::current_exception() may return a copy of the object in flight ([propagation]), and
+        // MSVC's always does, so comparing it with a recorded exception_ptr was false there for
+        // the base's own exception and no asset without an .xnb loaded on Windows. The cause is an
+        // exception_ptr inside the exception, and every copy shares the object it refers to.
         struct CompiledStreamAttempt
         {
             static thread_local CompiledStreamAttempt* active;
             const ContentManager* manager;
             const std::string& assetName;
-            std::exception_ptr missing;
+            std::exception_ptr missingCause;
+            std::string missingMessage;
             CompiledStreamAttempt* previous;
 
             CompiledStreamAttempt(const ContentManager* owner, const std::string& name)
@@ -343,9 +350,11 @@ namespace Microsoft::Xna::Framework::Content
                 throw ContentLoadException("ContentManager: OpenStream returned no stream for asset '" + assetName + "'.");
             return stream;
         }
-        catch (...)
+        catch (const ContentLoadException& error)
         {
-            if (attempt.missing && std::current_exception() == attempt.missing)
+            if (attempt.missingCause &&
+                error.getInnerExceptionProperty() == attempt.missingCause &&
+                error.getMessageProperty() == attempt.missingMessage)
                 return nullptr;
             throw;
         }
@@ -398,12 +407,15 @@ namespace Microsoft::Xna::Framework::Content
                         cause = std::make_exception_ptr(System::IO::DirectoryNotFoundException(
                             "Could not find a part of the path."));
                 }
-                const auto missing = std::make_exception_ptr(ContentLoadException(
-                    "Error loading \"" + assetName + "\". File not found.", cause));
+                ContentLoadException missing(
+                    "Error loading \"" + assetName + "\". File not found.", cause);
                 auto* attempt = CompiledStreamAttempt::active;
                 if (attempt && attempt->manager == this && attempt->assetName == assetName)
-                    attempt->missing = missing;
-                std::rethrow_exception(missing);
+                {
+                    attempt->missingCause = cause;
+                    attempt->missingMessage = missing.getMessageProperty();
+                }
+                throw missing;
             }
         }
         catch (const ContentLoadException&)

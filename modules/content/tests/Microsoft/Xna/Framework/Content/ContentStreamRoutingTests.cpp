@@ -1,13 +1,19 @@
 // SPDX-License-Identifier: MS-PL
 // ISSUE-012: no Game, no routing opt-in, and no manual built-in registration.
 #include "CNA/TestSupport/EmptyServiceProvider.hpp"
+#include "CNA/TestSupport/TestScratch.hpp"
 #include <gtest/gtest.h>
 #include <array>
 #include <algorithm>
 #include "System/IO/IOException.hpp"
+#include <filesystem>
+#include <fstream>
 #include <functional>
 #include <barrier>
+#include <random>
 #include <thread>
+#include "CNA/Internal/PathUtf8.hpp"
+#include "CNA/Internal/TitlePath.hpp"
 #include "CNA/Platform/PlatformTestDecorator.hpp"
 #include "CNA/Internal/Xnb/XnbBuiltInReaders.hpp"
 #include "CNA/Internal/Xnb/XnbReadLimits.hpp"
@@ -310,6 +316,101 @@ TEST_F(StreamRoutingBoundaryTest, ReplacedBaseMissingExceptionDoesNotFallBack)
     manager.open = [&](const auto& name) -> std::unique_ptr<System::IO::Stream> {
         try { return manager.BaseOpen(name); }
         catch (const ContentLoadException&) { throw ContentLoadException("translated refusal"); }
+    };
+    try { (void)manager.Load<Payload>("asset"); FAIL() << "replacement exception swallowed"; }
+    catch (const ContentLoadException& error) { EXPECT_EQ(error.getMessageProperty(), "translated refusal"); }
+    EXPECT_EQ(manager.opens, 1);
+    EXPECT_EQ(reads, 0);
+}
+
+// std::current_exception() may return a copy of the exception in flight ([propagation]), and
+// MSVC's always does. Telling the base's missing-file exception apart by object identity therefore
+// failed there for that very exception: on Windows every Load<T>() of an asset without an .xnb
+// threw `Error loading "logo". File not found.` instead of reaching the loose reader. A copy is
+// the same failure, which is what this override hands on.
+TEST_F(StreamRoutingBoundaryTest, CopiedBaseMissingExceptionStillUsesLooseFallback)
+{
+    CallbackStreamManager manager;
+    int reads = 0;
+    manager.RegisterTypeReader<Payload>(std::make_unique<CountingLooseReader>(reads));
+    manager.open = [&](const auto& name) -> std::unique_ptr<System::IO::Stream> {
+        try { return manager.BaseOpen(name); }
+        catch (const ContentLoadException& missing) { throw ContentLoadException(missing); }
+    };
+    const auto value = manager.Load<Payload>("asset");
+    ASSERT_NE(value, nullptr);
+    EXPECT_EQ(value->value, 9);
+    EXPECT_EQ(manager.opens, 1);
+    EXPECT_EQ(reads, 1);
+}
+
+namespace
+{
+    class PngPathReader final : public LooseFileContentTypeReader<Payload>
+    {
+    public:
+        explicit PngPathReader(std::string& path) : path_(path) { }
+        [[nodiscard]] std::vector<std::string> GetExtensions() const override { return {".png"}; }
+        Payload Read(const std::string& path, ContentManager&) override
+        {
+            path_ = path;
+            return std::make_shared<StreamPayload>(StreamPayload{7});
+        }
+    private:
+        std::string& path_;
+    };
+}
+
+// The cna-template smoke test: Load<Texture2D>("logo") with Content/logo.png beside the executable
+// (TitleLocation.Path) and the working directory somewhere else, as CTest runs an MSVC build.
+TEST_F(StreamRoutingBoundaryTest, ExtensionlessLooseAssetLoadsFromTheTitleWhileTheWorkingDirectoryIsElsewhere)
+{
+    namespace fs = std::filesystem;
+    std::random_device entropy;
+    const fs::path scratch = CNA::TestSupport::FixtureRoot() / ("cna-title-loose-" + std::to_string(entropy()));
+    const fs::path title = scratch / "Debug";
+    const fs::path working = scratch / "working";
+    fs::create_directories(title / "Content");
+    fs::create_directories(working);
+    std::ofstream(title / "Content" / "logo.png", std::ios::binary) << "png";
+    struct Restore
+    {
+        fs::path scratch;
+        fs::path directory = fs::current_path();
+        std::string title = CNA::Internal::TryGetTitlePath().value_or(std::string{});
+        ~Restore()
+        {
+            std::error_code ignored;
+            fs::current_path(directory, ignored);
+            CNA::Internal::SetTitlePath(title);
+            fs::remove_all(scratch, ignored);
+        }
+    } restore{scratch};
+    // Native spelling with a trailing separator, as the desktop platform's GetBasePath() reports it.
+    CNA::Internal::SetTitlePath(CNA::Internal::PathToUtf8(title / fs::path{}));
+    fs::current_path(working);
+
+    ContentManager manager(CNA::TestSupport::EmptyServices(), "Content");
+    std::string readPath;
+    manager.RegisterTypeReader<Payload>(std::make_unique<PngPathReader>(readPath));
+    const auto value = manager.Load<Payload>("logo");
+    ASSERT_NE(value, nullptr);
+    EXPECT_EQ(value->value, 7);
+    ASSERT_FALSE(readPath.empty());
+    EXPECT_TRUE(fs::equivalent(CNA::Internal::PathFromUtf8(readPath), title / "Content" / "logo.png"));
+}
+
+TEST_F(StreamRoutingBoundaryTest, ReplacementCarryingTheBaseCauseDoesNotFallBack)
+{
+    CallbackStreamManager manager;
+    int reads = 0;
+    manager.RegisterTypeReader<Payload>(std::make_unique<CountingLooseReader>(reads));
+    manager.open = [&](const auto& name) -> std::unique_ptr<System::IO::Stream> {
+        try { return manager.BaseOpen(name); }
+        catch (const ContentLoadException& missing)
+        {
+            throw ContentLoadException("translated refusal", missing.getInnerExceptionProperty());
+        }
     };
     try { (void)manager.Load<Payload>("asset"); FAIL() << "replacement exception swallowed"; }
     catch (const ContentLoadException& error) { EXPECT_EQ(error.getMessageProperty(), "translated refusal"); }
