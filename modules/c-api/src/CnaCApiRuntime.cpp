@@ -10,6 +10,7 @@
 #include "CnaCApiOutput.hpp"
 
 #include "Microsoft/Xna/Framework/Game.hpp"
+#include "Microsoft/Xna/Framework/Graphics/IGraphicsDeviceService.hpp"
 #include "Microsoft/Xna/Framework/Color.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
 #include "System/TimeSpan.hpp"
@@ -388,6 +389,17 @@ protected:
         const CallbackScope scope(*this);
         Invoke(frameHooks_.initialize, nullptr, frameHooks_.context);
         Game::Initialize();
+        // This ABI promises `load_content` in the first frame (runtime.h, CNA_GameFrameHooks::
+        // initialize) also for a game that creates no GraphicsDeviceManager and so runs on CNA's
+        // own device. XNA's Game.Initialize IL_0032-0048 -- which the C++ base now follows
+        // (HND-TQ-19) -- loads nothing without an IGraphicsDeviceService, so the C adapter keeps
+        // its own contract here. A service that exists but has no device yet still loads through
+        // its DeviceCreated event, as in the base.
+        if (!hasLoadedContent_ &&
+            getServicesProperty().GetService<Microsoft::Xna::Framework::Graphics::IGraphicsDeviceService>() ==
+                nullptr) {
+            LoadContent();
+        }
     }
 
     void BeginRun() override
