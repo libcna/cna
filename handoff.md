@@ -45,13 +45,9 @@ cmake-build-webgpu now has CNA_CNAEXT and CNA_WEBGPU_COMPILED_EFFECTS ON so it b
 CNA-FIX-L49 (generated `.x` normals in the file's own space, measured on genuine XNA; evidence
 `cnaplan/evidence/rev002/hnd-l49-generated-normals/`). The two feasible rows of the reconciled queue are
 therefore closed. The confirming full sweep 16 on bc5e629ab has no failure in any of the seven trees
-(section 0.3). CNA-FIX-XVERT-01 then fixed the `.x` corner-normal order over degenerate faces (5.1). Still open:
-the finite-loop cardinality question below, the `.x` VertexDuplicationIndices window in 5.1, and FNA3D-8
-(`docs/fna3d-dependency-defects.md`, state of 2026-11-09): fork 4ff109a converts OpenGL presentation
-rectangles, but a native `Gap08PresentedPixels` rerun needs CNA's removed forwarding reinstated in a probe
-build (the retained binary links the old FNA3D statically, the old patch no longer applies); the SDLGPU
-half needs a design decision in the fork (a persistent client-sized copy, or refusing destination
-rectangles), since a `LOAD` of a rotating swapchain image does not preserve the previous presentation.
+(section 0.3). CNA-FIX-XVERT-01 then fixed the `.x` corner-normal order over degenerate faces (5.1). The
+owner then answered every open question; what each answer led to is in *Results of the owner answers*
+below, and the final sweep 17 is in section 0.3.
 
 ### Owner answers of 2026-11-09 (~07:20) to every question below
 
@@ -67,6 +63,56 @@ decoding in sharp-runtime and the content route); HND-TQ-22 (content + C API), H
 retention and stock-shader clone rendering), HND-TQ-39 (shared lifetime-safe MediaSource identity with a C ownership
 plan); OPENGLES3 compiled effects ON in cmake-build-debug and cmake-build-multi with the 44-case corpus. The owner adds
 the FNA AI policy to CNA himself. The entries below keep their original text until each task lands.
+
+### Results of the owner answers (2026-11-09, frozen scope) -- end of the AI continuation
+
+The owner froze the scope at ~08:30 to exactly the answers above and asked that the work end so the FNA
+AI policy can be introduced (AI as an advisor afterwards). Outcome per item:
+
+| Item | Result |
+|---|---|
+| XACT finite-loop cardinality | Measured on native XACT 3.6 (56 cells, x86/x64): a raw loop byte n plays n+1 passes; NEW_ON_LOOP makes each pass its own wave. Implemented for event types 1/3 (HND-XACT-05, 3558fcd87/888e1f451); effect families 4/6, loop regions, random/shuffle and raw 5-254 are unmeasured. Evidence `cnaplan/evidence/rev002/hnd-xact/`. |
+| FNA3D-8 SDLGPU | Fork 76a76cf: a partial destination clears the swapchain to opaque black (d001379's refusal broke CNA's letterbox and was replaced). Pin TQ-FORK-PIN-06 (57ef09797). CNA keeps refusing non-default Present on FNA3D. |
+| HND-TQ-19 Game.Initialize | Implemented, then **reverted** by the owner (773a5f498): it crashed `cna_demo_2d` and 7 other CNA examples without a GraphicsDeviceManager. CNA keeps loading a manager-less game's content (boundary in docs/xna-fna-behavior-decisions.md). |
+| HND-TQ-04 DeviceChanged | Done: raised on the storage root's volume arriving/leaving (dfca11e7f). |
+| HND-TQ-10 pinch | Done: a replacement second finger starts from its own latest location (8b579080a). |
+| HND-TQ-35 ContentManager | Done: explicit Stream.Close; service-only device lookup beside injection (6321a723b). |
+| HND-TQ-47 R1/R2 (TQ-49 D3) | Implemented and pinned on branch `work/hnd-gfx` (56239f345, e8d5ecd69) but **not integrated** by the owner: they broke 114 EasyGL example programs in cmake-build-multi alone. CNA keeps its cascade dispose and stable back buffer (b5f3629ff). |
+| HND-TQ-16 XNB + .NET 4 | Done: Refresh acceptance/refusal types with allocation limits kept (330dbc73e; the C content smoke now expects CNA_RESULT_NOT_SUPPORTED for an unknown texture format, 2bcfb8bf4); sharp-runtime BinaryReader decodes as .NET 4.0 (sharp-runtime 0abe8a91) with CNA tests (6de78e2f0). |
+| HND-TQ-22 | Owner: C++ half only. Unlisted value-type reflective members read raw (6ea76b490); the Model-tag type-name half (no test reaches it) and the C route (would need ABI 0.61) are not done. |
+| HND-TQ-25 D8/D9 | D8: a C-ABI material keeps its source's retained C textures (3550a40cf). D9: a base-Effect/EffectMaterial clone of a stock effect draws with the stock shaders and its raw parameters (35cb1e6b8; ac66218fc keeps TextureCube out of sprite-only programs, which sweep 17 caught). |
+| HND-TQ-39 | Done: GetAvailableMediaSources returns shared sources and MediaLibrary returns the very source (e8fb8d3a3; cna-demos 8c2fa09, cna-examples 634600f). |
+| OPENGLES3 compiled effects | cmake-build-debug ON: 42/44 corpus pass, 2 skipped (LOD bias unrepresentable on ES 3), so **not qualified**; cmake-build-multi stays OFF (owner). Evidence `cnaplan/evidence/rev002/hnd-gles3-corpus/`. |
+
+Also this morning: CNA-FIX-XVERT-01 (.x corner normals, 2c100d63b) and the confirming sweep 16. Final
+sweep 17 and its two fixed regressions: section 0.3.
+
+Published on 2026-11-09: CNA `next` 2bcfb8bf4, FNA3D fork 76a76cf (`cna-audit-fixes`), sharp-runtime
+0abe8a91, cna-demos 8c2fa09, cna-examples 634600f. Unintegrated work stays on the local branches
+`work/hnd-gfx` (R1/R2, the SDL staging fix), `work/hnd-xact`, `work/hnd-content` and `work/hnd-stock`.
+Their worktrees were removed. The subagent reports are in `cnaplan/evidence/rev002/hnd-*/REPORT.md`.
+
+#### Found during this work, not done (for human follow-up)
+
+- XACT: effect families 4/6 and loop-region waves unmeasured (banks authored in `hnd-xact/banks/`,
+  `run-native.sh run effect`); random/shuffle without NEW_ON_LOOP and raw 5-254 follow the rule by
+  extension only; `check-xact-prefetch-oracle.py` fails "Probe source changed" since HND-XACT-04.
+- Graphics: effect ObjectDisposedException names use the resource Name, not XNA's type name; stock
+  EffectParameter::SetValue(Texture) never refuses a disposed texture; an unwritten stock matrix
+  parameter reads identity (XNA: zero), so a stock clone made before the source's first Apply draws;
+  SpriteEffect clones go through the custom path; stock classes read fields at draw time rather than
+  latching at Apply; DIRECTX9 stock-clone path compiled only.
+- C API: `cna_effect_clone` does not extend parameter-level/shader-unit C retention; content tags of
+  meshes/parts have no C route; HND-TQ-22 C route (ObjectValue handles, ABI 0.61) not done.
+- Content: Refresh closes an uncompressed XNB's stream twice (CNA once); Refresh skips totalLength for
+  non-seekable streams; null OpenStream is ArgumentNullException in XNA (CNA ContentLoadException);
+  texture dimension <= 0 is ArgumentOutOfRangeException in XNA; LZX failures surface per frame;
+  sharp-runtime PeekChar on a non-seekable stream throws (.NET returns -1).
+- Out-of-range ShaderIndex on a stock clone: CNA refuses at Apply; genuine XNA unmeasured.
+- Tooling: worktrees with a symlinked `third_party/SDL` fail SDL staging (fix proposed on
+  `work/hnd-gfx` 0f5474490, not integrated); `docs/xna-4-runtime-member-coverage.json` is stale for
+  ContentLoadException and the TouchCollection indexer.
+- `.x` VertexDuplicationIndices window (5.1) remains open; OPENGLES3 LOD bias (ES has no sampler bias).
 
 ### Owner questions recorded during the night (not implemented, owner rule)
 
@@ -257,7 +303,31 @@ if publication is later authorized. No current remote execution is implied by lo
 
 ### 0.3 Stable full sweep and remaining failures
 
-Latest full seven-tree sweep (sweep 16, the confirming run): `cnaplan/evidence/rev002/sweep16-bc5e629ab/`
+Final full seven-tree sweep (sweep 17): `cnaplan/evidence/rev002/sweep17-6ea76b490/`
+(`summary.txt`, identities, seven configure, build and CTest logs, JUnit, `RERUN-after-fixes.md`). It
+built and ran HEAD 6ea76b490 on 2026-11-09 between 11:28 and 14:46, through the same runner and
+settings as sweep 16. All seven builds succeeded. Each tree failed only regressions from that day's
+commits:
+
+- LinkFootprint_2DGame and LinkFootprint_GamerServicesGame failed in all seven trees. TextureCube was
+  linked through 35cb1e6b8's stock-clone code; ac66218fc fixes it.
+- CApi_ContentSmoke failed in multi and sdlgpu, because the error result changed with HND-TQ-16-XNB;
+  2bcfb8bf4 updates the smoke.
+
+Those tests were rebuilt and rerun at 2bcfb8bf4 in every tree and all passed. The fixes landed while
+the later trees were still in CTest, so summary.txt's head-end is 2bcfb8bf4 with tracked dirty zero.
+
+| Tree | Registered cases | Failed at 6ea76b490 | Explicit skips | After the fixes |
+|---|---:|---:|---:|---|
+| multi | 15,510 | 3 | 488 | rerun passes |
+| sdlgpu | 14,844 | 3 | 499 | rerun passes |
+| webgpu | 14,618 | 2 | 418 | rerun passes |
+| fna3d | 14,318 | 2 | 618 | rerun passes |
+| software | 14,361 | 2 | 237 | rerun passes |
+| headless | 13,285 | 2 | 918 | rerun passes |
+| opengl33 | 15,440 | 2 | 267 | rerun passes |
+
+Previous full sweep (sweep 16, the confirming run): `cnaplan/evidence/rev002/sweep16-bc5e629ab/`
 (`receipt.json`, `summary.txt`, identities, seven build and CTest logs, JUnit). Start and end HEAD
 `bc5e629ab1b1ddc3eef55e15c3df72d9e7bc809b`, tracked dirty zero; FNA3D 0bfbe7f, MojoShader 6f1e91b,
 sharp-runtime b6e72bad; 2026-11-09 04:41-06:40. All seven builds succeeded (six cores); suites ran
