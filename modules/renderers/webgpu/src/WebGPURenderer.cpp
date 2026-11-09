@@ -9935,6 +9935,9 @@ fn cnaInverseTranspose3(m: mat3x3f) -> mat3x3f {
                                 static_cast<std::uint64_t>(targetFormat));
         key = mix(key, targetSampleCount);
         key = mix(key, static_cast<std::uint64_t>(colorCount));
+        // HND-TQ-03: every attachment format is baked by InitStockColorTargetsEXT.
+        for (int c = 1; c < colorCount; ++c)
+            key = mix(key, static_cast<std::uint64_t>(replayMrtColorFormats_[static_cast<std::size_t>(c)]));
         key = mix(key, command.blend.blendEnabled ? 1u : 0u);
         key = mix(key, static_cast<std::uint64_t>(command.blend.colorSrc) |
                        (static_cast<std::uint64_t>(command.blend.colorDst) << 8) |
@@ -10111,6 +10114,12 @@ fn cnaInverseTranspose3(m: mat3x3f) -> mat3x3f {
                                    (a.shaderLocation + 2u));
         }
 
+        // HND-TQ-03: this route builds its own key instead of using the legacy WGSL key.
+        const bool customStencil = replayDepthHasStencil_ && command.stencil.enable;
+        key = mix(key, customStencil ? HashStencilState(command.stencil) : 0u);
+        key = mix(key, std::bit_cast<std::uint32_t>(command.depthBias));
+        key = mix(key, std::bit_cast<std::uint32_t>(command.slopeScaleDepthBias));
+
         WGPURenderPipeline pipe = nullptr;
         if (auto it = effect->pipelineCache_.find(key); it != effect->pipelineCache_.end())
         {
@@ -10162,10 +10171,9 @@ fn cnaInverseTranspose3(m: mat3x3f) -> mat3x3f {
 
             WGPUDepthStencilState depthStencil = WGPU_DEPTH_STENCIL_STATE_INIT;
             depthStencil.format = replayDepthFormat_;
-            depthStencil.depthWriteEnabled =
-                command.depthWrite ? WGPUOptionalBool_True : WGPUOptionalBool_False;
-            depthStencil.depthCompare =
-                command.depthTest ? ToWGPUCompareFunction(command.depthFunc) : WGPUCompareFunction_Always;
+            FillWGPUDepthState(depthStencil, command.depthTest, command.depthWrite, command.depthFunc);
+            if (customStencil)
+                FillWGPUStencilState(depthStencil, command.stencil, TopologyHasPolygonInterior(command.topology));
             const bool biasApplies = TopologyHasPolygonInterior(command.topology);
             depthStencil.depthBias =
                 biasApplies ? static_cast<std::int32_t>(command.depthBias * 16777215.0f) : 0;
@@ -10186,6 +10194,8 @@ fn cnaInverseTranspose3(m: mat3x3f) -> mat3x3f {
 
         ApplyDrawViewport(pass, command.viewport);
         ApplyDrawScissor(pass, command.scissor);
+        if (customStencil)
+            wgpuRenderPassEncoderSetStencilReference(pass, static_cast<std::uint32_t>(command.stencilRef));
         wgpuRenderPassEncoderSetPipeline(pass, pipe);
         SetDescriptorEffectBindGroupsEXT(pass, bindings, effect->ProgramLayoutEXT()->GroupCount());
         wgpuRenderPassEncoderSetVertexBuffer(pass, 0, vertexSource.buffer, vertexSource.offset,
@@ -10700,6 +10710,8 @@ fn cnaInverseTranspose3(m: mat3x3f) -> mat3x3f {
         command.depthTest = depthTestEnabled_;
         command.depthWrite = depthWriteEnabled_;
         command.depthFunc = depthCompareFunction_;
+        command.stencil = CaptureStencilStateEXT();
+        command.stencilRef = referenceStencil_;
         command.blend = blendEnabled_;
         command.blendParams = blendParams_;
         command.colorWriteChannels = colorWriteChannels_;
@@ -10814,6 +10826,9 @@ fn cnaInverseTranspose3(m: mat3x3f) -> mat3x3f {
         key = mix(key, static_cast<std::uint64_t>(command.depthBias * 16777215.0f));
         key = mix(key, static_cast<std::uint64_t>(command.slopeScaleDepthBias * 65536.0f));
 
+        const bool customStencil = replayDepthHasStencil_ && command.stencil.enable;
+        key = mix(key, customStencil ? HashStencilState(command.stencil) : 0u);
+
         WGPURenderPipeline pipe = nullptr;
         if (const auto it = compiledEffectPipelines_.find(key); it != compiledEffectPipelines_.end())
         {
@@ -10871,10 +10886,9 @@ fn cnaInverseTranspose3(m: mat3x3f) -> mat3x3f {
 
             WGPUDepthStencilState depthStencil = WGPU_DEPTH_STENCIL_STATE_INIT;
             depthStencil.format = replayDepthFormat_;
-            depthStencil.depthWriteEnabled =
-                command.depthWrite ? WGPUOptionalBool_True : WGPUOptionalBool_False;
-            depthStencil.depthCompare = command.depthTest
-                ? ToWGPUCompareFunction(command.depthFunc) : WGPUCompareFunction_Always;
+            FillWGPUDepthState(depthStencil, command.depthTest, command.depthWrite, command.depthFunc);
+            if (customStencil)
+                FillWGPUStencilState(depthStencil, command.stencil, TopologyHasPolygonInterior(command.topology));
             const bool biasApplies = TopologyHasPolygonInterior(command.topology);
             depthStencil.depthBias =
                 biasApplies ? static_cast<std::int32_t>(command.depthBias * 16777215.0f) : 0;
@@ -11028,6 +11042,8 @@ fn cnaInverseTranspose3(m: mat3x3f) -> mat3x3f {
 
         ApplyDrawViewport(pass, command.viewport);
         ApplyDrawScissor(pass, command.scissor);
+        if (customStencil)
+            wgpuRenderPassEncoderSetStencilReference(pass, static_cast<std::uint32_t>(command.stencilRef));
         wgpuRenderPassEncoderSetPipeline(pass, pipe);
         for (std::uint32_t group = 0; group < bindGroups.size(); ++group)
             wgpuRenderPassEncoderSetBindGroup(pass, group, bindGroups[group], dynamicCounts[group],

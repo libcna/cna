@@ -783,4 +783,306 @@ TEST(WebGPUPipelineStateContract, SpriteBatchDrawsIntoMrtSetsThatDifferOnlyInSlo
         << "a sprite pipeline built for one MRT set was reused for a set whose slot 1 differs";
 }
 
+
+#if defined(CNA_CNAEXT) || defined(CNA_WEBGPU_COMPILED_EFFECTS)
+
+// HND-TQ-03: the descriptor and compiled routes do not use the legacy WGSL pipelines above.
+#ifdef CNA_CNAEXT
+#include "CNA/Graphics/ShaderCodeEXT.hpp"
+#include "CNA/ShaderLanguageEXT.hpp"
+#endif
+#ifdef CNA_WEBGPU_COMPILED_EFFECTS
+#include "CNA/TestSupport/CompiledEffectFixtures.hpp"
+#include "Microsoft/Xna/Framework/Graphics/EffectParameter.hpp"
+#include "Microsoft/Xna/Framework/Graphics/EffectPass.hpp"
+#include "Microsoft/Xna/Framework/Graphics/EffectTechnique.hpp"
+#include "Microsoft/Xna/Framework/Vector4.hpp"
+#endif
+#include <memory>
+#include <optional>
+
+namespace
+{
+    enum class HndRoute { Descriptor3D, DescriptorSprite, Compiled3D, CompiledSprite };
+
+    class WebGPUHndTq03 : public ::testing::TestWithParam<HndRoute> {};
+
+    class HndDraw
+    {
+    public:
+        HndDraw(GraphicsDevice& device, HndRoute route) : device_(device), route_(route), batch_(device),
+            white_(Texture2D::CreateFromPixels(device, 1, 1, std::vector<std::uint8_t>{255,255,255,255}))
+        {
+#ifdef CNA_CNAEXT
+            if (route == HndRoute::Descriptor3D || route == HndRoute::DescriptorSprite)
+            {
+                // No uniforms or textures decide the result: forward the vertex colour unchanged.
+                // Descriptor sprites supply pixel-position numerators and clip W, unlike 3D.
+                // The renderer classifies a pair by its declared resources; the zero-weighted
+                // scalar block at @group(3) @binding(0) selects the descriptor contract (a pair
+                // declaring none is the legacy vs_main/fs_main contract).
+                const std::string vertex = route == HndRoute::Descriptor3D ? R"WGSL(
+struct S { v: array<vec4f, 8> };
+@group(3) @binding(0) var<uniform> s: S;
+struct O { @builtin(position) p: vec4f, @location(0) c: vec4f };
+@vertex fn main(@location(0) p: vec3f, @location(1) c: vec4f) -> O {
+    var o: O; o.p=vec4f(p,1); o.c=c+s.v[0]*0.0; return o;
+})WGSL" : R"WGSL(
+struct S { v: array<vec4f, 8> };
+@group(3) @binding(0) var<uniform> s: S;
+struct O { @builtin(position) p: vec4f, @location(0) c: vec4f };
+@vertex fn main(@location(0) p: vec4f, @location(1) uv: vec2f,
+                @location(2) c: vec4f) -> O {
+    var o: O; o.p=vec4f(p.x/4-p.w,p.w-p.y/4,p.z,p.w); o.c=c+s.v[0]*0.0; return o;
+})WGSL";
+                const CNA::Graphics::ShaderCodeEXT vs(CNA::ShaderLanguageEXT::Wgsl,
+                    CNA::ShaderStageEXT::Vertex, "main", "HND-TQ-03.vert", vertex);
+                const CNA::Graphics::ShaderCodeEXT fs(CNA::ShaderLanguageEXT::Wgsl,
+                    CNA::ShaderStageEXT::Fragment, "main", "HND-TQ-03.frag", R"WGSL(
+@fragment fn main(@location(0) c: vec4f) -> @location(0) vec4f { return c; }
+)WGSL");
+                descriptor_ = std::make_unique<ShaderEffect>(device, vs, fs);
+                if (!descriptor_->IsEffectValid())
+                    throw std::runtime_error(descriptor_->GetCompileErrorEXT());
+            }
+#endif
+#ifdef CNA_WEBGPU_COMPILED_EFFECTS
+            if (route == HndRoute::Compiled3D || route == HndRoute::CompiledSprite)
+            {
+                // The fixture has no render-state assignments: Apply only binds the shaders.
+                compiled_ = std::make_unique<Effect>(device, CNA::TestSupport::BuildSyntheticDrawableEffect());
+                Matrix transform = Matrix::getIdentityProperty();
+                if (route == HndRoute::CompiledSprite)
+                {
+                    // Hand map: pixel (0,0)->NDC(-1,+1), (8,8)->(+1,-1); retain z.
+                    transform.M11 = 2.0f / kSize;
+                    transform.M22 = -2.0f / kSize;
+                    transform.M41 = -1.0f;
+                    transform.M42 = 1.0f;
+                }
+                compiled_->getParametersProperty()["Transform"]->SetValue(transform);
+            }
+#endif
+        }
+
+        void Draw(float z, const Color& color, bool sloped = false)
+        {
+            Effect* effect = descriptor_.get();
+#ifdef CNA_WEBGPU_COMPILED_EFFECTS
+            if (compiled_)
+            {
+                // The synthetic pixel program returns Tint exactly; use only 0 and 1 channels.
+                compiled_->getParametersProperty()["Tint"]->SetValue(Vector4(
+                    color.getRProperty()/255.0f, color.getGProperty()/255.0f,
+                    color.getBProperty()/255.0f, color.getAProperty()/255.0f));
+                effect = compiled_.get();
+            }
+#endif
+            if (effect == nullptr) throw std::runtime_error("HND-TQ-03 route was not compiled in");
+            if (route_ == HndRoute::DescriptorSprite || route_ == HndRoute::CompiledSprite)
+            {
+                const auto depth = device_.getDepthStencilStateProperty();
+                batch_.Begin(SpriteSortMode::Immediate, &BlendState::Opaque, nullptr, &depth,
+                             &RasterizerState::CullNone, effect);
+                batch_.Draw(white_, Rectangle(0,0,kSize,kSize), std::nullopt, color, 0.0f,
+                            Vector2(0.0f,0.0f), SpriteEffects::None, z);
+                batch_.End();
+            }
+            else
+            {
+                auto quad = FullQuad(z, color);
+                if (sloped)
+                    for (auto& v : quad) v.Position.Z += 0.25f * v.Position.X;
+#ifdef CNA_WEBGPU_COMPILED_EFFECTS
+                if (compiled_)
+                    compiled_->getTechniquesProperty()[0]->getPassesProperty()[1]->Apply();
+                else
+#endif
+                    descriptor_->Apply();
+                device_.DrawUserPrimitives(PrimitiveType::TriangleList, quad.data(), 0, 2);
+            }
+        }
+    private:
+        GraphicsDevice& device_;
+        HndRoute route_;
+        SpriteBatch batch_;
+        Texture2D white_;
+        std::unique_ptr<ShaderEffect> descriptor_;
+#ifdef CNA_WEBGPU_COMPILED_EFFECTS
+        std::unique_ptr<Effect> compiled_;
+#endif
+    };
+
+    void HndBind(GraphicsDevice& device, RenderTarget2D& target)
+    {
+        device.SetRenderTarget(&target);
+        device.setBlendStateProperty(BlendState::Opaque);
+        device.setRasterizerStateProperty(RasterizerState::CullNone);
+        device.Clear(ClearOptions::Target | ClearOptions::DepthBuffer | ClearOptions::Stencil,
+                     Color::Black, 1.0f, 0);
+    }
+
+    std::string HndRouteName(const ::testing::TestParamInfo<HndRoute>& p)
+    {
+        switch (p.param)
+        {
+            case HndRoute::Descriptor3D: return "Descriptor3D";
+            case HndRoute::DescriptorSprite: return "DescriptorSprite";
+            case HndRoute::Compiled3D: return "Compiled3D";
+            case HndRoute::CompiledSprite: return "CompiledSprite";
+        }
+        return "Unknown";
+    }
+}
+
+TEST_P(WebGPUHndTq03, DisabledDepthDoesNotWrite)
+{
+    CNA_SKIP_IF_RENDERER_IS_NOT(CNA::GraphicsRendererType::WebGPU);
+    GraphicsDevice device = MakeDevice();
+    HndDraw draw(device, GetParam());
+    RenderTarget2D target(device,kSize,kSize,false,SurfaceFormat::Color,DepthFormat::Depth24Stencil8,0,
+                          RenderTargetUsage::PreserveContents);
+    HndBind(device,target);
+    device.setDepthStencilStateProperty(DepthState(false,true,CompareFunction::LessEqual));
+    draw.Draw(0.2f,Color::Red);
+    device.setDepthStencilStateProperty(DepthState(true,true,CompareFunction::LessEqual));
+    draw.Draw(0.5f,Color::Lime);
+    device.SetRenderTarget(nullptr);
+    // Hand oracle: disabled depth leaves clear 1; .5 <= 1 passes -> LIME.
+    // Defect writes .2; .5 <= .2 fails -> RED.
+    EXPECT_EQ(ReadTarget(target,4,3),Color::Lime);
+}
+
+TEST_P(WebGPUHndTq03, StencilStateAndCapturedReference)
+{
+    CNA_SKIP_IF_RENDERER_IS_NOT(CNA::GraphicsRendererType::WebGPU);
+    GraphicsDevice device = MakeDevice();
+    HndDraw draw(device, GetParam());
+    RenderTarget2D target(device,kSize,kSize,false,SurfaceFormat::Color,DepthFormat::Depth24Stencil8,0,
+                          RenderTargetUsage::PreserveContents);
+    DepthStencilState never;
+    never.setDepthBufferEnableProperty(false);
+    never.setStencilEnableProperty(true);
+    never.setStencilFunctionProperty(CompareFunction::Never);
+    HndBind(device,target);
+    device.setDepthStencilStateProperty(never);
+    draw.Draw(0.5f,Color::Lime);
+    device.SetRenderTarget(nullptr);
+    // Hand oracle: Never rejects every fragment, so BLACK stays. Missing stencil yields LIME.
+    EXPECT_EQ(ReadTarget(target,4,3),Color::Black);
+
+    DepthStencilState stamp;
+    stamp.setDepthBufferEnableProperty(false);
+    stamp.setStencilEnableProperty(true);
+    stamp.setStencilFunctionProperty(CompareFunction::Always);
+    stamp.setStencilPassProperty(StencilOperation::Replace);
+    stamp.setReferenceStencilProperty(5);
+    HndBind(device,target);
+    device.setDepthStencilStateProperty(stamp);
+    draw.Draw(0.5f,Color::Black);
+    device.setDepthStencilStateProperty(EqualProbe(5));
+    DrawStockQuad(device,0.5f,Color::Red);
+    device.setDepthStencilStateProperty(EqualProbe(9)); // live state differs at deferred replay
+    device.SetRenderTarget(nullptr);
+    // Hand oracle: Replace writes captured 5; Equal(5) passes -> RED. Missing/reference=9 -> BLACK.
+    EXPECT_EQ(ReadTarget(target,4,3),Color::Red);
+}
+
+TEST_P(WebGPUHndTq03, DepthAttachmentVariants)
+{
+    CNA_SKIP_IF_RENDERER_IS_NOT(CNA::GraphicsRendererType::WebGPU);
+    GraphicsDevice device = MakeDevice();
+    RenderTarget2D none(device,kSize,kSize,false,SurfaceFormat::Color,DepthFormat::None,0,
+                        RenderTargetUsage::PreserveContents);
+    RenderTarget2D depth(device,kSize,kSize,false,SurfaceFormat::Color,DepthFormat::Depth24,0,
+                         RenderTargetUsage::PreserveContents);
+    const auto errors = RendererOf(device).GetUncapturedErrorCountEXT();
+    for (bool reverse : {false,true})
+    {
+        HndDraw draw(device,GetParam()); // fresh cache for either order
+        for (RenderTarget2D* target : {reverse ? &depth : &none, reverse ? &none : &depth})
+        {
+            device.SetRenderTarget(target);
+            device.Clear(Color::Black);
+            device.setRasterizerStateProperty(RasterizerState::CullNone);
+            device.setBlendStateProperty(BlendState::Opaque);
+            device.setDepthStencilStateProperty(DepthStencilState::None);
+            draw.Draw(0.5f,Color::Lime);
+            device.SetRenderTarget(nullptr);
+            // Unconditional full coverage, opaque 0/1 output -> LIME in either attachment variant.
+            EXPECT_EQ(ReadTarget(*target,4,3),Color::Lime);
+        }
+    }
+    EXPECT_EQ(RendererOf(device).GetUncapturedErrorCountEXT(),errors);
+}
+
+#ifdef CNA_CNAEXT
+INSTANTIATE_TEST_SUITE_P(Descriptor,WebGPUHndTq03,
+    ::testing::Values(HndRoute::Descriptor3D,HndRoute::DescriptorSprite),HndRouteName);
+
+TEST(WebGPUHndTq03Descriptor, BothBiasFieldsSelectDistinctPipelines)
+{
+    CNA_SKIP_IF_RENDERER_IS_NOT(CNA::GraphicsRendererType::WebGPU);
+    GraphicsDevice device = MakeDevice();
+    RenderTarget2D target(device,kSize,kSize,false,SurfaceFormat::Color,DepthFormat::Depth24Stencil8,0,
+                          RenderTargetUsage::PreserveContents);
+    for (bool slope : {false,true})
+    {
+        SCOPED_TRACE(slope ? "SlopeScaleDepthBias" : "DepthBias");
+        HndDraw draw(device,HndRoute::Descriptor3D);
+        HndBind(device,target);
+        device.setDepthStencilStateProperty(DepthStencilState::Default);
+        draw.Draw(0.5f,Color::Red,slope);
+        RasterizerState biased;
+        biased.setCullModeProperty(CullMode::None);
+        if (slope) biased.setSlopeScaleDepthBiasProperty(4.0f);
+        else biased.setDepthBiasProperty(0.25f);
+        device.setRasterizerStateProperty(biased);
+        draw.Draw(0.5f,Color::Lime,slope);
+        device.SetRenderTarget(nullptr);
+        // Hand oracle: constant .5 + .25 > stored .5. Sloped dz/dx=.5/8=.0625;
+        // slope bias=4*.0625=.25 > 0. Both reject GREEN, leaving RED.
+        // Without either key dimension the unbiased pipeline passes equal depths -> LIME.
+        EXPECT_EQ(ReadTarget(target,4,3),Color::Red);
+    }
+}
+
+TEST(WebGPUHndTq03Descriptor, SpriteMrtSecondaryFormatVariants)
+{
+    CNA_SKIP_IF_RENDERER_IS_NOT(CNA::GraphicsRendererType::WebGPU);
+    GraphicsDevice device = MakeDevice();
+    ASSERT_TRUE(device.SupportsCapability(CNA::GraphicsCapability::MultipleRenderTargets));
+    ASSERT_TRUE(device.SupportsSurfaceFormatAsRenderTargetEXT(SurfaceFormat::Single));
+    RenderTarget2D slot0(device,kSize,kSize,false,SurfaceFormat::Color,DepthFormat::None,0,
+                         RenderTargetUsage::PreserveContents);
+    RenderTarget2D color(device,kSize,kSize,false,SurfaceFormat::Color,DepthFormat::None,0,
+                         RenderTargetUsage::PreserveContents);
+    RenderTarget2D single(device,kSize,kSize,false,SurfaceFormat::Single,DepthFormat::None,0,
+                          RenderTargetUsage::PreserveContents);
+    const auto errors = RendererOf(device).GetUncapturedErrorCountEXT();
+    for (bool reverse : {false,true})
+    {
+        HndDraw draw(device,HndRoute::DescriptorSprite);
+        for (RenderTarget2D* second : {reverse ? &single : &color,reverse ? &color : &single})
+        {
+            device.SetRenderTargets({RenderTargetBinding(static_cast<Texture*>(&slot0)),
+                                     RenderTargetBinding(static_cast<Texture*>(second))});
+            device.Clear(Color::Black);
+            device.setDepthStencilStateProperty(DepthStencilState::None);
+            draw.Draw(0.5f,Color::Lime);
+            device.SetRenderTarget(nullptr);
+            // The fragment writes slot 0 only; opaque full coverage -> LIME regardless of slot 1.
+            EXPECT_EQ(ReadTarget(slot0,4,3),Color::Lime);
+        }
+    }
+    EXPECT_EQ(RendererOf(device).GetUncapturedErrorCountEXT(),errors);
+}
+#endif
+#ifdef CNA_WEBGPU_COMPILED_EFFECTS
+INSTANTIATE_TEST_SUITE_P(Compiled,WebGPUHndTq03,
+    ::testing::Values(HndRoute::Compiled3D,HndRoute::CompiledSprite),HndRouteName);
+#endif
+
+#endif // CNA_CNAEXT || CNA_WEBGPU_COMPILED_EFFECTS
+
 #endif

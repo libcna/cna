@@ -6055,6 +6055,10 @@ namespace CNA::Internal::Renderers::WebGPU
             bool wireframe = false;
             float depthBias = 0.0f;
             float slopeScaleDepthBias = 0.0f;
+            /** @brief HND-TQ-03: immutable stencil state captured for this compiled draw. */
+            StencilKeyParams stencil{};
+            /** @brief Dynamic stencil reference captured alongside the static stencil state. */
+            int stencilRef = 0;
             WebGPUViewportSnapshot viewport{};
             WebGPUScissorSnapshot scissor{};
         };
