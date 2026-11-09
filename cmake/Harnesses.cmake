@@ -597,7 +597,20 @@ if(CNA_ENABLE_NET AND CNA_BUILD_TESTS)
     set_tests_properties(GamerServices_FakeBackend PROPERTIES TIMEOUT 45)
 endif()
 
-set(CNA_GAMER_SERVICES_SERVER_ROOT "${CMAKE_SOURCE_DIR}/../../cna-gamer-services-server" CACHE PATH "Canonical service checkout for optional protocol and E2E validation")
+# The service is a sibling of CNA's checkout. The first default named ../../ from the build's
+# source root, written in a worktree one level deeper; from the main checkout it named a directory
+# that does not exist, so GamerServices_ProtocolDrift was silently never registered. Only that
+# exact generated value is migrated; a caller's own path is kept.
+set(_cna_gss_default "${CMAKE_CURRENT_LIST_DIR}/../../cna-gamer-services-server")
+cmake_path(NORMAL_PATH _cna_gss_default)
+if(DEFINED CACHE{CNA_GAMER_SERVICES_SERVER_ROOT}
+   AND CNA_GAMER_SERVICES_SERVER_ROOT STREQUAL "${CMAKE_SOURCE_DIR}/../../cna-gamer-services-server"
+   AND NOT EXISTS "${CNA_GAMER_SERVICES_SERVER_ROOT}/protocol/v1.md")
+    set(CNA_GAMER_SERVICES_SERVER_ROOT "${_cna_gss_default}" CACHE PATH
+        "Canonical service checkout for optional protocol and E2E validation" FORCE)
+endif()
+set(CNA_GAMER_SERVICES_SERVER_ROOT "${_cna_gss_default}" CACHE PATH "Canonical service checkout for optional protocol and E2E validation")
+unset(_cna_gss_default)
 if(CNA_ENABLE_NET AND CNA_BUILD_TESTS AND EXISTS "${CNA_GAMER_SERVICES_SERVER_ROOT}/protocol/v1.md")
     find_package(Python3 COMPONENTS Interpreter REQUIRED)
     add_test(NAME GamerServices_ProtocolDrift COMMAND ${Python3_EXECUTABLE} ${CMAKE_SOURCE_DIR}/tools/net/check_service_protocol.py ${CNA_GAMER_SERVICES_SERVER_ROOT})
