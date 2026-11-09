@@ -45,6 +45,15 @@ namespace Microsoft::Xna::Framework::Graphics
             return true;
         }
 
+    protected:
+        /** @brief BasicEffect: the stock shaders a base-Effect or EffectMaterial clone of it runs. */
+        CNAEXT [[nodiscard]] StockEffectKindInternal GetStockEffectKindInternal() const noexcept override
+        {
+            return StockEffectKindInternal::Basic;
+        }
+
+    public:
+
         /** @brief The world matrix applied to drawn geometry. */
         Matrix World      = Matrix::getIdentityProperty();
         /** @brief The view matrix representing the camera transform. */

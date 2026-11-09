@@ -32,6 +32,12 @@ layout(set = 1, binding = 1) uniform EnvMapParams {
     vec4 light2Dir_pad;
     vec4 light2Diffuse_pad;
     vec4 envMapSpecular_pad;
+    // HND-TQ-25 D9: a base-Effect/EffectMaterial clone of a stock effect feeds the stock shader
+    // its raw WorldInverseTranspose; normalMatrixCol0.w is 1 exactly then. The fragment stage's
+    // block of the same name ends before these three columns.
+    vec4 normalMatrixCol0;
+    vec4 normalMatrixCol1;
+    vec4 normalMatrixCol2;
 } ep;
 
 // Fog forwarded to the fragment stage as a varying (the shared PC block is fully
@@ -46,7 +52,9 @@ void main() {
     gl_Position = pc.mvp * CNA_INSTANCE_POSITION(vec4(inPos, 1.0));
     gl_PointSize = 1.0;  // Apple M4 AM4-181: PointListEXT draws one pixel per point
     fragUV = inUV;
-    mat3 normalMatrix = transpose(inverse(mat3(CNA_INSTANCE_WORLD(ep.world))));
+    mat3 normalMatrix = ep.normalMatrixCol0.w > 0.5
+        ? mat3(ep.normalMatrixCol0.xyz, ep.normalMatrixCol1.xyz, ep.normalMatrixCol2.xyz)
+        : transpose(inverse(mat3(CNA_INSTANCE_WORLD(ep.world))));
     fragNormal = normalize(normalMatrix * inNormal);
     fragWorldPos = (ep.world * CNA_INSTANCE_POSITION(vec4(inPos, 1.0))).xyz;
     fragTint = pc.diffuseColor;

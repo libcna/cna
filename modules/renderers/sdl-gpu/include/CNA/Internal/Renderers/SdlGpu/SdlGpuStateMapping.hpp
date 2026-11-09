@@ -1019,6 +1019,35 @@ namespace CNA::Internal::Renderers::SdlGpu::Detail
             out[52] = p.specularColor[0]; out[53] = p.specularColor[1]; out[54] = p.specularColor[2]; out[55] = p.specularPower;
         }
 
+        // HND-TQ-25 D9: the vertex-stage tail of LitLightParams, SkinnedLightParams and
+        // EnvMapParams. Those vertex shaders derive the normal matrix from World with inverse();
+        // a base-Effect/EffectMaterial clone of a stock effect instead feeds the stock shader its
+        // raw WorldInverseTranspose (GpuDrawParams::rawStockTransforms). Three vec4 columns of
+        // that 3x3; the first column's w is 1 exactly when the shader is to use them.
+        inline void FillClassicNormalMatrixOverride(std::array<float, 12>& out, const GpuDrawParams& p)
+        {
+            const float* n = p.worldInverseTransposeColMajor;
+            for (int column = 0; column < 3; ++column)
+            {
+                out[column * 4 + 0] = p.rawStockTransforms ? n[column * 3 + 0] : 0.0f;
+                out[column * 4 + 1] = p.rawStockTransforms ? n[column * 3 + 1] : 0.0f;
+                out[column * 4 + 2] = p.rawStockTransforms ? n[column * 3 + 2] : 0.0f;
+                out[column * 4 + 3] = 0.0f;
+            }
+            out[3] = p.rawStockTransforms ? 1.0f : 0.0f;
+        }
+
+        // The vertex-stage block: a fragment-stage block of the same name ends before the tail.
+        template <std::size_t N>
+        [[nodiscard]] inline std::array<float, N + 12> WithClassicNormalMatrixOverride(
+            const std::array<float, N>& block, const std::array<float, 12>& normalMatrix)
+        {
+            std::array<float, N + 12> out{};
+            for (std::size_t i = 0; i < N; ++i) out[i] = block[i];
+            for (std::size_t i = 0; i < 12; ++i) out[N + i] = normalMatrix[i];
+            return out;
+        }
+
         // pbr3d.frag.glsl's tertiary PbrParams block: material/map factors, alpha coverage,
         // transfer flags, specular Fresnel inputs, and fourteen affine texture-transform rows.
         inline void FillPbrParams(std::array<float, 72>& out, const GpuDrawParams& p)

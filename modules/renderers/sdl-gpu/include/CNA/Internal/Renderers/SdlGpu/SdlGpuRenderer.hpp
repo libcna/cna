@@ -2470,6 +2470,8 @@ namespace CNA::Internal::Renderers::SdlGpu
             Uint32 instanceCount = 1;
             std::array<float, 32> uniforms{};
             std::array<float, 56> lightUniforms{};  ///< LitLightParams: 10 vec4 + 1 mat4 = 224 bytes
+            /// HND-TQ-25 D9: appended to the vertex-stage LitLightParams (FillClassicNormalMatrixOverride).
+            std::array<float, 12> normalMatrixUniforms{};
             ShadowReceptionEXT shadow;  ///< SMG-0032
         std::array<float, 8> fogUniforms{};  ///< FogParams: vec4 fogColorEnabled + vec4 fogVector (32 bytes)
             bool depthTest = false;
@@ -2616,6 +2618,8 @@ namespace CNA::Internal::Renderers::SdlGpu
             Uint32 instanceCount = 1;
             std::array<float, 24> uniforms{};       ///< PC: mvp(16) + diffuseColor(4) + emissiveAmount(4)
             std::array<float, 48> envMapUniforms{}; ///< EnvMapParams: world(16) + 8 vec4 (32) = 48 floats
+            /// HND-TQ-25 D9: appended to the vertex-stage EnvMapParams (FillClassicNormalMatrixOverride).
+            std::array<float, 12> normalMatrixUniforms{};
         std::array<float, 8> fogUniforms{};  ///< FogParams: vec4 fogColorEnabled + vec4 fogVector (32 bytes)
             bool depthTest = false;
             bool depthWrite = false;
@@ -2689,6 +2693,8 @@ namespace CNA::Internal::Renderers::SdlGpu
             std::array<float, 32> uniforms{};        ///< PC: same 32-float layout FillExtUniforms already fills
             std::array<float, 72 * 16> boneUniforms{}; ///< 72 column-major mat4 values uploaded as a 288x1 RGBA32F vertex texture
             std::array<float, 56> lightUniforms{};   ///< SkinnedLightParams: byte-identical to LitLightParams
+            /// HND-TQ-25 D9: appended to the vertex-stage SkinnedLightParams (FillClassicNormalMatrixOverride).
+            std::array<float, 12> normalMatrixUniforms{};
             ShadowReceptionEXT shadow;  ///< SMG-0032
         std::array<float, 8> fogUniforms{};  ///< FogParams: vec4 fogColorEnabled + vec4 fogVector (32 bytes)
             bool depthTest = false;

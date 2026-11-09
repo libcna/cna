@@ -400,6 +400,7 @@ namespace CNA::Internal::Renderers::EasyGL
 #include <stdexcept>
 #include "System/InvalidOperationException.hpp"
 #include <algorithm>
+#include <iterator>
 #include <mutex>
 #include <cstdio>
 #include <iomanip>
@@ -10481,7 +10482,16 @@ namespace CNA::Internal::Renderers::EasyGL
         // non-uniform-scale World transforms don't skew the transformed normal (Task 398 fix;
         // the raw upper-left 3x3 used before was only correct for rotation/uniform-scale/
         // translation World matrices).
-        if (p.loc_normalmat >= 0)
+        if (p.loc_normalmat >= 0 && params.rawStockTransforms)
+        {
+            // HND-TQ-25 D9: a clone of a stock effect hands over its raw WorldInverseTranspose,
+            // already in this uniform's layout, instead of one derived from World.
+            float nm[9];
+            std::copy(std::begin(params.worldInverseTransposeColMajor),
+                      std::end(params.worldInverseTransposeColMajor), nm);
+            p.SetUniformMatrix3(p.loc_normalmat, nm);
+        }
+        else if (p.loc_normalmat >= 0)
         {
             const float* w = params.worldColMajor;
             const float a = w[0], d = w[1], g = w[2];

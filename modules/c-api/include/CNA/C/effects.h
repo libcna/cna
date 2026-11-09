@@ -1347,6 +1347,10 @@ CNA_C_API CNA_Result cna_shader_effect_create(
  * @param clone_source Source effect handle.
  * @param out_effect Receives the owned material handle.
  * @return A CNA result code.
+ *
+ * A material cloned from one of the five stock effects draws, as XNA's does, with that stock
+ * effect's shaders fed its own raw parameter values: no stock OnApply derives WorldViewProj,
+ * FogVector, EmissiveColor or ShaderIndex for it (HND-TQ-25 D9).
  */
 CNA_C_API CNA_Result cna_effect_material_create(
     CNA_EffectHandle clone_source,
@@ -1416,7 +1420,8 @@ CNA_C_API CNA_Result cna_effect_destroy(CNA_EffectHandle effect);
  * @param effect Source effect.
  * @param out_clone Receives an owned clone with the type chosen by the native Clone contract.
  *        In particular, EffectMaterial inherits the base Effect clone and does not preserve
- *        the EffectMaterial wrapper type.
+ *        the EffectMaterial wrapper type. A base-Effect clone of a stock effect's material keeps
+ *        drawing with that stock effect's shaders and its own raw parameter values.
  * @return A CNA result code.
  */
 CNA_C_API CNA_Result cna_effect_clone(

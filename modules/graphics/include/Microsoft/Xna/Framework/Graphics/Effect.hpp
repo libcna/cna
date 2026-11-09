@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: MS-PL
 #pragma once
 
+#include <cstdint>
+#include <memory>
 #include <string>
 #include <vector>
 
@@ -18,9 +20,19 @@ namespace CNA::Internal::Renderers
     class ICompiledEffectRuntime;
 }
 
+namespace CNA::Internal::Graphics
+{
+    struct StockCloneParameterSnapshot;
+}
+
 namespace CNA::TestSupport
 {
     struct CompiledEffectTestAccess;
+}
+
+namespace Microsoft::Xna::Framework
+{
+    struct Matrix;
 }
 
 namespace Microsoft::Xna::Framework::Graphics
@@ -208,27 +220,51 @@ namespace Microsoft::Xna::Framework::Graphics
 
         /**
          * @brief Whether this is one of XNA's five stock effects -- BasicEffect, AlphaTestEffect,
-         *        DualTextureEffect, EnvironmentMapEffect, SkinnedEffect -- or derives from one.
+         *        DualTextureEffect, EnvironmentMapEffect, SkinnedEffect -- or derives from one,
+         *        or is a base-Effect or EffectMaterial clone of one.
          *
          * SpriteBatch asks it of a custom effect: a stock effect's vertex shader places sprites
          * with World*View*Projection. A virtual rather than dynamic_cast for the same reason as
          * IsExactStockSpriteEffectEXT(): a dynamic_cast to each stock type made every SpriteBatch
-         * user link all five of them.
+         * user link all five of them. XNA's clone of a stock effect runs the cloned stock shaders
+         * (HND-TQ-25 D9), so its vertex shader places sprites the same way, with its own raw
+         * WorldViewProj.
          *
-         * @return False here; true in the five stock effects.
+         * @return True for a clone of a stock effect here; true in the five stock effects.
          */
         CNAEXT [[nodiscard]] virtual bool IsStockEffectEXT() const noexcept
         {
-            return false;
+            return IsStockCloneInternal();
         }
+
+        /**
+         * @brief The world, view and projection a draw through a stock-effect clone hands its
+         *        renderer.
+         *
+         * XNA's base-Effect or EffectMaterial clone of a stock effect draws with the cloned stock
+         * shaders, which place a vertex with the raw WorldViewProj parameter (HND-TQ-25 D9). The
+         * renderer receives identity, identity and that matrix -- the WorldViewProj its last
+         * Apply captured, or the current value before any Apply.
+         *
+         * @param world Receives the world matrix.
+         * @param view Receives the view matrix.
+         * @param projection Receives the projection matrix.
+         * @return True when this effect is such a clone and the matrices were written; false,
+         *         leaving them untouched, otherwise.
+         */
+        CNAEXT [[nodiscard]] bool GetStockCloneDrawMatricesInternal(
+            Microsoft::Xna::Framework::Matrix& world,
+            Microsoft::Xna::Framework::Matrix& view,
+            Microsoft::Xna::Framework::Matrix& projection) const;
 
         /**
          * @brief Fills a GpuDrawParams struct with this effect's current render parameters.
          *
          * Called by GraphicsDevice before every draw call so the renderer can select the
-         * correct shader variant and upload uniforms. Default implementation is a no-op;
-         * concrete effect classes override it to populate texture, color, lighting, and
-         * other renderer-relevant fields.
+         * correct shader variant and upload uniforms. The base implementation forwards a
+         * compiled effect's runtime, and for a clone of a stock effect the stock shader variant
+         * and raw parameter values its last Apply captured; concrete effect classes override it
+         * to populate texture, color, lighting, and other renderer-relevant fields.
          *
          * @param params Output struct to populate.
          */
@@ -316,6 +352,38 @@ namespace Microsoft::Xna::Framework::Graphics
          */
         CNAEXT [[nodiscard]] Texture* SampledStockTextureInternal(int slot, Texture* own) const;
 
+        /** @brief Which of XNA's five classic stock effects an effect is, if any. */
+        enum class CNAEXT StockEffectKindInternal : std::uint8_t
+        {
+            /** @brief Not a stock effect. */
+            None,
+            /** @brief BasicEffect. */
+            Basic,
+            /** @brief AlphaTestEffect. */
+            AlphaTest,
+            /** @brief DualTextureEffect. */
+            DualTexture,
+            /** @brief EnvironmentMapEffect. */
+            EnvironmentMap,
+            /** @brief SkinnedEffect. */
+            Skinned,
+        };
+
+        /**
+         * @brief The stock effect class this object itself is.
+         *
+         * Each of the five stock classes answers its own kind, so a base-Effect or EffectMaterial
+         * clone of it can remember whose stock shaders it runs (HND-TQ-25 D9). The stock classes
+         * draw through their own FillGpuDrawParams, so the answer also tells the base Effect that
+         * it is not itself such a clone.
+         *
+         * @return StockEffectKindInternal::None here.
+         */
+        CNAEXT [[nodiscard]] virtual StockEffectKindInternal GetStockEffectKindInternal() const noexcept
+        {
+            return StockEffectKindInternal::None;
+        }
+
         /**
          * @brief Constructs an effect that is a clone of @p cloneSource.
          *
@@ -325,7 +393,8 @@ namespace Microsoft::Xna::Framework::Graphics
          * source's mutable parameter values carried across. A source with no compiled runtime --
          * a stock effect, for one -- clones to the same techniques, passes and parameters, each
          * holding the source's current value in storage of the clone's own. The clone selects its
-         * first technique, as XNA does.
+         * first technique, as XNA does. A clone of a stock effect keeps drawing with that stock
+         * effect's shaders, fed its own raw parameter values (HND-TQ-25 D9).
          *
          * Protected rather than public, exactly as in XNA: an Effect is a reference type
          * there and games never copy one, but subclasses must be able to.
@@ -354,6 +423,21 @@ namespace Microsoft::Xna::Framework::Graphics
         void ApplyCompiledPassState(std::uint32_t passIndex);
         void SyncCompiledParameters();
 
+        // HND-TQ-25 D9: a base-Effect/EffectMaterial clone of a stock effect (not a stock class).
+        [[nodiscard]] bool IsStockCloneInternal() const noexcept
+        {
+            return stockCloneKind_ != StockEffectKindInternal::None &&
+                   GetStockEffectKindInternal() == StockEffectKindInternal::None;
+        }
+        // Reads the clone's raw parameter values, refusing a ShaderIndex no stock shader answers.
+        [[nodiscard]] CNA::Internal::Graphics::StockCloneParameterSnapshot
+            ReadStockCloneParametersInternal() const;
+        // Apply's native-pass part for such a clone: binds the textures its shaders sample and
+        // captures the parameter values the next draws use.
+        void ApplyStockClonePassInternal();
+        // Hands the renderer the captured values in its stock-path vocabulary.
+        void FillStockCloneDrawParamsInternal(CNA::Internal::Renderers::GpuDrawParams& params) const;
+
         /**
          * @brief False: XNA never raises Disposing for an Effect or any type derived from it.
          *
@@ -368,6 +452,9 @@ namespace Microsoft::Xna::Framework::Graphics
         EffectTechniqueCollection techniques_;
         EffectTechnique* currentTechnique_ = nullptr;
         std::unique_ptr<CNA::Internal::Renderers::ICompiledEffectRuntime> compiledRuntime_;
+        // HND-TQ-25 D9: whose stock shaders this clone runs, and what its last Apply captured.
+        StockEffectKindInternal stockCloneKind_ = StockEffectKindInternal::None;
+        std::unique_ptr<CNA::Internal::Graphics::StockCloneParameterSnapshot> stockCloneApplied_;
 
         friend class EffectPass;
         /** @brief Allows conformance tests to exercise staged runtimes before capability enablement. */

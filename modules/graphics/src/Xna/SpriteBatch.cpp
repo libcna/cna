@@ -773,7 +773,6 @@ namespace Microsoft::Xna::Framework::Graphics
         auto indexBuffer = device.CreateIndexBuffer16(static_cast<int>(indices.size()));
         indexBuffer->SetData16(indices.data(), static_cast<int>(indices.size()));
 
-        const auto& matrices = dynamic_cast<const IEffectMatrices&>(*customEffect_);
         EffectPassCollection& passes = customEffect_->getCurrentTechniqueProperty()->getPassesProperty();
         for (int pass = 0; pass < passes.getCountProperty(); ++pass)
         {
@@ -783,10 +782,19 @@ namespace Microsoft::Xna::Framework::Graphics
             GpuDrawParams drawParams;
             customEffect_->FillGpuDrawParams(drawParams);
             drawParams.texture0 = &texture;
+            // A clone of a stock effect has no World/View/Projection of its own: its stock vertex
+            // shader reads the WorldViewProj its Apply captured (HND-TQ-25 D9).
+            Matrix world, view, projection;
+            if (!customEffect_->GetStockCloneDrawMatricesInternal(world, view, projection))
+            {
+                const auto& matrices = dynamic_cast<const IEffectMatrices&>(*customEffect_);
+                world = matrices.getWorldProperty();
+                view = matrices.getViewProperty();
+                projection = matrices.getProjectionProperty();
+            }
             graphicsDevice_->applySamplerStatesToRenderer();
             device.DrawIndexedPrimitivesEx(
-                *vertexBuffer, *indexBuffer, matrices.getWorldProperty(), matrices.getViewProperty(),
-                matrices.getProjectionProperty(), PrimitiveType::TriangleList,
+                *vertexBuffer, *indexBuffer, world, view, projection, PrimitiveType::TriangleList,
                 static_cast<int>(count * 2), drawParams);
         }
     }

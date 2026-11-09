@@ -5898,6 +5898,7 @@ namespace CNA::Internal::Renderers::SdlGpu
         FillExtUniforms(command.uniforms, wvp, params);
         FillFogUniforms(command.fogUniforms, params);
         FillLitLightUniforms(command.lightUniforms, params);
+        FillClassicNormalMatrixOverride(command.normalMatrixUniforms, params);
         command.shadow = CaptureShadowReceptionEXT(params);
         command.texture = ResolveSampledTextureEXT(params.texture0, "BasicEffect.Texture (lit)");
         command.textureFilter = samplerSlots_[0].filter;
@@ -6990,6 +6991,7 @@ namespace CNA::Internal::Renderers::SdlGpu
         FillEnvMapUniforms(command.uniforms, wvp, params);
         FillFogUniforms(command.fogUniforms, params);
         FillEnvMapParams(command.envMapUniforms, params);
+        FillClassicNormalMatrixOverride(command.normalMatrixUniforms, params);
         command.texture = ResolveSampledTextureEXT(params.texture0, "EnvironmentMapEffect.Texture");
         command.envMapTexture = envMapTexture;
         // SDLGPU-21: EnvironmentMapEffect samples TWO resources, and each one takes
@@ -7221,6 +7223,7 @@ namespace CNA::Internal::Renderers::SdlGpu
         FillFogUniforms(command.fogUniforms, params);
         FillSkinnedBoneUniforms(command.boneUniforms, params);
         FillSkinnedLightUniforms(command.lightUniforms, params);
+        FillClassicNormalMatrixOverride(command.normalMatrixUniforms, params);
         command.instanceStream =
             CaptureInstanceTransformStreamEXT(sdlGpuVb, params, pendingInstanceCountEXT_);
         command.instanceCount = static_cast<Uint32>(std::max(1, pendingInstanceCountEXT_));
@@ -8134,7 +8137,9 @@ namespace CNA::Internal::Renderers::SdlGpu
         if (pipeline != boundPipeline) { SDL_BindGPUGraphicsPipeline(pass, pipeline); boundPipeline = pipeline; }
         SDL_SetGPUStencilReference(pass, static_cast<Uint8>(command.renderState.stencilReference));
         SDL_PushGPUVertexUniformData(cmd, 0, command.uniforms.data(), sizeof(command.uniforms));
-        SDL_PushGPUVertexUniformData(cmd, 1, command.envMapUniforms.data(), sizeof(command.envMapUniforms));
+        const auto vertexEnvMapUniforms =
+            WithClassicNormalMatrixOverride(command.envMapUniforms, command.normalMatrixUniforms);
+        SDL_PushGPUVertexUniformData(cmd, 1, vertexEnvMapUniforms.data(), sizeof(vertexEnvMapUniforms));
         SDL_PushGPUVertexUniformData(cmd, 2, command.fogUniforms.data(), sizeof(command.fogUniforms));
         SDL_PushGPUFragmentUniformData(cmd, 0, command.uniforms.data(), sizeof(command.uniforms));
         SDL_PushGPUFragmentUniformData(cmd, 1, command.envMapUniforms.data(), sizeof(command.envMapUniforms));
@@ -8220,7 +8225,9 @@ namespace CNA::Internal::Renderers::SdlGpu
         if (pipeline != boundPipeline) { SDL_BindGPUGraphicsPipeline(pass, pipeline); boundPipeline = pipeline; }
         SDL_SetGPUStencilReference(pass, static_cast<Uint8>(command.renderState.stencilReference));
         SDL_PushGPUVertexUniformData(cmd, 0, command.uniforms.data(), sizeof(command.uniforms));
-        SDL_PushGPUVertexUniformData(cmd, 1, command.lightUniforms.data(), sizeof(command.lightUniforms));
+        const auto vertexLightUniforms =
+            WithClassicNormalMatrixOverride(command.lightUniforms, command.normalMatrixUniforms);
+        SDL_PushGPUVertexUniformData(cmd, 1, vertexLightUniforms.data(), sizeof(vertexLightUniforms));
         SDL_PushGPUVertexUniformData(cmd, 2, command.fogUniforms.data(), sizeof(command.fogUniforms));
         // Both the stride-52 (litTexturedFragmentShader_, reused unchanged) and stride-56
         // (skinnedColoredFragmentShader_) fragment shaders expect PC at slot 0 and a
@@ -8977,7 +8984,9 @@ namespace CNA::Internal::Renderers::SdlGpu
         if (pipeline != boundPipeline) { SDL_BindGPUGraphicsPipeline(pass, pipeline); boundPipeline = pipeline; }
         SDL_SetGPUStencilReference(pass, static_cast<Uint8>(command.renderState.stencilReference));
         SDL_PushGPUVertexUniformData(cmd, 0, command.uniforms.data(), sizeof(command.uniforms));
-        SDL_PushGPUVertexUniformData(cmd, 1, command.lightUniforms.data(), sizeof(command.lightUniforms));
+        const auto vertexLightUniforms =
+            WithClassicNormalMatrixOverride(command.lightUniforms, command.normalMatrixUniforms);
+        SDL_PushGPUVertexUniformData(cmd, 1, vertexLightUniforms.data(), sizeof(vertexLightUniforms));
         SDL_PushGPUVertexUniformData(cmd, 2, command.fogUniforms.data(), sizeof(command.fogUniforms));
         SDL_PushGPUFragmentUniformData(cmd, 0, command.uniforms.data(), sizeof(command.uniforms));
         SDL_PushGPUFragmentUniformData(cmd, 1, command.lightUniforms.data(), sizeof(command.lightUniforms));

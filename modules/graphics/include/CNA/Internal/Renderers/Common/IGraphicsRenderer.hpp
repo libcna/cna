@@ -1282,6 +1282,22 @@ namespace CNA::Internal::Renderers
         float light2Diffuse[3] = {0,0,0};
         float worldColMajor[16] = {                         ///< Column-major world matrix
             1,0,0,0, 0,1,0,0, 0,0,1,0, 0,0,0,1};
+        /// HND-TQ-25 D9: true only for a draw through a base-Effect or EffectMaterial clone of a
+        /// classic stock effect. XNA's clone runs the cloned stock shaders on its own raw parameter
+        /// values without the stock class's OnApply, so World and WorldInverseTranspose are two
+        /// independent values and WorldViewProj is not World*View*Projection. Such a draw hands
+        /// the renderer identity, identity and the raw WorldViewProj as its world, view and
+        /// projection arguments (their product is exactly WorldViewProj), worldColMajor holds the
+        /// raw World, and worldInverseTransposeColMajor the raw WorldInverseTranspose. A classic
+        /// stock path then transforms normals with worldInverseTransposeColMajor instead of
+        /// deriving it from World, and one that reads World from its world argument reads
+        /// worldColMajor instead. False for every other draw, whose paths are unchanged.
+        bool rawStockTransforms = false;
+        /// HND-TQ-25 D9: the raw WorldInverseTranspose parameter (its float3x3, i.e. the upper
+        /// left 3x3 of the XNA matrix) in worldColMajor's convention: the XNA matrix's rows in
+        /// order, so a column-vector normal n transforms as {m[0]n.x + m[3]n.y + m[6]n.z, ...}.
+        /// Read only when rawStockTransforms is true.
+        float worldInverseTransposeColMajor[9] = {1,0,0, 0,1,0, 0,0,1};
         /// Alpha-test parameters (x=refVal, y=tolerance, z=passWeight, w=failWeight).
         /// Shader evaluates: if ((y>0) ? (|a-x|<y) : (a<x)) ? z : w < 0 → discard.
         /// Default {0,0,1,1} = Always pass (never discard).

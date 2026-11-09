@@ -6816,6 +6816,10 @@ fn cnaInverseTranspose3(m: mat3x3f) -> mat3x3f {
 
         const Matrix mvp = world * view * projection * XnaPixelCenterCorrectionEXT(primitive);
         FillEnvMapTransform(command.transformUniforms, mvp, world);
+        // HND-TQ-25 D9: a stock clone's world argument is identity; its raw World is in params.
+        if (params.rawStockTransforms)
+            std::copy(std::begin(params.worldColMajor), std::end(params.worldColMajor),
+                      command.transformUniforms.begin() + 16);
         FillEnvMapParams(command.envMapUniforms, params);
         // WEBGPU-205: the environment-map family carries its own uniform block, so its bias tail is
         // its own too -- [60] is the base texture's slot, [61] the cube's.

@@ -723,6 +723,8 @@ namespace Microsoft::Xna::Framework::Graphics
 
     private:
         friend class EnvironmentMapEffect;
+        // A clone of an EnvironmentMapEffect samples its EnvironmentMap the same way (HND-TQ-25 D9).
+        friend class Effect;
         friend struct CNA::Internal::ContentOwnershipAccess;
         [[nodiscard]] std::shared_ptr<System::IDisposable> GetContentDisposalRecord() const override;
         void DetachContentOwnership() const;

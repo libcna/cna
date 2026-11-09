@@ -1768,6 +1768,21 @@ namespace CNA::Internal::Renderers::Software
                     normalMatrix[8] * normal.Z));
         }
 
+        /// HND-TQ-25 D9: a classic stock shader transforms a normal with its WorldInverseTranspose
+        /// parameter. The stock classes derive it from World, as TransformWorldNormal does; a clone
+        /// of one hands its raw value over instead (GpuDrawParams::rawStockTransforms).
+        [[nodiscard]] Vector3 TransformClassicWorldNormal(const GpuDrawParams& params,
+                                                          const Vector3& normal)
+        {
+            if (!params.rawStockTransforms)
+                return TransformWorldNormal(params.worldColMajor, normal);
+            const float* m = params.worldInverseTransposeColMajor;
+            return NormalizeOrZero(Vector3(
+                m[0] * normal.X + m[3] * normal.Y + m[6] * normal.Z,
+                m[1] * normal.X + m[4] * normal.Y + m[7] * normal.Z,
+                m[2] * normal.X + m[5] * normal.Y + m[8] * normal.Z));
+        }
+
         void PrepareUnlitCommonDiffuseVertex(ClipVertex& vertex, const GpuDrawParams& params)
         {
             if (!UsesUnlitCommonDiffuseOutput(params))
@@ -1790,7 +1805,7 @@ namespace CNA::Internal::Renderers::Software
             const Vector3 worldPosition =
                 ApplyAffineColumnMajor(params.worldColMajor, position, 1.0f);
             const Vector3 worldNormal = haveNormal
-                ? TransformWorldNormal(params.worldColMajor, normal)
+                ? TransformClassicWorldNormal(params, normal)
                 : Vector3::Zero;
             vertex.wpx = worldPosition.X;
             vertex.wpy = worldPosition.Y;
@@ -1860,7 +1875,7 @@ namespace CNA::Internal::Renderers::Software
             const Vector3 worldPosition =
                 ApplyAffineColumnMajor(params.worldColMajor, position, 1.0f);
             const Vector3 worldNormal = haveNormal
-                ? TransformWorldNormal(params.worldColMajor, normal)
+                ? TransformClassicWorldNormal(params, normal)
                 : Vector3::Zero;
             const Vector3 eye = NormalizeOrZero(Vector3(
                 params.eyePositionWorld[0] - worldPosition.X,

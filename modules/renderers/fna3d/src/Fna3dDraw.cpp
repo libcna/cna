@@ -1245,9 +1245,25 @@ namespace CNA::Internal::Renderers::Fna3d
         }
 
         effect.SetFloats("EyePosition", params.eyePositionWorld, 3);
-        effect.SetMatrix("World", world);
-        effect.SetMatrix("WorldInverseTranspose",
-                         Matrix::Transpose(Matrix::Invert(world)));
+        if (params.rawStockTransforms)
+        {
+            // HND-TQ-25 D9: a clone of a stock effect feeds the stock shader its raw World and
+            // WorldInverseTranspose; its world argument is identity (WorldViewProj rides in
+            // the projection).
+            const float* w = params.worldColMajor;
+            effect.SetMatrix("World", Matrix(w[0], w[1], w[2], w[3], w[4], w[5], w[6], w[7],
+                                             w[8], w[9], w[10], w[11], w[12], w[13], w[14], w[15]));
+            const float* n = params.worldInverseTransposeColMajor;
+            effect.SetMatrix("WorldInverseTranspose",
+                             Matrix(n[0], n[1], n[2], 0.0f, n[3], n[4], n[5], 0.0f,
+                                    n[6], n[7], n[8], 0.0f, 0.0f, 0.0f, 0.0f, 1.0f));
+        }
+        else
+        {
+            effect.SetMatrix("World", world);
+            effect.SetMatrix("WorldInverseTranspose",
+                             Matrix::Transpose(Matrix::Invert(world)));
+        }
         (void)view;
     }
 }

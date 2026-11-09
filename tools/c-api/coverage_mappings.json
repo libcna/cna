@@ -14434,6 +14434,35 @@
       ]
     },
     {
+      "id": "effect-stock-clone-dispatch",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Graphics::(?:(?:Effect|BasicEffect|AlphaTestEffect|DualTextureEffect|EnvironmentMapEffect|SkinnedEffect)::GetStockEffectKindInternal|Effect::GetStockCloneDrawMatricesInternal|Effect::StockEffectKindInternal(?:::(?:None|Basic|AlphaTest|DualTexture|EnvironmentMap|Skinned))?)$",
+      "kinds": [
+        "method",
+        "enum",
+        "enum-value"
+      ],
+      "mapping": "No separate C route: the C++ plumbing by which a base-Effect or EffectMaterial clone of a stock effect keeps drawing with that stock effect's shaders (HND-TQ-25 D9) -- a protected virtual naming the stock class, its kind enumeration, and the draw matrices GraphicsDevice and SpriteBatch hand the renderer. A C program reaches the behaviour through `cna_effect_material_create`, `cna_effect_clone` and `cna_effect_apply`, and C cannot derive from an effect",
+      "tests": "Doxygen declaration inventory; `StockEffectCloneDispatchTest` and `StockEffectCloneRenderingTest` exercise the dispatch",
+      "status": "not-applicable",
+      "task": "CBIND-080",
+      "approved_symbols": [
+        "CPP-01A016992139",
+        "CPP-021DB5FD64EF",
+        "CPP-0388C1BD6038",
+        "CPP-1464E6D7A2FE",
+        "CPP-363A16D09493",
+        "CPP-38A43CF52EC8",
+        "CPP-45D8607E761E",
+        "CPP-69DF26D41344",
+        "CPP-754A3B0500F0",
+        "CPP-7EC7E42613E7",
+        "CPP-C05495E4C7DE",
+        "CPP-C9DE26ACB6D2",
+        "CPP-DEBF044F5E0A",
+        "CPP-E005162F1204"
+      ]
+    },
+    {
       "id": "pbr-effect-vertex-color",
       "qualified_name_regex": "^Microsoft::Xna::Framework::Graphics::(PbrEffect|SkinnedPbrEffect)::VertexColorEnabledEXT$",
       "kinds": [

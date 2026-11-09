@@ -752,6 +752,19 @@ namespace CNA::Internal::Renderers::WebGPU
         out[6] = (d * h - e * g) * invDet; out[7] = -(a * h - b * g) * invDet; out[8] = (a * e - b * d) * invDet;
     }
 
+    // HND-TQ-25 D9: a classic stock shader transforms normals with its WorldInverseTranspose
+    // parameter. The stock classes derive it from World (above); a clone of one hands its raw
+    // value over in this same layout (GpuDrawParams::rawStockTransforms).
+    inline void ComputeClassicNormalMatrix3x3(const GpuDrawParams& p, float out[9])
+    {
+        if (!p.rawStockTransforms)
+        {
+            ComputeNormalMatrix3x3(p.worldColMajor, out);
+            return;
+        }
+        for (int i = 0; i < 9; ++i) out[i] = p.worldInverseTransposeColMajor[i];
+    }
+
     // Secondary UBO for lit_textured3d.wgsl: DirectionalLight1/DirectionalLight2, EmissiveColor,
     // World (for world-space position), EyePosition, per-light SpecularColor, material
     // SpecularColor/Power, and the 3x3 normal matrix -- forwarded here since the primary
@@ -772,7 +785,7 @@ namespace CNA::Internal::Renderers::WebGPU
         out[48] = p.light2Specular[0]; out[49] = p.light2Specular[1]; out[50] = p.light2Specular[2]; out[51] = 0.0f;
         out[52] = p.specularColor[0]; out[53] = p.specularColor[1]; out[54] = p.specularColor[2]; out[55] = p.specularPower;
         float normalMatrix[9];
-        ComputeNormalMatrix3x3(p.worldColMajor, normalMatrix);
+        ComputeClassicNormalMatrix3x3(p, normalMatrix);
         out[56] = normalMatrix[0]; out[57] = normalMatrix[1]; out[58] = normalMatrix[2]; out[59] = 0.0f;
         out[60] = normalMatrix[3]; out[61] = normalMatrix[4]; out[62] = normalMatrix[5]; out[63] = 0.0f;
         out[64] = normalMatrix[6]; out[65] = normalMatrix[7]; out[66] = normalMatrix[8]; out[67] = 0.0f;
@@ -814,7 +827,7 @@ namespace CNA::Internal::Renderers::WebGPU
         out[40] = p.light2Dir[0]; out[41] = p.light2Dir[1]; out[42] = p.light2Dir[2]; out[43] = 0.0f;
         out[44] = p.light2Diffuse[0]; out[45] = p.light2Diffuse[1]; out[46] = p.light2Diffuse[2]; out[47] = 0.0f;
         float normalMatrix[9];
-        ComputeNormalMatrix3x3(p.worldColMajor, normalMatrix);
+        ComputeClassicNormalMatrix3x3(p, normalMatrix);
         out[48] = normalMatrix[0]; out[49] = normalMatrix[1]; out[50] = normalMatrix[2]; out[51] = 0.0f;
         out[52] = normalMatrix[3]; out[53] = normalMatrix[4]; out[54] = normalMatrix[5]; out[55] = 0.0f;
         out[56] = normalMatrix[6]; out[57] = normalMatrix[7]; out[58] = normalMatrix[8]; out[59] = 0.0f;

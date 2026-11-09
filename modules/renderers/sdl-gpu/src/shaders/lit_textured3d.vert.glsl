@@ -43,6 +43,12 @@ layout(set = 1, binding = 1) uniform LitLightParams {
     vec4 light1Specular_pad;
     vec4 light2Specular_pad;
     vec4 specularColorPower;
+    // HND-TQ-25 D9: a base-Effect/EffectMaterial clone of a stock effect feeds the stock shader
+    // its raw WorldInverseTranspose; normalMatrixCol0.w is 1 exactly then. The fragment stage's
+    // block of the same name ends before these three columns.
+    vec4 normalMatrixCol0;
+    vec4 normalMatrixCol1;
+    vec4 normalMatrixCol2;
 } lp;
 
 // Fog forwarded to the fragment stage as a varying (the shared PC block is fully
@@ -64,7 +70,9 @@ void main() {
     fragUV = inUV;
     // GLSL has a built-in inverse(), unlike WGSL -- no need for WebGPU's CPU-precomputed normal
     // matrix workaround; this mirrors the retired VulkanRenderer's lit_textured3d.vert.glsl.
-    mat3 normalMatrix = transpose(inverse(mat3(CNA_INSTANCE_WORLD(lp.world))));
+    mat3 normalMatrix = lp.normalMatrixCol0.w > 0.5
+        ? mat3(lp.normalMatrixCol0.xyz, lp.normalMatrixCol1.xyz, lp.normalMatrixCol2.xyz)
+        : transpose(inverse(mat3(CNA_INSTANCE_WORLD(lp.world))));
     fragNormal = normalize(normalMatrix * inNormal);
     fragWorldPos = (lp.world * CNA_INSTANCE_POSITION(vec4(inPos, 1.0))).xyz;
     fragTint = (pc.vertexColorEnabled > 0.5) ? inColor * pc.diffuseColor : pc.diffuseColor;

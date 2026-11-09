@@ -1,6 +1,12 @@
 // SPDX-License-Identifier: MS-PL
 #include "Microsoft/Xna/Framework/Graphics/Effect.hpp"
+#include "Microsoft/Xna/Framework/Graphics/EffectParameter.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
+#include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
+#include "Microsoft/Xna/Framework/Graphics/TextureCube.hpp"
+#include "Microsoft/Xna/Framework/Matrix.hpp"
+#include "Microsoft/Xna/Framework/Vector3.hpp"
+#include "Microsoft/Xna/Framework/Vector4.hpp"
 #include "CNA/Internal/Renderers/Common/IGraphicsRenderer.hpp"
 #include "System/ArgumentException.hpp"
 #include "System/ArgumentNullException.hpp"
@@ -12,8 +18,11 @@
 #include <cstddef>
 #include <cstring>
 #include <functional>
+#include <iterator>
+#include <limits>
 #include <optional>
 #include <stdexcept>
+#include <string>
 
 namespace
 {
@@ -772,6 +781,44 @@ namespace
     }
 }
 
+namespace CNA::Internal::Graphics
+{
+    /**
+     * HND-TQ-25 D9: the raw parameter values a base-Effect or EffectMaterial clone of a stock
+     * effect hands the cloned stock shaders. XNA latches them when the pass begins
+     * (EffectPass.Apply IL_003b OnApply, then the native BeginPass IL_009f), so a draw uses what
+     * the clone's last Apply read, never a value written after it.
+     */
+    struct StockCloneParameterSnapshot
+    {
+        int shaderIndex = 0;
+        Microsoft::Xna::Framework::Vector4 diffuseColor{0.0f, 0.0f, 0.0f, 1.0f};
+        Microsoft::Xna::Framework::Vector3 emissiveColor{0.0f, 0.0f, 0.0f};
+        Microsoft::Xna::Framework::Vector3 specularColor{0.0f, 0.0f, 0.0f};
+        float specularPower = 0.0f;
+        Microsoft::Xna::Framework::Vector3 lightDirection[3]{};
+        Microsoft::Xna::Framework::Vector3 lightDiffuseColor[3]{};
+        Microsoft::Xna::Framework::Vector3 lightSpecularColor[3]{};
+        Microsoft::Xna::Framework::Vector3 eyePosition{0.0f, 0.0f, 0.0f};
+        Microsoft::Xna::Framework::Vector3 fogColor{0.0f, 0.0f, 0.0f};
+        Microsoft::Xna::Framework::Vector4 fogVector{0.0f, 0.0f, 0.0f, 0.0f};
+        Microsoft::Xna::Framework::Vector4 alphaTest{0.0f, 0.0f, 0.0f, 0.0f};
+        Microsoft::Xna::Framework::Vector3 environmentMapSpecular{0.0f, 0.0f, 0.0f};
+        float environmentMapAmount = 0.0f;
+        float fresnelFactor = 0.0f;
+        Microsoft::Xna::Framework::Matrix world = Microsoft::Xna::Framework::Matrix::getIdentityProperty();
+        Microsoft::Xna::Framework::Matrix worldInverseTranspose =
+            Microsoft::Xna::Framework::Matrix::getIdentityProperty();
+        Microsoft::Xna::Framework::Matrix worldViewProj =
+            Microsoft::Xna::Framework::Matrix::getIdentityProperty();
+        std::vector<Microsoft::Xna::Framework::Matrix> bones;
+        // Sampler s0 (Texture) and s1 (DualTextureEffect's Texture2, EnvironmentMapEffect's
+        // EnvironmentMap).
+        Microsoft::Xna::Framework::Graphics::Texture* texture0 = nullptr;
+        Microsoft::Xna::Framework::Graphics::Texture* texture1 = nullptr;
+    };
+}
+
 namespace Microsoft::Xna::Framework::Graphics
 {
     Effect::Effect(GraphicsDevice& device)
@@ -887,6 +934,12 @@ namespace Microsoft::Xna::Framework::Graphics
             // arrays again. Rebuild the same graph from the source's own reflection, with every
             // value in storage of the clone's own (TQ-035).
             CopyUncompiledObjectGraphInternal(cloneSource);
+            // The cloned native effect is the stock effect's own, so the clone keeps drawing with
+            // its shaders -- whatever type the clone is, and through a clone of a clone too
+            // (HND-TQ-25 D9).
+            const StockEffectKindInternal sourceKind = cloneSource.GetStockEffectKindInternal();
+            stockCloneKind_ = sourceKind != StockEffectKindInternal::None
+                ? sourceKind : cloneSource.stockCloneKind_;
             return;
         }
 
@@ -1094,6 +1147,10 @@ namespace Microsoft::Xna::Framework::Graphics
             compiledRuntime_->SetTechnique(currentTechnique_->getIndexInternal());
             ApplyCompiledPassState(passIndex);
         }
+        else if (IsStockCloneInternal())
+        {
+            ApplyStockClonePassInternal();
+        }
         if (device_) device_->SetCurrentEffect(this);
     }
 
@@ -1150,6 +1207,335 @@ namespace Microsoft::Xna::Framework::Graphics
             params.compiledDeviceVertexSamplerStates =
                 &device_->getVertexSamplerStatesProperty();
         }
+        if (compiledRuntime_ == nullptr && IsStockCloneInternal())
+            FillStockCloneDrawParamsInternal(params);
+    }
+
+    // HND-TQ-25 D9. XNA's Effect::.ctor(Effect) IL_0048-0085 clones the native stock effect, so a
+    // base-Effect or EffectMaterial clone of BasicEffect and its siblings runs the very same
+    // stock shader bytecode. Its type is not the stock class, so EffectPass.Apply IL_003b calls
+    // the clone's own OnApply -- Effect's, which does nothing -- and the stock class's dirty-flag
+    // derivation (WorldViewProj, FogVector, EmissiveColor, ShaderIndex, ...) never runs: the
+    // shaders read whatever raw values the clone's parameters hold. The technique's single pass
+    // selects its shaders with VSArray[VSIndices[ShaderIndex]] / PSArray[PSIndices[ShaderIndex]]
+    // (the stock .fx files), and the native BeginPass (Apply IL_009f) binds the samplers those
+    // shaders read and latches the constants.
+    CNA::Internal::Graphics::StockCloneParameterSnapshot Effect::ReadStockCloneParametersInternal() const
+    {
+        CNA::Internal::Graphics::StockCloneParameterSnapshot snapshot;
+        const auto find = [this](const char* name) -> const EffectParameter*
+        {
+            return parameters_[std::string(name)];
+        };
+        const auto vector3 = [&](const char* name, Vector3& out)
+        {
+            if (const EffectParameter* parameter = find(name)) out = parameter->GetValueVector3();
+        };
+        const auto vector4 = [&](const char* name, Vector4& out)
+        {
+            if (const EffectParameter* parameter = find(name)) out = parameter->GetValueVector4();
+        };
+        const auto single = [&](const char* name, float& out)
+        {
+            if (const EffectParameter* parameter = find(name)) out = parameter->GetValueSingle();
+        };
+        const auto matrix = [&](const char* name, Matrix& out)
+        {
+            if (const EffectParameter* parameter = find(name)) out = parameter->GetValueMatrix();
+        };
+
+        // The number of entries in each stock effect's VSIndices/PSIndices tables.
+        int shaderCount = 0;
+        switch (stockCloneKind_)
+        {
+            case StockEffectKindInternal::Basic:          shaderCount = 32; break;
+            case StockEffectKindInternal::AlphaTest:      shaderCount = 8;  break;
+            case StockEffectKindInternal::DualTexture:    shaderCount = 4;  break;
+            case StockEffectKindInternal::EnvironmentMap: shaderCount = 16; break;
+            case StockEffectKindInternal::Skinned:        shaderCount = 18; break;
+            case StockEffectKindInternal::None:           break;
+        }
+        if (const EffectParameter* parameter = find("ShaderIndex"))
+            snapshot.shaderIndex = parameter->GetValueInt32();
+        if (snapshot.shaderIndex < 0 || snapshot.shaderIndex >= shaderCount)
+        {
+            // What the native effect does with an index outside its shader tables is not
+            // established; CNA refuses it rather than drawing some variant (HND-TQ-25 D9).
+            throw System::InvalidOperationException(
+                "The ShaderIndex parameter value " + std::to_string(snapshot.shaderIndex) +
+                " selects none of the " + std::to_string(shaderCount) +
+                " shaders of the stock effect this effect was cloned from.");
+        }
+
+        vector4("DiffuseColor", snapshot.diffuseColor);
+        vector3("EmissiveColor", snapshot.emissiveColor);
+        vector3("SpecularColor", snapshot.specularColor);
+        single("SpecularPower", snapshot.specularPower);
+        static constexpr const char* lightNames[3][3] = {
+            {"DirLight0Direction", "DirLight0DiffuseColor", "DirLight0SpecularColor"},
+            {"DirLight1Direction", "DirLight1DiffuseColor", "DirLight1SpecularColor"},
+            {"DirLight2Direction", "DirLight2DiffuseColor", "DirLight2SpecularColor"}};
+        for (int light = 0; light < 3; ++light)
+        {
+            vector3(lightNames[light][0], snapshot.lightDirection[light]);
+            vector3(lightNames[light][1], snapshot.lightDiffuseColor[light]);
+            vector3(lightNames[light][2], snapshot.lightSpecularColor[light]);
+        }
+        vector3("EyePosition", snapshot.eyePosition);
+        vector3("FogColor", snapshot.fogColor);
+        vector4("FogVector", snapshot.fogVector);
+        vector4("AlphaTest", snapshot.alphaTest);
+        vector3("EnvironmentMapSpecular", snapshot.environmentMapSpecular);
+        single("EnvironmentMapAmount", snapshot.environmentMapAmount);
+        single("FresnelFactor", snapshot.fresnelFactor);
+        matrix("World", snapshot.world);
+        matrix("WorldInverseTranspose", snapshot.worldInverseTranspose);
+        matrix("WorldViewProj", snapshot.worldViewProj);
+        if (const EffectParameter* bones = find("Bones"))
+        {
+            // SkinnedEffect's float4x3 Bones has no fourth column; the affine bone has M44 = 1, as
+            // SkinnedEffect::GetBoneTransforms reads it.
+            snapshot.bones = bones->GetValueMatrixArray(bones->getElementsProperty().getCountProperty());
+            for (Matrix& bone : snapshot.bones)
+                bone.M44 = 1.0f;
+        }
+        if (const EffectParameter* texture = find("Texture"))
+            snapshot.texture0 = texture->GetValueTexture2D();
+        if (const EffectParameter* texture = find("Texture2"))
+            snapshot.texture1 = texture->GetValueTexture2D();
+        else if (const EffectParameter* environmentMap = find("EnvironmentMap"))
+            snapshot.texture1 = environmentMap->GetValueTextureCube();
+        return snapshot;
+    }
+
+    void Effect::ApplyStockClonePassInternal()
+    {
+        auto snapshot = std::make_unique<CNA::Internal::Graphics::StockCloneParameterSnapshot>(
+            ReadStockCloneParametersInternal());
+        // The native pass binds the samplers its two shaders read, as each stock class's OnApply
+        // does in CNA: BasicEffect's textured variants (ShaderIndex bit 4) read s0, every
+        // AlphaTestEffect and SkinnedEffect variant reads s0, and every DualTextureEffect and
+        // EnvironmentMapEffect variant reads s0 and s1.
+        switch (stockCloneKind_)
+        {
+            case StockEffectKindInternal::Basic:
+                if ((snapshot->shaderIndex & 4) != 0)
+                    BindStockTextureInternal(0, snapshot->texture0);
+                break;
+            case StockEffectKindInternal::AlphaTest:
+            case StockEffectKindInternal::Skinned:
+                BindStockTextureInternal(0, snapshot->texture0);
+                break;
+            case StockEffectKindInternal::DualTexture:
+            case StockEffectKindInternal::EnvironmentMap:
+                BindStockTextureInternal(0, snapshot->texture0);
+                BindStockTextureInternal(1, snapshot->texture1);
+                break;
+            case StockEffectKindInternal::None:
+                break;
+        }
+        stockCloneApplied_ = std::move(snapshot);
+    }
+
+    void Effect::FillStockCloneDrawParamsInternal(CNA::Internal::Renderers::GpuDrawParams& p) const
+    {
+        // A draw selects an effect only through its Apply, so a captured snapshot is what draws;
+        // a caller reading the parameters of a never-applied clone gets its current values.
+        std::optional<CNA::Internal::Graphics::StockCloneParameterSnapshot> current;
+        const CNA::Internal::Graphics::StockCloneParameterSnapshot* s = stockCloneApplied_.get();
+        if (s == nullptr)
+        {
+            current.emplace(ReadStockCloneParametersInternal());
+            s = &*current;
+        }
+        const int index = s->shaderIndex;
+
+        const auto copy3 = [](float (&out)[3], const Vector3& value)
+        {
+            out[0] = value.X; out[1] = value.Y; out[2] = value.Z;
+        };
+        const auto copy4 = [](float (&out)[4], const Vector4& value)
+        {
+            out[0] = value.X; out[1] = value.Y; out[2] = value.Z; out[3] = value.W;
+        };
+        const auto sampled2D = [this](int slot, Texture* own)
+            -> const CNA::Internal::Renderers::ITextureRenderer*
+        {
+            auto* texture = dynamic_cast<Texture2D*>(SampledStockTextureInternal(slot, own));
+            return texture != nullptr ? &texture->GetRenderer() : nullptr;
+        };
+        // Lighting.fxh ComputeLights(..., numLights): the one-light vertex shaders read DirLight0
+        // only, the others all three. A light the shader does not read contributes nothing,
+        // which is what a renderer that always sums three lights computes for a black one.
+        const auto lights = [&](bool oneLight, bool withSpecular)
+        {
+            float (*const directions[3])[3] = {&p.light0Dir, &p.light1Dir, &p.light2Dir};
+            float (*const diffuse[3])[3] = {&p.light0Diffuse, &p.light1Diffuse, &p.light2Diffuse};
+            float (*const specular[3])[3] = {&p.light0Specular, &p.light1Specular, &p.light2Specular};
+            for (int light = 0; light < 3; ++light)
+            {
+                const bool read = light == 0 || !oneLight;
+                copy3(*directions[light], s->lightDirection[light]);
+                copy3(*diffuse[light], read ? s->lightDiffuseColor[light] : Vector3::Zero);
+                copy3(*specular[light],
+                      read && withSpecular ? s->lightSpecularColor[light] : Vector3::Zero);
+            }
+        };
+
+        // The stock vertex shaders place a vertex with WorldViewProj, light it in World space with
+        // World and WorldInverseTranspose, and fog it with FogVector -- three raw values here.
+        p.rawStockTransforms = true;
+        s->world.ToColumnMajor(p.worldColMajor);
+        const Matrix& wit = s->worldInverseTranspose;
+        const float witRows[9] = {wit.M11, wit.M12, wit.M13,
+                                  wit.M21, wit.M22, wit.M23,
+                                  wit.M31, wit.M32, wit.M33};
+        std::copy(std::begin(witRows), std::end(witRows), p.worldInverseTransposeColMajor);
+        copy4(p.diffuseColor, s->diffuseColor);
+        copy3(p.fogColor, s->fogColor);
+        copy4(p.fogVector, s->fogVector);
+        // A lit stock shader adds EmissiveColor, which the stock OnApply had already made
+        // (emissive + ambient * diffuse) * alpha (EffectHelpers.SetMaterialColor): the renderers'
+        // separate ambient term stays zero, so the raw EmissiveColor is the whole constant term.
+        p.ambientColor[0] = p.ambientColor[1] = p.ambientColor[2] = 0.0f;
+
+        switch (stockCloneKind_)
+        {
+            case StockEffectKindInternal::Basic:
+            {
+                // ShaderIndex: +1 no fog, +2 vertex colour, +4 texture; 8-15 three lights per vertex,
+                // 16-23 one light per vertex, 24-31 per pixel. PSIndices give every odd index below
+                // 24 a NoFog pixel shader; PSBasicPixelLighting(Tx) fogs all eight per-pixel ones.
+                const int lighting = index / 8;
+                p.vertexColorEnabled = (index & 2) != 0;
+                p.textureEnabled = (index & 4) != 0;
+                p.lightingEnabled = lighting != 0;
+                p.preferPerPixelLighting = lighting == 3;
+                p.fogEnabled = (index & 1) == 0 || lighting == 3;
+                if (p.textureEnabled)
+                    p.texture0 = sampled2D(0, s->texture0);
+                if (p.lightingEnabled)
+                {
+                    lights(lighting == 2, true);
+                    copy3(p.emissiveColor, s->emissiveColor);
+                    copy3(p.specularColor, s->specularColor);
+                    p.specularPower = s->specularPower;
+                    copy3(p.eyePositionWorld, s->eyePosition);
+                }
+                break;
+            }
+            case StockEffectKindInternal::AlphaTest:
+            {
+                // +1 no fog, +2 vertex colour, +4 the equal/not-equal pixel shader.
+                p.alphaTestEffect = true;
+                p.textureEnabled = true;
+                p.lightingEnabled = false;
+                p.vertexColorEnabled = (index & 2) != 0;
+                p.fogEnabled = (index & 1) == 0;
+                p.texture0 = sampled2D(0, s->texture0);
+                copy4(p.alphaTest, s->alphaTest);
+                // The renderers pick the equal/not-equal form by AlphaTest.y > 0, where XNA picks it
+                // by ShaderIndex. PSAlphaTestLtGt never reads y, so zeroing it keeps the
+                // less/greater form exact. PSAlphaTestEqNe's abs(a - x) < y is false for every
+                // alpha when y is not positive, so it always takes w -- which the less/greater
+                // form gives for x = -FLT_MAX.
+                if ((index & 4) == 0)
+                {
+                    p.alphaTest[1] = 0.0f;
+                }
+                else if (!(p.alphaTest[1] > 0.0f))
+                {
+                    p.alphaTest[0] = -std::numeric_limits<float>::max();
+                    p.alphaTest[1] = 0.0f;
+                }
+                break;
+            }
+            case StockEffectKindInternal::DualTexture:
+            {
+                // +1 no fog, +2 vertex colour.
+                p.dualTexture = true;
+                p.textureEnabled = true;
+                p.lightingEnabled = false;
+                p.vertexColorEnabled = (index & 2) != 0;
+                p.fogEnabled = (index & 1) == 0;
+                p.texture0 = sampled2D(0, s->texture0);
+                p.texture1 = sampled2D(1, s->texture1);
+                break;
+            }
+            case StockEffectKindInternal::EnvironmentMap:
+            {
+                // +1 no fog, +2 Fresnel, +4 specular, +8 one light.
+                p.envMapping = true;
+                p.textureEnabled = true;
+                p.lightingEnabled = true;
+                p.vertexColorEnabled = false;
+                p.fogEnabled = (index & 1) == 0;
+                p.fresnelEnabled = (index & 2) != 0;
+                p.specularEnabled = (index & 4) != 0;
+                p.texture0 = sampled2D(0, s->texture0);
+                if (auto* cube = dynamic_cast<TextureCube*>(SampledStockTextureInternal(1, s->texture1)))
+                    p.envMap = cube->GetRendererRaw();
+                lights((index & 8) != 0, false);
+                copy3(p.emissiveColor, s->emissiveColor);
+                copy3(p.envMapSpecular, s->environmentMapSpecular);
+                p.envMapAmount = s->environmentMapAmount;
+                p.fresnelFactor = s->fresnelFactor;
+                copy3(p.eyePositionWorld, s->eyePosition);
+                break;
+            }
+            case StockEffectKindInternal::Skinned:
+            {
+                // +1 no fog; (index / 2) % 3 picks one, two or four bones; 0-5 three lights per
+                // vertex, 6-11 one light per vertex, 12-17 per pixel, whose pixel shader fogs all six.
+                static constexpr int weights[3] = {1, 2, 4};
+                const int lighting = index / 6;
+                p.skinned = true;
+                p.textureEnabled = true;
+                p.lightingEnabled = true;
+                p.vertexColorEnabled = false;
+                p.weightsPerVertex = weights[(index / 2) % 3];
+                p.preferPerPixelLighting = lighting == 2;
+                p.fogEnabled = (index & 1) == 0 || lighting == 2;
+                p.texture0 = sampled2D(0, s->texture0);
+                lights(lighting == 1, true);
+                copy3(p.emissiveColor, s->emissiveColor);
+                copy3(p.specularColor, s->specularColor);
+                p.specularPower = s->specularPower;
+                copy3(p.eyePositionWorld, s->eyePosition);
+                const int boneCount = std::min(static_cast<int>(s->bones.size()), 72);
+                p.boneCount = boneCount;
+                for (int bone = 0; bone < boneCount; ++bone)
+                    s->bones[static_cast<std::size_t>(bone)].ToColumnMajor(p.boneTransforms + bone * 16);
+                break;
+            }
+            case StockEffectKindInternal::None:
+                break;
+        }
+        // A NoFog pixel shader never reads the fog factor. Some renderers fog by FogVector alone
+        // (a stock class zeroes it when fog is off), so the selected variant's choice reaches them
+        // as a zero vector.
+        if (!p.fogEnabled)
+            p.fogVector[0] = p.fogVector[1] = p.fogVector[2] = p.fogVector[3] = 0.0f;
+    }
+
+    bool Effect::GetStockCloneDrawMatricesInternal(Matrix& world, Matrix& view, Matrix& projection) const
+    {
+        if (!IsStockCloneInternal())
+            return false;
+        // GpuDrawParams::rawStockTransforms: the renderer's world*view*projection is then exactly
+        // the raw WorldViewProj the stock vertex shader multiplies by.
+        world = Matrix::getIdentityProperty();
+        view = Matrix::getIdentityProperty();
+        if (stockCloneApplied_ != nullptr)
+        {
+            projection = stockCloneApplied_->worldViewProj;
+        }
+        else
+        {
+            const EffectParameter* parameter = parameters_[std::string("WorldViewProj")];
+            projection = parameter != nullptr ? parameter->GetValueMatrix() : Matrix::getIdentityProperty();
+        }
+        return true;
     }
 
     const std::string& Effect::GetVertexSource() const

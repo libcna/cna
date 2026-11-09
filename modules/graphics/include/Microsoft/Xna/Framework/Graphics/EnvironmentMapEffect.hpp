@@ -44,6 +44,15 @@ namespace Microsoft::Xna::Framework::Graphics
             return true;
         }
 
+    protected:
+        /** @brief EnvironmentMapEffect: the stock shaders a base-Effect or EffectMaterial clone of it runs. */
+        CNAEXT [[nodiscard]] StockEffectKindInternal GetStockEffectKindInternal() const noexcept override
+        {
+            return StockEffectKindInternal::EnvironmentMap;
+        }
+
+    public:
+
         /** @brief Returns the fully qualified .NET type name. */
         CNAEXT [[nodiscard]] const std::string& GetTypeName() const override;
 

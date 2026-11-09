@@ -1388,6 +1388,9 @@ namespace Microsoft::Xna::Framework::Graphics
             world = Matrix::getIdentityProperty();
             view  = Matrix::getIdentityProperty();
             proj  = Matrix::getIdentityProperty();
+            // HND-TQ-25 D9: a clone of a stock effect places vertices with its raw WorldViewProj.
+            if (effect != nullptr && effect->GetStockCloneDrawMatricesInternal(world, view, proj))
+                return;
             if (const auto* m = dynamic_cast<const IEffectMatrices*>(effect))
             {
                 world = m->getWorldProperty();

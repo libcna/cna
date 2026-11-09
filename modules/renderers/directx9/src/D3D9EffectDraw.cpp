@@ -123,6 +123,26 @@ namespace CNA::Internal::Renderers::DirectX9
             TryUploadVertexShaderConstantEXT(device, table, count, name, regs);
         }
 
+        /// HND-TQ-25 D9: the World and WorldInverseTranspose a classic stock shader reads. The stock
+        /// classes derive both from the draw's world argument; a base-Effect/EffectMaterial clone of
+        /// one hands over its two raw parameter values instead (GpuDrawParams::rawStockTransforms),
+        /// with an identity world argument.
+        Matrix StockWorldEXT(const Matrix& world, const GpuDrawParams& params)
+        {
+            if (!params.rawStockTransforms) return world;
+            const float* w = params.worldColMajor;
+            return Matrix(w[0], w[1], w[2], w[3], w[4], w[5], w[6], w[7],
+                          w[8], w[9], w[10], w[11], w[12], w[13], w[14], w[15]);
+        }
+
+        Matrix StockWorldInverseTransposeEXT(const Matrix& world, const GpuDrawParams& params)
+        {
+            if (!params.rawStockTransforms) return Matrix::Transpose(Matrix::Invert(world));
+            const float* n = params.worldInverseTransposeColMajor;
+            return Matrix(n[0], n[1], n[2], 0.0f, n[3], n[4], n[5], 0.0f,
+                          n[6], n[7], n[8], 0.0f, 0.0f, 0.0f, 0.0f, 1.0f);
+        }
+
         /// GpuDrawParams stores 3-component colors/directions as `float[3]`, but every D3D9
         /// constant register is a full 4-float slot -- pads with a trailing 0 rather than reading
         /// past the end of a 3-float array.
@@ -796,8 +816,8 @@ namespace CNA::Internal::Renderers::DirectX9
 
         if (params.lightingEnabled)
         {
-            UploadMatrixConstantVS(device_.Get(), regs.vs, regs.vsCount, "World", world);
-            const Matrix worldInverseTranspose = Matrix::Transpose(Matrix::Invert(world));
+            UploadMatrixConstantVS(device_.Get(), regs.vs, regs.vsCount, "World", StockWorldEXT(world, params));
+            const Matrix worldInverseTranspose = StockWorldInverseTransposeEXT(world, params);
             UploadMatrixConstantVS(device_.Get(), regs.vs, regs.vsCount, "WorldInverseTranspose", worldInverseTranspose);
 
             // Real bug found and fixed 2026-07-16, while oracle-proving the PreferPerPixelLighting
@@ -1090,8 +1110,8 @@ namespace CNA::Internal::Renderers::DirectX9
         device_->SetPixelShader(ps);
 
         UploadMatrixConstantVS(device_.Get(), regs.vs, regs.vsCount, "WorldViewProj", world * view * projection);
-        UploadMatrixConstantVS(device_.Get(), regs.vs, regs.vsCount, "World", world);
-        const Matrix worldInverseTranspose = Matrix::Transpose(Matrix::Invert(world));
+        UploadMatrixConstantVS(device_.Get(), regs.vs, regs.vsCount, "World", StockWorldEXT(world, params));
+        const Matrix worldInverseTranspose = StockWorldInverseTransposeEXT(world, params);
         UploadMatrixConstantVS(device_.Get(), regs.vs, regs.vsCount, "WorldInverseTranspose", worldInverseTranspose);
 
         TryUploadVertexShaderConstantEXT(device_.Get(), regs.vs, regs.vsCount, "DiffuseColor", params.diffuseColor);
@@ -1211,8 +1231,8 @@ namespace CNA::Internal::Renderers::DirectX9
         device_->SetPixelShader(ps);
 
         UploadMatrixConstantVS(device_.Get(), regs.vs, regs.vsCount, "WorldViewProj", world * view * projection);
-        UploadMatrixConstantVS(device_.Get(), regs.vs, regs.vsCount, "World", world);
-        const Matrix worldInverseTranspose = Matrix::Transpose(Matrix::Invert(world));
+        UploadMatrixConstantVS(device_.Get(), regs.vs, regs.vsCount, "World", StockWorldEXT(world, params));
+        const Matrix worldInverseTranspose = StockWorldInverseTransposeEXT(world, params);
         UploadMatrixConstantVS(device_.Get(), regs.vs, regs.vsCount, "WorldInverseTranspose", worldInverseTranspose);
 
         // DiffuseColor/EmissiveColor: SkinnedEffect::FillGpuDrawParams() computes these identically

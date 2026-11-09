@@ -57,7 +57,10 @@ experimental minor-version rule:
   (non-DDS) gives texels whose alpha is 0 an RGB of 0, after any requested resize.
   `cna_effect_material_create` and the base `cna_effect_clone` of a stock effect keep its
   techniques, passes and parameter values instead of one "Default" technique; texture values are
-  shared references and the source's C retention is not extended to the copy.
+  shared references and the source's C retention is not extended to the copy. Since HND-TQ-25 D9
+  (owner decision 2026-11-09) such a copy also draws with the stock effect's shaders, fed its own raw
+  parameter values with no stock OnApply, where it drew through the base Effect before; an apply
+  whose ShaderIndex selects none of the stock shaders returns `CNA_RESULT_INVALID_STATE`.
 - TQ-037: `cna_game_run_one_frame` only ticks, as XNA's RunOneFrame does: it no longer initializes
   the game or begins a run, so a host that needs initialization calls `cna_game_run_frame_ext`.
   Disposing the graphics device manager removes only its graphics-device service. A changed graphics

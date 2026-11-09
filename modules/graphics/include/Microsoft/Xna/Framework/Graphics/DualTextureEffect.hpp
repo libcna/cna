@@ -41,6 +41,15 @@ namespace Microsoft::Xna::Framework::Graphics
             return true;
         }
 
+    protected:
+        /** @brief DualTextureEffect: the stock shaders a base-Effect or EffectMaterial clone of it runs. */
+        CNAEXT [[nodiscard]] StockEffectKindInternal GetStockEffectKindInternal() const noexcept override
+        {
+            return StockEffectKindInternal::DualTexture;
+        }
+
+    public:
+
         /** @brief Returns the fully qualified .NET type name. */
         CNAEXT [[nodiscard]] const std::string& GetTypeName() const override;
 

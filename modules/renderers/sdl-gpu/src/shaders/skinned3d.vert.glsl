@@ -55,6 +55,12 @@ layout(set = 1, binding = 1) uniform SkinnedLightParams {
     vec4 light1Specular_pad;
     vec4 light2Specular_pad;
     vec4 specularColorPower;
+    // HND-TQ-25 D9: a base-Effect/EffectMaterial clone of a stock effect feeds the stock shader
+    // its raw WorldInverseTranspose; normalMatrixCol0.w is 1 exactly then. The fragment stage's
+    // block of the same name ends before these three columns.
+    vec4 normalMatrixCol0;
+    vec4 normalMatrixCol1;
+    vec4 normalMatrixCol2;
 } lp;
 
 // Fog forwarded to the fragment stage as a varying (the shared PC block is fully
@@ -97,7 +103,9 @@ void main() {
     // model was lit as if World were identity. Computed in-shader as transpose(inverse(mat3(world)))
     // because lp.world is already present and this renderer mirrors the retired VulkanRenderer's
     // (fixed) skinned3d.vert.glsl.
-    mat3 skinNormalMatrix = transpose(inverse(mat3(CNA_INSTANCE_WORLD(lp.world))));
+    mat3 skinNormalMatrix = lp.normalMatrixCol0.w > 0.5
+        ? mat3(lp.normalMatrixCol0.xyz, lp.normalMatrixCol1.xyz, lp.normalMatrixCol2.xyz)
+        : transpose(inverse(mat3(CNA_INSTANCE_WORLD(lp.world))));
     fragNormal = normalize(skinNormalMatrix * (mat3(skinMat) * inNormal));
     fragWorldPos = (lp.world * skinnedPos).xyz;
     fragTint = pc.diffuseColor;
