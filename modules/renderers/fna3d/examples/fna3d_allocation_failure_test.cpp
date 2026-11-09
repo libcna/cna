@@ -571,7 +571,11 @@ namespace
         // SpriteBatch's own vertex and index buffers grow when a batch is larger than any before.
         // A warm-up batch of 10 sprites sizes them for 256 quads; 300 needs both to grow. The last
         // sprite is the only visible one, so a retry that draws with an index buffer still sized
-        // for 256 quads loses it.
+        // for 256 quads loses it. The renderer-level batch keeps the device's default depth test,
+        // and a new back buffer's depth is undefined until cleared -- FNA3D's OpenGL driver keeps a
+        // faux back buffer since TQ-FORK-GLPRESENT-01, and on radeonsi a renderer created after
+        // another one inherits depth/HiZ memory that rejects every sprite -- so each frame clears
+        // depth too, as DrawsColour does.
         const ImageData greenTexel{1, 1, {0, 255, 0, 255}};
         std::unique_ptr<CNA::Internal::Renderers::ITextureRenderer> texture;
         std::unique_ptr<CNA::Internal::Renderers::ISpriteBatchRenderer> sprites;
@@ -590,11 +594,11 @@ namespace
             [&](Fna3dRenderer& renderer) {
                 texture = renderer.CreateTexture(greenTexel);
                 sprites = renderer.CreateSpriteBatch();
-                renderer.Clear(0.0f, 0.0f, 0.0f, 1.0f);
+                renderer.ClearColorAndDepth(0.0f, 0.0f, 0.0f, 1.0f, 1.0f);
                 drawSprites(10);
             },
             [&](Fna3dRenderer& renderer) {
-                renderer.Clear(0.0f, 0.0f, 0.0f, 1.0f);
+                renderer.ClearColorAndDepth(0.0f, 0.0f, 0.0f, 1.0f, 1.0f);
                 drawSprites(300);
                 return Outcome::Succeeded;
             },
