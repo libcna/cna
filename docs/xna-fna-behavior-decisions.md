@@ -507,6 +507,12 @@ These are current decisions, not open defects:
 - **SpriteEffect's MatrixTransform follows FNA, including M33 = -1** (owner decision 2026-11-04,
   TQ-035). XNA has no public SpriteEffect; its internal SpriteBatch matrix has M33 = +1
   (`SpriteBatch.SetRenderState` IL_0104-0188). CNA's public class is FNA's and is marked CNAEXT.
+- **A game with no IGraphicsDeviceService still loads its content** (owner decision 2026-11-09,
+  HND-TQ-19). XNA's `Game.Initialize` IL_0032-0048 calls `LoadContent` only through a service that has
+  a device, and its `HookDeviceEvents` (IL_0001) runs before the components initialize. CNA gives a
+  game without a GraphicsDeviceManager a device of its own (a CNAEXT) and loads its content too,
+  after the components, because CNA's examples and downstream games depend on it: following XNA here
+  crashed `cna_demo_2d` in CI (reverted in 773a5f498).
 - **An EffectMaterial or base-Effect clone of a stock effect keeps the stock parameters and values but
   draws through the base Effect** (TQ-035 D9): XNA would draw it with the cloned stock shaders. Not
   changed by TQ-035.
