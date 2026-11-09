@@ -46,10 +46,12 @@ CNA-FIX-L49 (generated `.x` normals in the file's own space, measured on genuine
 `cnaplan/evidence/rev002/hnd-l49-generated-normals/`). The two feasible rows of the reconciled queue are
 therefore closed. The confirming full sweep 16 on bc5e629ab has no failure in any of the seven trees
 (section 0.3). CNA-FIX-XVERT-01 then fixed the `.x` corner-normal order over degenerate faces (5.1). Still open:
-the finite-loop cardinality question below, the `.x` VertexDuplicationIndices window in 5.1, and FNA3D-8 (`docs/fna3d-dependency-defects.md`): fork
-4ff109a already converts OpenGL presentation rectangles, so its OpenGL half needs a native rerun of
-`Gap08PresentedPixels` before CNA's FNA3D non-default-Present refusal can be reconsidered; the SDLGPU half
-(DONT_CARE swapchain load) still needs a fork repair.
+the finite-loop cardinality question below, the `.x` VertexDuplicationIndices window in 5.1, and FNA3D-8
+(`docs/fna3d-dependency-defects.md`, state of 2026-11-09): fork 4ff109a converts OpenGL presentation
+rectangles, but a native `Gap08PresentedPixels` rerun needs CNA's removed forwarding reinstated in a probe
+build (the retained binary links the old FNA3D statically, the old patch no longer applies); the SDLGPU
+half needs a design decision in the fork (a persistent client-sized copy, or refusing destination
+rectangles), since a `LOAD` of a rotating swapchain image does not preserve the previous presentation.
 
 ### Owner questions recorded during the night (not implemented, owner rule)
 

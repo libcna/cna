@@ -61,6 +61,20 @@ rerun of that fixture revision is claimed yet. The current checked-in native fix
 SOFTWARE only. An FNA3D-8 fork repair must precede any new presentation support claim;
 the other repairs below do not cover this defect.
 
+**State on 2026-11-09 (FNA3D 0bfbe7f).** The OpenGL half has a fork repair (TQ-FORK-GLPRESENT-01,
+4ff109a: source and destination rectangles become GL endpoints and presentation targets the override
+drawable; the fork's `presentation_tests` check default-framebuffer pixels, window-override rectangles
+included). No CNA-level native rerun of `Gap08PresentedPixels` exists for it. The retained diagnostic binary cannot provide one: it links
+FNA3D 10f650b statically. A rerun needs CNA's forwarding reinstated in a probe build, and the
+original forwarding patch no longer applies to `next`; the patch, the fixture and the 2026-11-06 logs
+are kept in `cnaplan/evidence/rev002/fna3d-8-gap08a-retained/`. The SDLGPU half has no repair, and
+replacing `SDL_GPU_LOADOP_DONT_CARE` with `LOAD` is not one: an acquired swapchain texture holds
+whichever earlier frame last used that image (the swapchain rotates two or three images), not the
+previous presentation. Preserving pixels outside a destination rectangle needs a persistent
+client-sized copy that each Present updates and blits from, or an explicit refusal of destination
+rectangles on that driver. That is a design decision for the fork, and it is not taken here. Until
+both halves are measured natively, CNA keeps refusing non-default Present on FNA3D.
+
 
 ### FNA3D-3: the SDL GPU driver applies no MultiSampleMask
 
