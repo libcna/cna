@@ -315,9 +315,29 @@ static int validate_texture_clone(
             vector_equals(vector, 0.4F, 0.5F, 0.6F));
     /* TQ-035: an EffectMaterial over a stock effect keeps every parameter value, as XNA's
        Effect::.ctor(Effect) IL_0048-0085 does by cloning the native effect. SpecularPower is
-       written to its parameter by the setter (BasicEffect.set_SpecularPower IL_0000-000c). */
+       written to its parameter by the setter (BasicEffect.set_SpecularPower IL_0000-000c).
+       HND-TQ-25 D8: the material also keeps the C textures its source retains -- the stock
+       texture slot and every parameter slot -- so they outlive the source's own references. */
+    CNA_EffectHandle material = CNA_INVALID_HANDLE;
+    CNA_EffectParameterHandle source_texture_parameter = CNA_INVALID_HANDLE;
+    CNA_Handle parameter_texture = CNA_INVALID_HANDLE;
     {
-        CNA_EffectHandle material = CNA_INVALID_HANDLE;
+        static const char TextureName[] = "Texture";
+        CNA_EffectParameterCollectionHandle parameters = CNA_INVALID_HANDLE;
+        CNA_Bool found_texture = CNA_FALSE;
+        REQUIRE(cna_texture2d_create(device, &texture_info, &parameter_texture) ==
+                    CNA_RESULT_SUCCESS &&
+                cna_effect_get_parameters(basic, &parameters) == CNA_RESULT_SUCCESS &&
+                cna_effect_parameter_collection_find_name(
+                    parameters, (CNA_StringView){TextureName, sizeof(TextureName) - 1U},
+                    &found_texture, &source_texture_parameter) == CNA_RESULT_SUCCESS &&
+                found_texture == CNA_TRUE &&
+                cna_effect_parameter_set_value_texture(
+                    source_texture_parameter, CNA_EFFECT_TEXTURE_BASE, parameter_texture) ==
+                    CNA_RESULT_SUCCESS &&
+                cna_effect_parameter_collection_destroy(parameters) == CNA_RESULT_SUCCESS);
+    }
+    {
         CNA_EffectParameterCollectionHandle source_parameters = CNA_INVALID_HANDLE;
         CNA_EffectParameterCollectionHandle material_parameters = CNA_INVALID_HANDLE;
         CNA_EffectParameterHandle power = CNA_INVALID_HANDLE;
@@ -346,16 +366,24 @@ static int validate_texture_clone(
                 cna_effect_parameter_collection_destroy(material_parameters) ==
                     CNA_RESULT_SUCCESS &&
                 cna_effect_parameter_collection_destroy(source_parameters) ==
-                    CNA_RESULT_SUCCESS &&
-                cna_effect_destroy(material) == CNA_RESULT_SUCCESS);
+                    CNA_RESULT_SUCCESS);
     }
     REQUIRE(cna_basic_effect_set_texture(basic, CNA_INVALID_HANDLE) ==
                 CNA_RESULT_SUCCESS &&
             cna_texture2d_destroy(texture) == CNA_RESULT_INVALID_STATE);
     REQUIRE(cna_basic_effect_set_texture(clone, CNA_INVALID_HANDLE) ==
                 CNA_RESULT_SUCCESS &&
-            cna_texture2d_destroy(texture) == CNA_RESULT_SUCCESS &&
             cna_effect_destroy(clone) == CNA_RESULT_SUCCESS);
+    /* Neither the source nor the clone holds `texture` any more; the material still does. */
+    REQUIRE(cna_texture2d_destroy(texture) == CNA_RESULT_INVALID_STATE);
+    REQUIRE(cna_effect_parameter_set_value_texture(
+                source_texture_parameter, CNA_EFFECT_TEXTURE_BASE, CNA_INVALID_HANDLE) ==
+                CNA_RESULT_SUCCESS &&
+            cna_effect_parameter_destroy(source_texture_parameter) == CNA_RESULT_SUCCESS &&
+            cna_texture2d_destroy(parameter_texture) == CNA_RESULT_INVALID_STATE);
+    REQUIRE(cna_effect_destroy(material) == CNA_RESULT_SUCCESS &&
+            cna_texture2d_destroy(texture) == CNA_RESULT_SUCCESS &&
+            cna_texture2d_destroy(parameter_texture) == CNA_RESULT_SUCCESS);
     return 1;
 }
 

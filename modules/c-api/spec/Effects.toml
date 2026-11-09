@@ -126,7 +126,7 @@ cna_effect_apply = { call = "object->value->Apply()" }
 cna_effect_get_is_compiled_ext = { get = "object->value->GetCompiledRuntimePtr() != nullptr" }
 cna_effect_has_renderer = { get = "object->value->GetEffectRendererPtr() != nullptr" }
 cna_effect_is_exact_stock_sprite_effect = { get = "object->value->IsExactStockSpriteEffectEXT()" }
-cna_effect_material_create = { result = "CreateEffectHandle(std::make_shared<EffectMaterial>(*object->value), object->parentGame, out_effect)" }
+cna_effect_material_create = { result = "EffectMaterialCreate(object, out_effect)" }
 cna_effect_get_parameters = { result = "CreateParameterCollectionHandle(GetEffectState(object)->parameters, out_collection)" }
 cna_effect_get_techniques = { result = "CreateTechniqueCollectionHandle(GetEffectState(object)->techniques, out_collection)" }
 cna_effect_destroy = { release = true, require = 'InvalidStateIf(object->activeModelReferenceCount != 0U, "The Effect is retained by a ModelMeshPart.")' }

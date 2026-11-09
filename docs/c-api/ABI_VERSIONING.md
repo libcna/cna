@@ -25,6 +25,16 @@ contracts are unchanged. New
 snapshot handles have typed destruction; child code is independently copied. Device runtime
 variants are separate qualification tests. Public headers define the detailed contracts.
 
+## Behaviour corrections within ABI 0.60 (owner decisions 2026-11-09)
+
+No route, layout or enum identity changes and no new symbols.
+
+- HND-TQ-25 D8: `cna_effect_material_create` now also retains every C texture handle its source
+  retains at that moment -- the stock texture slots and each parameter's slots, through elements and
+  structure members -- until the material replaces or clears it or is destroyed. Destroying such a
+  texture while only the material holds it returns `CNA_RESULT_INVALID_STATE`, as for its source.
+  This reverses the TQ-035 note below for materials; `cna_effect_clone` is unchanged.
+
 ## Behaviour corrections within ABI 0.60 (TQ campaign, owner decisions 2026-11-04)
 
 No route, layout or enum identity changes and no new symbols. Existing routes now follow XNA under the

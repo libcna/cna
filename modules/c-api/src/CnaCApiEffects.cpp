@@ -2100,6 +2100,104 @@ namespace {
         outEffect);
 }
 
+// HND-TQ-25 D8 (owner decision 2026-11-09): a material made from an effect keeps the C texture
+// handles the source retains, as the source does. The material's parameter graph is a clone of the
+// source's, so a parameter's retention moves to the parameter at the same position, through its
+// elements and structure members.
+void CopyRetainedTextureSlot(const RetainedTextureSlot& source, RetainedTextureSlot& destination)
+{
+    if (source.handle != CNA_INVALID_HANDLE) {
+        destination.Set(source.handle, source.value, source.owner, source.referenceCount);
+    }
+}
+
+void CopyParameterRetention(
+    const std::shared_ptr<ParameterCollectionState>& source,
+    const std::shared_ptr<ParameterCollectionState>& destination)
+{
+    if (source == nullptr || destination == nullptr || source->value == nullptr ||
+        destination->value == nullptr) {
+        return;
+    }
+    const int count = source->value->getCountProperty();
+    if (destination->value->getCountProperty() != count) {
+        return;
+    }
+    for (const auto& [sourceParameter, sourceState] : source->elementStates) {
+        if (sourceState == nullptr) {
+            continue;
+        }
+        for (int index = 0; index < count; ++index) {
+            if ((*source->value)[index] != sourceParameter) {
+                continue;
+            }
+            EffectParameter* const target = (*destination->value)[index];
+            if (target == nullptr) {
+                break;
+            }
+            const std::shared_ptr<ParameterState> targetState = GetElementState(destination, target);
+            CopyRetainedTextureSlot(sourceState->baseTexture, targetState->baseTexture);
+            CopyRetainedTextureSlot(sourceState->texture2D, targetState->texture2D);
+            CopyRetainedTextureSlot(sourceState->texture3D, targetState->texture3D);
+            CopyRetainedTextureSlot(sourceState->textureCube, targetState->textureCube);
+            const std::shared_ptr<EffectParameter> owned(destination->value, target);
+            if (sourceState->elements != nullptr) {
+                if (targetState->elements == nullptr) {
+                    auto elements = std::make_shared<ParameterCollectionState>();
+                    elements->value = std::shared_ptr<EffectParameterCollection>(
+                        owned, &target->getElementsProperty());
+                    elements->effectOwnership = targetState->effectOwnership;
+                    targetState->elements = std::move(elements);
+                }
+                CopyParameterRetention(sourceState->elements, targetState->elements);
+            }
+            if (sourceState->members != nullptr) {
+                if (targetState->members == nullptr) {
+                    auto members = std::make_shared<ParameterCollectionState>();
+                    members->value = std::shared_ptr<EffectParameterCollection>(
+                        owned, &target->getStructureMembersProperty());
+                    members->effectOwnership = targetState->effectOwnership;
+                    targetState->members = std::move(members);
+                }
+                CopyParameterRetention(sourceState->members, targetState->members);
+            }
+            break;
+        }
+    }
+}
+
+[[nodiscard]] CNA_Result EffectMaterialCreate(
+    const std::shared_ptr<EffectResource>& source,
+    CNA_EffectHandle* const outMaterial)
+{
+    if (const CNA_Result result = CreateEffectHandle(
+            std::make_shared<EffectMaterial>(*source->value), source->parentGame, outMaterial);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    std::shared_ptr<EffectResource> material;
+    if (const CNA_Result result = GetEffect(*outMaterial, &material);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    const std::shared_ptr<EffectState> sourceState = GetEffectState(source);
+    const std::shared_ptr<EffectState> materialState = GetEffectState(material);
+    const std::shared_ptr<EffectLifetime>& from = sourceState->lifetime;
+    const std::shared_ptr<EffectLifetime>& to = materialState->lifetime;
+    for (const auto& [unit, slot] : from->shaderTextures) {
+        CopyRetainedTextureSlot(slot, to->shaderTextures[unit]);
+    }
+    CopyRetainedTextureSlot(from->basicTexture, to->basicTexture);
+    CopyRetainedTextureSlot(from->stockTexture0, to->stockTexture0);
+    CopyRetainedTextureSlot(from->stockTexture1, to->stockTexture1);
+    CopyRetainedTextureSlot(from->environmentMap, to->environmentMap);
+    for (std::size_t index = 0U; index < from->pbrTextures.size(); ++index) {
+        CopyRetainedTextureSlot(from->pbrTextures[index], to->pbrTextures[index]);
+    }
+    CopyParameterRetention(sourceState->parameters, materialState->parameters);
+    return CNA_RESULT_SUCCESS;
+}
+
 [[nodiscard]] CNA_Result EffectClone(
     const CNA_EffectHandle effectHandle,
     CNA_EffectHandle* const outClone)

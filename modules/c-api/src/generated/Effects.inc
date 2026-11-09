@@ -975,7 +975,7 @@ CNA_Result cna_effect_material_create(
             routeResult != CNA_RESULT_SUCCESS) {
             return routeResult;
         }
-        return CreateEffectHandle(std::make_shared<EffectMaterial>(*object->value), object->parentGame, out_effect);
+        return EffectMaterialCreate(object, out_effect);
     });
 }
 

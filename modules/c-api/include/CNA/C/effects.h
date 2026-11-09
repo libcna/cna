@@ -1340,8 +1340,9 @@ CNA_C_API CNA_Result cna_shader_effect_create(
  * As XNA's `EffectMaterial(Effect)` -> `Effect(Effect)` clone: the material has the source's
  * techniques and passes and every parameter with its current value, in storage of its own, and
  * starts on its first technique. That holds for a stock or hand-built source as much as for a
- * compiled one. Texture parameter values are copied as references; the source's C texture
- * retention is not extended to the material.
+ * compiled one. Texture parameter values are copied as references, and every C texture handle the
+ * source retains at that moment -- its stock texture slots and each parameter's slots -- is
+ * retained by the material too, until the material replaces or clears it or is destroyed.
  *
  * @param clone_source Source effect handle.
  * @param out_effect Receives the owned material handle.
