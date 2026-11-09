@@ -29,10 +29,10 @@
 
 include_guard(GLOBAL)
 
-# libcna/FNA3D 4ff109ad0fe3 (cna-audit-fixes): release 26.10 plus CNA's audit fixes,
+# libcna/FNA3D 0bfbe7fe4958 (cna-audit-fixes): release 26.10 plus CNA's audit fixes,
 # 912e26d (stencil winding, SDL upload ordering, unsigned mip bounds), b301e3a (malformed
 # Effect investigation regression), and the MojoShader gitlink move. MojoShader is
-# libcna/mojoshader c6397f8dd949d21e72bf9ad2550648a96e6d7d3f: 04616e1 repairs duplicate
+# libcna/mojoshader 6f1e91b65c8dfe493ec1ace818b294b7181fa1b6: 04616e1 repairs duplicate
 # Effect payload ownership; 6ae750b implements SPIR-V BEM/TEXDEPTH; 100025e distinguishes
 # matrix-only BEM metadata from sampled textures (TQ-SWEEP12-10, 2026-11-06).
 # b6125e5 repairs scalar-dot legacy specular reflection (TQ-SWEEP12-11).
@@ -51,7 +51,9 @@ include_guard(GLOBAL)
 # independent across profiles (TQ-FORK-L38). FNA3D 1f59268 refuses overlapping traced devices
 # (TQ-FORK-L41) and da0726e negotiates SDL GPU sample counts in {2,4,8} (TQ-FORK-E01).
 # 4ff109a presents the OpenGL back buffer into its destination rectangle after native resizes
-# (TQ-FORK-GLPRESENT-01).
+# (TQ-FORK-GLPRESENT-01). 6f1e91b refuses truncated effect object headers and untyped
+# small-object slots through the parser's error list instead of an assertion; FNA3D 0bfbe7f carries
+# it (TQ-FORK-EFFECT-TRUNC-01, 2026-11-09).
 # SPIR-V admits all eight legacy envelope opcodes. CNA retains the 44-case corpus and its
 # original assertions, adding full-image depth and public 2D/cube/volume inference witnesses
 # (TQ-FORK-PIN-02). OFF builds still refuse every capability by name.
@@ -66,7 +68,7 @@ include_guard(GLOBAL)
 include("${CMAKE_CURRENT_LIST_DIR}/Fna3dSourcePin.cmake")
 cna_fna3d_select_source_pin(
     DEFAULT_REPOSITORY "https://github.com/libcna/FNA3D.git"
-    DEFAULT_TAG "4ff109ad0fe3a32f036e599e0a2484787ce673a6")
+    DEFAULT_TAG "0bfbe7fe4958243058775408cd1cf8b017bbf4b0")
 
 # Every configure compares the checkout with the pin, read-only: FNA3D's HEAD, the MojoShader
 # commit it records against MojoShader's own HEAD, and local changes in either. A

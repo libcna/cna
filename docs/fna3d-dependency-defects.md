@@ -119,11 +119,21 @@ identities: `../../cnaplan/evidence/rev002/fna-current-qualification-b7ab/fna-re
 
 ## Fixed on the forks
 
-The owner-authorized repairs through TQ-TEXM3X2DEPTH-01 and TQ-SAMPLER-INFER-01
-were published on 2026-11-08. CNA pins FNA3D
-`866d402288ad1b54eee079044bd7aeb7486646bf` with MojoShader
-`93ee117a109ee2d8c979f8cc8f73feb0f9907e30`. Earlier identities below identify each
+The owner-authorized repairs through TQ-FORK-EFFECT-TRUNC-01 were published by
+2026-11-09. CNA pins FNA3D `0bfbe7fe4958243058775408cd1cf8b017bbf4b0` with MojoShader
+`6f1e91b65c8dfe493ec1ace818b294b7181fa1b6`. Earlier identities below identify each
 repair's delivery and qualification; they are not the current pin.
+
+### TQ-FORK-EFFECT-TRUNC-01: truncated effect object headers reached an assertion
+
+**Status:** fixed in published MojoShader `6f1e91b`, carried by FNA3D `0bfbe7f`.
+`readui32` returns zero at end of input, and the small/large object loops read their
+headers unchecked (upstream since 2016). A 1884-byte prefix of CNA's conformance effect
+fabricated small record 0 of type VOID and reached `assert(0 && "Small object type
+unknown!")` -- fatal for CNA's `CompiledEffectTruncationSweepTest` under `SDL_ASSERT=abort`.
+Both loops now require complete headers and untyped slots are parser errors; the fork's
+`cna_effect_tests` cover every four-byte prefix and every header cut, and three production
+mutants fail them.
 
 ### TQ-TEXM3X2DEPTH-01: desktop depth APIs selected in OpenGL ES contexts
 
