@@ -111,12 +111,13 @@ namespace Microsoft::Xna::Framework::Content
             throw ContentLoadException(
                 "ContentManager: OpenStream returned no stream for asset '" + assetName + "'.");
         }
-        const auto xnbBytes = ReadStreamToEnd(*stream, assetName);
-        const std::string xnbPath =
-            ResolveExistingAssetPath(BuildAssetPath(assetName) + ".xnb");
-
-        detail::RegisterEveryBuiltinXnbReader();
-        std::any result = LoadXnbAssetUntyped(xnbBytes, xnbPath, assetName);
+        std::any result = ReadThenCloseStream(
+            *stream, assetName, [&](const std::vector<std::uint8_t>& xnbBytes) {
+                const std::string xnbPath =
+                    ResolveExistingAssetPath(BuildAssetPath(assetName) + ".xnb");
+                detail::RegisterEveryBuiltinXnbReader();
+                return LoadXnbAssetUntyped(xnbBytes, xnbPath, assetName);
+            });
         loadedAssets_[cacheKey] = result;
         return result;
     }

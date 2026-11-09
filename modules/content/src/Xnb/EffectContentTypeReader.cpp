@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 #include "CNA/Internal/Xnb/EffectContentTypeReader.hpp"
+#include "CNA/Internal/ContentManagerAccess.hpp"
 
 #include "Microsoft/Xna/Framework/Content/ContentLoadException.hpp"
 #include "Microsoft/Xna/Framework/Content/ContentManager.hpp"
@@ -44,7 +45,7 @@ namespace CNA::Internal::Xnb
         const std::vector<std::uint8_t> bytes =
             input.ReadBytesExactOrThrow(length, "EffectReader");
         auto effect = std::make_shared<Effect>(
-            input.getContentManagerProperty()->getGraphicsDeviceInternal(), bytes);
+            CNA::Internal::ContentManagerAccess::GraphicsDeviceFromContentReader(input), bytes);
         effect->setNameProperty(input.getAssetNameProperty());
         return effect;
     }

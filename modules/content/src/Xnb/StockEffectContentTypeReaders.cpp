@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 #include "CNA/Internal/Xnb/StockEffectContentTypeReaders.hpp"
+#include "CNA/Internal/ContentManagerAccess.hpp"
 #include "CNA/Internal/Xnb/XnbCanonicalData.hpp"
 
 #include "CNA/Internal/Renderers/Common/IGraphicsRenderer.hpp"
@@ -28,7 +29,7 @@ namespace CNA::Internal::Xnb
                     std::string(readerName) +
                     ": no GraphicsDevice available (ContentManager was not set on this ContentReader).");
             }
-            return input.getContentManagerProperty()->getGraphicsDeviceInternal();
+            return CNA::Internal::ContentManagerAccess::GraphicsDeviceFromContentReader(input);
         }
     }
 

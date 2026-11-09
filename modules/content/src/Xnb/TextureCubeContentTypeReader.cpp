@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 #include "CNA/Internal/Xnb/TextureCubeContentTypeReader.hpp"
+#include "CNA/Internal/ContentManagerAccess.hpp"
 
 #include <algorithm>
 #include <cstdint>
@@ -38,7 +39,7 @@ namespace CNA::Internal::Xnb
                     "TextureCubeReader: no GraphicsDevice available (ContentManager was not set "
                     "on this ContentReader).");
             }
-            return input.getContentManagerProperty()->getGraphicsDeviceInternal();
+            return CNA::Internal::ContentManagerAccess::GraphicsDeviceFromContentReader(input);
         }
     }
 

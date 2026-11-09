@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 #include "CNA/Internal/Xnb/Texture2DContentTypeReader.hpp"
+#include "CNA/Internal/ContentManagerAccess.hpp"
 
 #include <algorithm>
 #include <bit>
@@ -43,7 +44,7 @@ namespace CNA::Internal::Xnb
     Texture2D Texture2DReader::Read(ContentReader& input, std::optional<Texture2D> existingInstance)
     {
         GraphicsDevice* device = input.getContentManagerProperty()
-            ? &input.getContentManagerProperty()->getGraphicsDeviceInternal()
+            ? &CNA::Internal::ContentManagerAccess::GraphicsDeviceFromContentReader(input)
             : nullptr;
         if (!device)
         {
@@ -53,26 +54,18 @@ namespace CNA::Internal::Xnb
         }
         const XnbTextureData decoded = DecodeTexture2DXnbData(
             input, static_cast<std::uint32_t>(device->GetMaxTextureDimension()));
-        return CreateTexture2DFromXnbData(input, decoded, std::move(existingInstance));
+        return CreateTexture2DFromXnbData(input, *device, decoded, std::move(existingInstance));
     }
 
     Texture2D CreateTexture2DFromXnbData(
-        ContentReader& input, const XnbTextureData& decoded,
+        ContentReader& /*input*/, GraphicsDevice& deviceReference, const XnbTextureData& decoded,
         std::optional<Texture2D> existingInstance)
     {
         const int32_t width = static_cast<int32_t>(decoded.width);
         const int32_t height = static_cast<int32_t>(decoded.height);
         const int32_t levelCount = static_cast<int32_t>(decoded.mipCount);
         const SurfaceFormat surfaceFormat = decoded.surfaceFormat;
-        GraphicsDevice* device = input.getContentManagerProperty()
-            ? &input.getContentManagerProperty()->getGraphicsDeviceInternal()
-            : nullptr;
-        if (!device)
-        {
-            throw ContentLoadException(
-                "Texture2DReader: no GraphicsDevice available (ContentManager was not set on "
-                "this ContentReader).");
-        }
+        GraphicsDevice* const device = &deviceReference;
 
         // WEBGPU-144 Phase 2 (XNB-24's per-renderer capability query): keep DXT content compressed
         // and upload the raw blocks when the active renderer opts in via

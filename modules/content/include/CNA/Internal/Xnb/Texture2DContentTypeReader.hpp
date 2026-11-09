@@ -17,13 +17,16 @@ namespace CNA::Internal::Xnb
     /**
      * @brief Constructs the runtime Texture2D adapter from already parsed canonical XNB data.
      *
-     * @param input Reader supplying the owning ContentManager and GraphicsDevice.
+     * @param input The reader of the asset being read.
+     * @param device The device the reader looked up once for this read, as Refresh's readers ask
+     *        GraphicsContentHelper.GraphicsDeviceFromContentReader once.
      * @param decoded Validated source texture data.
      * @param existingInstance Optional runtime texture to reload.
      * @return Runtime texture with the same supported upload semantics as Texture2DReader.
      */
     [[nodiscard]] Microsoft::Xna::Framework::Graphics::Texture2D CreateTexture2DFromXnbData(
         Microsoft::Xna::Framework::Content::ContentReader& input,
+        Microsoft::Xna::Framework::Graphics::GraphicsDevice& device,
         const XnbTextureData& decoded,
         std::optional<Microsoft::Xna::Framework::Graphics::Texture2D> existingInstance =
             std::nullopt);

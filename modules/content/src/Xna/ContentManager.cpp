@@ -204,19 +204,29 @@ namespace Microsoft::Xna::Framework::Content
         graphicsDevice_ = &graphicsDevice;
     }
 
+    Graphics::GraphicsDevice* ContentManager::FindGraphicsDevice() const
+    {
+        // CNA's injection first: a device set with setGraphicsDevice is used without asking the
+        // service provider at all.
+        if (graphicsDevice_ != nullptr)
+        {
+            return graphicsDevice_;
+        }
+        // Refresh GraphicsContentHelper.GraphicsDeviceFromContentReader IL_0000-003e: the
+        // provider's IGraphicsDeviceService, asked again on every call, and its device.
+        if (serviceProvider_ == nullptr)
+        {
+            return nullptr;
+        }
+        auto* graphicsDeviceService = static_cast<Graphics::IGraphicsDeviceService*>(
+            serviceProvider_->GetService(typeid(Graphics::IGraphicsDeviceService)));
+        return graphicsDeviceService != nullptr ? graphicsDeviceService->getGraphicsDeviceProperty()
+                                                : nullptr;
+    }
+
     Graphics::GraphicsDevice& ContentManager::getGraphicsDeviceInternal() const
     {
-        Graphics::GraphicsDevice* graphicsDevice = graphicsDevice_;
-        if (graphicsDevice == nullptr && serviceProvider_ != nullptr)
-        {
-            auto* graphicsDeviceService = static_cast<Graphics::IGraphicsDeviceService*>(
-                serviceProvider_->GetService(typeid(Graphics::IGraphicsDeviceService)));
-            if (graphicsDeviceService != nullptr)
-            {
-                graphicsDevice = graphicsDeviceService->getGraphicsDeviceProperty();
-            }
-        }
-
+        Graphics::GraphicsDevice* graphicsDevice = FindGraphicsDevice();
         if (graphicsDevice == nullptr)
         {
             throw ContentLoadException(
@@ -251,6 +261,28 @@ namespace Microsoft::Xna::Framework::Content
             disposableAssets_.clear();
             ++disposableAssetsVersion_;
             disposed_ = true;
+        }
+    }
+
+    void ContentManager::CloseReadStream(System::IO::Stream& stream, std::exception_ptr readFailure)
+    {
+        // Refresh ContentManager.ReadAsset<T> IL_0079-0082: the stream is disposed in a finally,
+        // and Stream.Dispose() is the virtual Close(). The owner decided (HND-TQ-35, 2026-11-09)
+        // that a throwing Close does not replace a read failure already propagating.
+        try
+        {
+            stream.Close();
+        }
+        catch (...)
+        {
+            if (!readFailure)
+            {
+                readFailure = std::current_exception();
+            }
+        }
+        if (readFailure)
+        {
+            std::rethrow_exception(readFailure);
         }
     }
 

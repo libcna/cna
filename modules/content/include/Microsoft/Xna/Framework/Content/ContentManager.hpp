@@ -2,11 +2,13 @@
 #pragma once
 
 #include <any>
+#include <exception>
 #include <filesystem>
 #include <fstream>
 #include <functional>
 #include <limits>
 #include <memory>
+#include <optional>
 #include <sstream>
 #include <stdexcept>
 #include <string>
@@ -145,11 +147,44 @@ namespace Microsoft::Xna::Framework::Content
         [[nodiscard]] std::unique_ptr<System::IO::Stream> TryOpenCompiledStream(
             const std::string& assetName);
 
+        /// The injected device, else the service provider's IGraphicsDeviceService device, else null.
+        [[nodiscard]] Graphics::GraphicsDevice* FindGraphicsDevice() const;
+
         /// Reads a stream OpenStream() produced to its end. A ContentManager asset is read whole --
         /// LoadXnbAsset() needs the complete container to parse its header and payload -- so the
         /// stream shape an override may provide is turned into bytes once, here.
         [[nodiscard]] static std::vector<std::uint8_t> ReadStreamToEnd(System::IO::Stream& stream,
                                                                       const std::string& assetName);
+
+        /// Reads @p stream to its end, hands the bytes to @p read, then closes the stream whether or
+        /// not that succeeded: Refresh ContentManager.ReadAsset<T> disposes the OpenStream() result
+        /// in its outer finally (IL_0079-0082), and Stream.Dispose() is the virtual Close(). A Close
+        /// that throws does not replace an exception already propagating from the read, and
+        /// propagates when the read succeeded (owner decision HND-TQ-35, 2026-11-09).
+        template <typename Read>
+        static auto ReadThenCloseStream(System::IO::Stream& stream, const std::string& assetName,
+                                        Read&& read)
+            -> std::invoke_result_t<Read&, const std::vector<std::uint8_t>&>
+        {
+            using Result = std::invoke_result_t<Read&, const std::vector<std::uint8_t>&>;
+            std::optional<Result> result;
+            std::exception_ptr failure;
+            try
+            {
+                const std::vector<std::uint8_t> bytes = ReadStreamToEnd(stream, assetName);
+                result.emplace(read(bytes));
+            }
+            catch (...)
+            {
+                failure = std::current_exception();
+            }
+            CloseReadStream(stream, std::move(failure));
+            return std::move(*result);
+        }
+
+        /// The finally of ReadThenCloseStream: closes @p stream, then rethrows @p readFailure if the
+        /// read failed, or the exception Close threw if only Close failed.
+        static void CloseReadStream(System::IO::Stream& stream, std::exception_ptr readFailure);
 
         friend class ContentReader;
         void RecordDisposableObject(std::shared_ptr<System::IDisposable> disposable);
@@ -314,9 +349,10 @@ namespace Microsoft::Xna::Framework::Content
                     "ContentManager: OpenStream returned no stream for asset '" + assetName + "'.");
             }
 
-            std::vector<std::uint8_t> bytes = ReadStreamToEnd(*stream, assetName);
-            detail::BuiltinContent<T>::Register(*this);
-            return LoadXnbAsset<T>(bytes, assetName, assetName, std::move(recordDisposableObject));
+            return ReadThenCloseStream(*stream, assetName, [&](const std::vector<std::uint8_t>& bytes) {
+                detail::BuiltinContent<T>::Register(*this);
+                return LoadXnbAsset<T>(bytes, assetName, assetName, std::move(recordDisposableObject));
+            });
         }
 
     public:
@@ -331,6 +367,9 @@ namespace Microsoft::Xna::Framework::Content
         /**
          * @brief Sets the graphics device used when loading GPU resources such as textures.
          *
+         * A device set here takes precedence over the service provider's
+         * `IGraphicsDeviceService`, which is then not consulted.
+         *
          * @param graphicsDevice The graphics device to associate with this manager.
          */
         void setGraphicsDevice(Graphics::GraphicsDevice& graphicsDevice);
@@ -338,7 +377,11 @@ namespace Microsoft::Xna::Framework::Content
         /**
          * @brief Returns the graphics device associated with this content manager.
          *
+         * The injected device when there is one, otherwise the service provider's
+         * `IGraphicsDeviceService` device, looked up on every call.
+         *
          * @return Reference to the associated GraphicsDevice.
+         * @throws ContentLoadException if neither provides a device.
          */
         [[nodiscard]] Graphics::GraphicsDevice& getGraphicsDeviceInternal() const;
 
@@ -632,10 +675,12 @@ namespace Microsoft::Xna::Framework::Content
             // Do not swallow an override's refusal, malformed stream, or an actual I/O failure.
             if (const auto stream = TryOpenCompiledStream(cleanedAssetName))
             {
-                const auto xnbBytes = ReadStreamToEnd(*stream, cleanedAssetName);
-                const std::string xnbCandidate =
-                    ResolveExistingAssetPath(BuildAssetPath(cleanedAssetName) + ".xnb");
-                T result = LoadXnbAsset<T>(xnbBytes, xnbCandidate, cleanedAssetName);
+                T result = ReadThenCloseStream(
+                    *stream, cleanedAssetName, [&](const std::vector<std::uint8_t>& xnbBytes) {
+                        const std::string xnbCandidate =
+                            ResolveExistingAssetPath(BuildAssetPath(cleanedAssetName) + ".xnb");
+                        return LoadXnbAsset<T>(xnbBytes, xnbCandidate, cleanedAssetName);
+                    });
                 loadedAssets_[cacheKey] = result;
                 return result;
             }

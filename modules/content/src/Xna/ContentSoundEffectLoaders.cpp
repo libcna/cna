@@ -210,10 +210,12 @@ namespace Microsoft::Xna::Framework::Content
         // and .xnb-first precedence. Only the base missing-XNB case permits lower tiers.
         if (const auto stream = TryOpenCompiledStream(assetName))
         {
-            const auto xnbBytes = ReadStreamToEnd(*stream, assetName);
-            const std::string xnbCandidate =
-                ResolveExistingAssetPath(BuildAssetPath(assetName) + ".xnb");
-            return LoadXnbAsset<Audio::SoundEffect>(xnbBytes, xnbCandidate, assetName);
+            return ReadThenCloseStream(
+                *stream, assetName, [&](const std::vector<std::uint8_t>& xnbBytes) {
+                    const std::string xnbCandidate =
+                        ResolveExistingAssetPath(BuildAssetPath(assetName) + ".xnb");
+                    return LoadXnbAsset<Audio::SoundEffect>(xnbBytes, xnbCandidate, assetName);
+                });
         }
 
         // CNBF-103A. This tier was MISSING: because SoundEffect has its own

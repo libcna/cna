@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 #include "CNA/Internal/Xnb/SpriteFontContentTypeReader.hpp"
+#include "CNA/Internal/ContentManagerAccess.hpp"
 
 #include "CNA/Internal/Xnb/CollectionContentTypeReaders.hpp"
 #include "CNA/Internal/Xnb/MathContentTypeReaders.hpp"
@@ -42,11 +43,10 @@ namespace CNA::Internal::Xnb
                 "SpriteFontReader: no GraphicsDevice available (ContentManager was not set on "
                 "this ContentReader).");
         }
-        const auto maximumDimension = static_cast<std::uint32_t>(
-            input.getContentManagerProperty()->getGraphicsDeviceInternal()
-                .GetMaxTextureDimension());
+        auto& device = CNA::Internal::ContentManagerAccess::GraphicsDeviceFromContentReader(input);
+        const auto maximumDimension = static_cast<std::uint32_t>(device.GetMaxTextureDimension());
         XnbSpriteFontData decoded = DecodeSpriteFontXnbData(input, maximumDimension);
-        Texture2D texture = CreateTexture2DFromXnbData(input, decoded.atlas);
+        Texture2D texture = CreateTexture2DFromXnbData(input, device, decoded.atlas);
         // Canonical decoding bypasses ReadObject<Texture2D>, but the atlas is
         // still a newly materialized disposable belonging to this read.
         input.RecordDisposable(texture);

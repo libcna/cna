@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 #include "CNA/Content/ObjectDictionaryEXT.hpp"
+#include "CNA/Internal/ContentManagerAccess.hpp"
 #include "CNA/Content/ObjectValueEXT.hpp"
 
 #include <any>
@@ -63,7 +64,7 @@ namespace CNA::Internal::Xnb
                     std::string(readerName) +
                     ": no GraphicsDevice available (ContentManager was not set on this ContentReader).");
             }
-            return input.getContentManagerProperty()->getGraphicsDeviceInternal();
+            return CNA::Internal::ContentManagerAccess::GraphicsDeviceFromContentReader(input);
         }
 
         // XNA resolves every bone reference through ReadOnlyCollection<ModelBone>.get_Item

@@ -42,6 +42,8 @@ namespace
             return graphicsDevice_;
         }
 
+        void Replace(GraphicsDevice* graphicsDevice) { graphicsDevice_ = graphicsDevice; }
+
         [[nodiscard]] System::EventHandler<System::EventArgs>& getDeviceCreatedEvent() override
         {
             return deviceCreated_;
@@ -284,5 +286,58 @@ TEST(ContentManagerServiceTq045Test, MissingServiceAndNullDeviceRefuseAndDoNotCa
             EXPECT_EQ(manager.getRootDirectoryProperty(), "tests/assets/xnb/monogame/windows/uncompressed");
         }
         manager.Unload();
+    }
+}
+
+// HND-TQ-35 (b): the graphics device a graphics reader creates its resource on. Refresh
+// GraphicsContentHelper.GraphicsDeviceFromContentReader (Microsoft.Xna.Framework.Graphics.dll
+// IL_0000-0053) asks the reader's manager's service provider for IGraphicsDeviceService on every
+// call and reports a missing service or device as ContentLoadException with the asset's name,
+// FrameworkResources.NoGraphicsDeviceContent: `Error loading "{0}". GraphicsDevice component not
+// found.` CNA's setGraphicsDevice injection is consulted first (owner decision 2026-11-09).
+TEST(ContentManagerServiceTq035Test, AnInjectedDeviceWinsAndTheServiceIsNotAsked)
+{
+    GraphicsDevice injected;
+    GraphicsDevice serviced;
+    GraphicsDeviceService service(&serviced);
+    GraphicsDeviceServiceProvider services(&service);
+    ContentManager manager(&services, "tests/assets/xnb/monogame/windows/uncompressed");
+    manager.setGraphicsDevice(injected);
+
+    const Texture2D texture = manager.Load<Texture2D>("white-1");
+
+    EXPECT_EQ(texture.getGraphicsDeviceProperty(), &injected);
+    EXPECT_EQ(services.lookups, 0);
+}
+
+TEST(ContentManagerServiceTq035Test, WithoutInjectionTheServiceIsAskedOnEveryLoad)
+{
+    GraphicsDevice first;
+    GraphicsDevice second;
+    GraphicsDeviceService service(&first);
+    GraphicsDeviceServiceProvider services(&service);
+    ContentManager manager(&services, "tests/assets/xnb/monogame/windows/uncompressed");
+
+    EXPECT_EQ(manager.Load<Texture2D>("white-1").getGraphicsDeviceProperty(), &first);
+    EXPECT_EQ(services.lookups, 1);
+    manager.Unload();
+    service.Replace(&second);
+    EXPECT_EQ(manager.Load<Texture2D>("white-1").getGraphicsDeviceProperty(), &second);
+    EXPECT_EQ(services.lookups, 2);
+}
+
+TEST(ContentManagerServiceTq035Test, AMissingServiceOrDeviceNamesTheAsset)
+{
+    GraphicsDeviceService emptyDevice(nullptr);
+    for (IGraphicsDeviceService* service : {static_cast<IGraphicsDeviceService*>(nullptr),
+                                           static_cast<IGraphicsDeviceService*>(&emptyDevice)}) {
+        GraphicsDeviceServiceProvider services(service);
+        ContentManager manager(&services, "tests/assets/xnb/monogame/windows/uncompressed");
+        try {
+            (void)manager.Load<Texture2D>("white-1");
+            ADD_FAILURE() << "a texture loaded without a graphics device";
+        } catch (const ContentLoadException& error) {
+            EXPECT_STREQ(error.what(), "Error loading \"white-1\". GraphicsDevice component not found.");
+        }
     }
 }

@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 #include "CNA/Internal/Xnb/VideoContentTypeReader.hpp"
+#include "CNA/Internal/ContentManagerAccess.hpp"
 #include "CNA/Internal/PathUtf8.hpp"
 
 #include <array>
@@ -105,7 +106,8 @@ namespace CNA::Internal::Xnb
             contentRoot, CNA::Internal::PathToGenericUtf8(assetPath),
             CNA::Internal::PathToGenericUtf8(selectedRelative));
 
-        GraphicsDevice* device = &contentManager->getGraphicsDeviceInternal();
+        GraphicsDevice* device =
+            &CNA::Internal::ContentManagerAccess::GraphicsDeviceFromContentReader(input);
         return Video(
             path, device, decoded.durationMs, decoded.width, decoded.height,
             decoded.framesPerSecond,
