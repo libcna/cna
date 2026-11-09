@@ -51,6 +51,9 @@ using namespace Microsoft::Xna::Framework::Audio;
 class ManualDevice;
 ManualDevice* manualDevice = nullptr;
 int factoryCalls = 0;
+// Device rate reported by the next opened ManualDevice. The literal banks below are 44100 Hz; the
+// native XACT captures are 22050 Hz and are rendered at their own rate (NativeRateXact).
+std::uint32_t manualDeviceRate = 44100;
 class ManualDevice final : public AP::IAudioDevice
 {
     std::shared_ptr<AP::IAudioBufferCallback> callback_;
@@ -69,7 +72,7 @@ public:
     bool IsOpen() const noexcept override { return bool(callback_); }
     bool IsRunning() const noexcept override { return running_; }
     AP::AudioFormat GetFormat() const noexcept override
-    { return callback_ ? AP::AudioFormat{44100, 2, AP::AudioSampleFormat::Float32} : AP::AudioFormat{}; }
+    { return callback_ ? AP::AudioFormat{manualDeviceRate, 2, AP::AudioSampleFormat::Float32} : AP::AudioFormat{}; }
     std::vector<float> Render(int frames)
     {
         if (!running_ || !callback_) throw std::runtime_error("manual device is not running");

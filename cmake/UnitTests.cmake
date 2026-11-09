@@ -94,9 +94,15 @@ if(CNA_BUILD_TESTS)
             -Wl,--wrap=_ZN3CNA5Audio8Platform25CreateSelectedAudioDeviceEv
             -Wl,--wrap=_ZN3CNA8Internal5Audio17SetMixerTrackGainEPNS1_10MixerTrackEf
             -Wl,--wrap=_ZN3CNA8Internal5Audio27SetMixerTrackFrequencyRatioEPNS1_10MixerTrackEf)
-        add_test(NAME CnaXactFiniteLoopTests COMMAND CnaXactFiniteLoopTests)
-        set_tests_properties(CnaXactFiniteLoopTests PROPERTIES TIMEOUT 30
-            LABELS "Audio;Xact;Offline")
+        # The harness opens one device per process; the native 22050 Hz captures run in their
+        # own process at that rate (XactPrefetchCases.hpp NativeRateXact).
+        set(_cna_xact_native_rate_suites "HndXactPrefetch.*:HndXactCrossBank.*")
+        add_test(NAME CnaXactFiniteLoopTests COMMAND CnaXactFiniteLoopTests
+            "--gtest_filter=-${_cna_xact_native_rate_suites}")
+        add_test(NAME CnaXactFiniteLoopNativeRateTests COMMAND CnaXactFiniteLoopTests
+            "--gtest_filter=${_cna_xact_native_rate_suites}")
+        set_tests_properties(CnaXactFiniteLoopTests CnaXactFiniteLoopNativeRateTests PROPERTIES
+            TIMEOUT 30 LABELS "Audio;Xact;Offline")
         # Exercise the other real MixerEngine implementation in this same reserved
         # tree. The executable's object definitions satisfy the static archive's
         # facade references, so the SDL adapter is not pulled into this executable.
@@ -126,9 +132,12 @@ if(CNA_BUILD_TESTS)
             set_source_files_properties(
                 modules/audio/src/Backend/CnaMixer/DrLibs.cpp
                 modules/audio/src/Backend/CnaMixer/StbVorbis.cpp PROPERTIES COMPILE_OPTIONS "-w")
-            add_test(NAME CnaXactFiniteLoopCnaMixerTests COMMAND CnaXactFiniteLoopCnaMixerTests)
-            set_tests_properties(CnaXactFiniteLoopCnaMixerTests PROPERTIES TIMEOUT 30
-                LABELS "Audio;Xact;Offline;CnaMixer")
+            add_test(NAME CnaXactFiniteLoopCnaMixerTests COMMAND CnaXactFiniteLoopCnaMixerTests
+                "--gtest_filter=-${_cna_xact_native_rate_suites}")
+            add_test(NAME CnaXactFiniteLoopCnaMixerNativeRateTests
+                COMMAND CnaXactFiniteLoopCnaMixerTests "--gtest_filter=${_cna_xact_native_rate_suites}")
+            set_tests_properties(CnaXactFiniteLoopCnaMixerTests CnaXactFiniteLoopCnaMixerNativeRateTests
+                PROPERTIES TIMEOUT 30 LABELS "Audio;Xact;Offline;CnaMixer")
         endif()
     endif()
 

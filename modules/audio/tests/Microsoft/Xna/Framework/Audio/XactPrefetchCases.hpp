@@ -29,6 +29,25 @@ std::unique_ptr<WaveBank> PrefetchB(ScheduledBanks& b,const char* profile)
         :std::make_unique<WaveBank>(b.engine.get(),path.string());
 }
 
+// The captured banks hold 22050 Hz mono PCM. At 44100 Hz SDL3_mixer resamples them with a
+// windowed sinc whose output is not DC-exact (0.0350 for the 1/32 marker at frame 1), while
+// CnaMixer's linear interpolation reproduces a constant. Rendering at the captures' own rate
+// keeps ExpectMarker's values source samples in every mixer. The harness opens one device per
+// process, so the rate is chosen before that open: ctest runs these suites as their own process
+// (CnaXactFiniteLoop*NativeRateTests, cmake/UnitTests.cmake).
+class NativeRateXact : public ::testing::Test
+{
+protected:
+    void SetUp() override
+    {
+        if (factoryCalls == 0) manualDeviceRate = 22050;
+        ASSERT_EQ(manualDeviceRate, 22050u)
+            << "the device is already open at another rate; run HndXactPrefetch.* and "
+               "HndXactCrossBank.* in their own process";
+    }
+};
+class HndXactPrefetch : public NativeRateXact {};
+
 void PrefetchCurrentWave(Cue& cue,float sample)
 {
     auto* voice=CueTestAccess::ActiveInstance(cue,0);ASSERT_NE(voice,nullptr);
@@ -39,7 +58,7 @@ void PrefetchCurrentWave(Cue& cue,float sample)
     voice->setVolumeProperty(1.f);ExpectMarker(manualDevice->Render(128),sample);
 }
 
-TEST(HndXactPrefetch, SuccessorOwnsItsBankBeforeCurrentWaveEndsWithoutStartingAnotherVoice)
+TEST_F(HndXactPrefetch, SuccessorOwnsItsBankBeforeCurrentWaveEndsWithoutStartingAnotherVoice)
 {
     // ordered/ordered-streaming normal50/250/500 repeats0..2, no-props, io1:
     // prepared_300 A132/B4; play_200 A132/B132; next PREPARED before first STOP.
@@ -61,7 +80,7 @@ TEST(HndXactPrefetch, SuccessorOwnsItsBankBeforeCurrentWaveEndsWithoutStartingAn
     }
 }
 
-TEST(HndXactPrefetch, PromotionConsumesThePreparedCandidateAndPreservesTheMeasuredPrefix)
+TEST_F(HndXactPrefetch, PromotionConsumesThePreparedCandidateAndPreservesTheMeasuredPrefix)
 {
     // samebank/ordered/ordered-streaming normal and lateB: native actual PLAY
     // indices0,1,0,1 in A, or bankA,B,A,B/index0. Test prefix0..2 only: raw3's
@@ -81,7 +100,7 @@ TEST(HndXactPrefetch, PromotionConsumesThePreparedCandidateAndPreservesTheMeasur
     }
 }
 
-TEST(HndXactPrefetch, MissingSuccessorDoesNotRefusePlayAndIsNotRetriedAfterItsBankLoads)
+TEST_F(HndXactPrefetch, MissingSuccessorDoesNotRefusePlayAndIsNotRetriedAfterItsBankLoads)
 {
     // ordered/ordered-streaming missingB and lateB-playing: Prepare0/Play0,
     // exactly one A0 PREPARE/PLAY/STOP/DESTROY; B loaded100ms after Play stays4.
@@ -103,7 +122,7 @@ TEST(HndXactPrefetch, MissingSuccessorDoesNotRefusePlayAndIsNotRetriedAfterItsBa
     }
 }
 
-TEST(HndXactPrefetch, BankLoadedAfterPrepareBeforePlayIsAvailableToTheSuccessor)
+TEST_F(HndXactPrefetch, BankLoadedAfterPrepareBeforePlayIsAvailableToTheSuccessor)
 {
     // ordered/ordered-streaming lateB: preparation does not require B, loading it
     // before Play permits successor preparation and actual B playback.
@@ -117,7 +136,7 @@ TEST(HndXactPrefetch, BankLoadedAfterPrepareBeforePlayIsAvailableToTheSuccessor)
     }
 }
 
-TEST(HndXactPrefetch, SameBankDoesNotRequireAnUnselectedBankEvenWhenLoadedAfterPlay)
+TEST_F(HndXactPrefetch, SameBankDoesNotRequireAnUnselectedBankEvenWhenLoadedAfterPlay)
 {
     // samebank missingB/lateB-playing: A0,A1 still play; irrelevant B stays unused4.
     for(bool late:{false,true})

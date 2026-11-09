@@ -18,7 +18,9 @@ Bytes CrossSound(const char* profile)
     std::ifstream f(p,std::ios::binary);return Bytes(std::istreambuf_iterator<char>(f),{});
 }
 
-TEST(HndXactCrossBank, DuplicateNamesSelectFirstRegisteredBankForPreparationAndActualPlayback)
+class HndXactCrossBank : public NativeRateXact {};
+
+TEST_F(HndXactCrossBank, DuplicateNamesSelectFirstRegisteredBankForPreparationAndActualPlayback)
 {
     // resident/ordered/interactive duplicateA: bank0 used132, duplicate slot2 stays4.
     for(const char* profile:{"resident","ordered","interactive"})
@@ -38,7 +40,7 @@ TEST(HndXactCrossBank, DuplicateNamesSelectFirstRegisteredBankForPreparationAndA
     }
 }
 
-TEST(HndXactCrossBank, ClonedSoundBanksRetainIndependentOwnersOfTheSameResolvedWaveBanks)
+TEST_F(HndXactCrossBank, ClonedSoundBanksRetainIndependentOwnersOfTheSameResolvedWaveBanks)
 {
     // resident/ordered/interactive clone: two actual cues; after destroying first
     // soundbank owners remain132 until destroyed_both_soundbanks ->4.
@@ -61,7 +63,7 @@ TEST(HndXactCrossBank, ClonedSoundBanksRetainIndependentOwnersOfTheSameResolvedW
     }
 }
 
-TEST(HndXactCrossBank, CategoryOldestReplacesTheSolePlayingVictimAcrossSoundBanks)
+TEST_F(HndXactCrossBank, CategoryOldestReplacesTheSolePlayingVictimAcrossSoundBanks)
 {
     // admission normal positive, same-soundbank and clone: at400ms victim32,
     // incoming8; both dispatch one real wave; clone counts0/1 then0/0 atEOF.
