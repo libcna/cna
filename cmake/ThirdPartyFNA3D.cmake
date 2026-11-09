@@ -29,7 +29,7 @@
 
 include_guard(GLOBAL)
 
-# libcna/FNA3D 0bfbe7fe4958 (cna-audit-fixes): release 26.10 plus CNA's audit fixes,
+# libcna/FNA3D 76a76cf98544 (cna-audit-fixes): release 26.10 plus CNA's audit fixes,
 # 912e26d (stencil winding, SDL upload ordering, unsigned mip bounds), b301e3a (malformed
 # Effect investigation regression), and the MojoShader gitlink move. MojoShader is
 # libcna/mojoshader 6f1e91b65c8dfe493ec1ace818b294b7181fa1b6: 04616e1 repairs duplicate
@@ -53,7 +53,9 @@ include_guard(GLOBAL)
 # 4ff109a presents the OpenGL back buffer into its destination rectangle after native resizes
 # (TQ-FORK-GLPRESENT-01). 6f1e91b refuses truncated effect object headers and untyped
 # small-object slots through the parser's error list instead of an assertion; FNA3D 0bfbe7f carries
-# it (TQ-FORK-EFFECT-TRUNC-01, 2026-11-09).
+# it (TQ-FORK-EFFECT-TRUNC-01, 2026-11-09). FNA3D 76a76cf clears the SDL GPU swapchain to opaque
+# black outside a destination rectangle that does not cover it, since a rotating swapchain cannot
+# keep the previous pixels (TQ-FORK-SDLPRESENT-01/02; d001379's refusal broke CNA's letterbox).
 # SPIR-V admits all eight legacy envelope opcodes. CNA retains the 44-case corpus and its
 # original assertions, adding full-image depth and public 2D/cube/volume inference witnesses
 # (TQ-FORK-PIN-02). OFF builds still refuse every capability by name.
@@ -68,7 +70,7 @@ include_guard(GLOBAL)
 include("${CMAKE_CURRENT_LIST_DIR}/Fna3dSourcePin.cmake")
 cna_fna3d_select_source_pin(
     DEFAULT_REPOSITORY "https://github.com/libcna/FNA3D.git"
-    DEFAULT_TAG "0bfbe7fe4958243058775408cd1cf8b017bbf4b0")
+    DEFAULT_TAG "76a76cf98544f008584a5c6e0a1f5eb5b468795b")
 
 # Every configure compares the checkout with the pin, read-only: FNA3D's HEAD, the MojoShader
 # commit it records against MojoShader's own HEAD, and local changes in either. A

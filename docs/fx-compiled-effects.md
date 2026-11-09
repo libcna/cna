@@ -322,7 +322,7 @@ with no attachment becomes a private variable, which Vulkan's validation layer o
 and on WebGPU, whose viewport cannot leave its attachment, the vertex stage's clip position moves
 by XNA's pixel-centre correction (SDLGPU moves the viewport, as FNA3D's SDLGPU driver does).
 The repaired MojoShader pin `6f1e91b65c8dfe493ec1ace818b294b7181fa1b6`, recorded by FNA3D
-`0bfbe7fe4958243058775408cd1cf8b017bbf4b0`, was published on 2026-11-09 (the opcode work below
+`0bfbe7fe4958243058775408cd1cf8b017bbf4b0` (pinned now through its successor `76a76cf`), was published on 2026-11-09 (the opcode work below
 on 2026-11-08; 6f1e91b only refuses truncated effect object headers). It implements
 ps_1_4 `BEM` using the destination-numbered texture-stage bump matrix and `TEXDEPTH` using
 guarded r5.r/r5.g fragment depth. It also admits `TEXREG2AR`, `TEXREG2GB`, `TEXREG2RGB`,
