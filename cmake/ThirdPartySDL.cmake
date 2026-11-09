@@ -97,6 +97,24 @@ if(NOT EMSCRIPTEN AND NOT APPLE)
     list(APPEND CNA_SDL3_PATCHES
         "${CMAKE_CURRENT_LIST_DIR}/patches/sdl-86296ac8-0005-vulkan-mipmap-level-extent.patch")
 endif()
+# The persistent cache lives beside CNA's sources so every build tree on the machine shares one SDL
+# build. A consumer may take CNA from a read-only checkout; then the default moves into the
+# consumer's binary tree instead of failing the configure. An explicit CNA_SDL_PREBUILT_ROOT wins.
+set(_cna_sdl_prebuilt_parent "${CMAKE_CURRENT_SOURCE_DIR}")
+if(NOT DEFINED CNA_SDL_PREBUILT_ROOT)
+    set(_cna_sdl_write_probe "${CMAKE_CURRENT_SOURCE_DIR}/.cna-sdl-prebuilt-write-probe")
+    execute_process(COMMAND "${CMAKE_COMMAND}" -E touch "${_cna_sdl_write_probe}"
+                    RESULT_VARIABLE _cna_sdl_write_probe_result OUTPUT_QUIET ERROR_QUIET)
+    if(_cna_sdl_write_probe_result EQUAL 0)
+        file(REMOVE "${_cna_sdl_write_probe}")
+    else()
+        set(_cna_sdl_prebuilt_parent "${CMAKE_BINARY_DIR}")
+        message(STATUS "CNA: ${CMAKE_CURRENT_SOURCE_DIR} is not writable; the SDL3 cache defaults to "
+                       "${CMAKE_BINARY_DIR} (set CNA_SDL_PREBUILT_ROOT to share one elsewhere)")
+    endif()
+    unset(_cna_sdl_write_probe)
+    unset(_cna_sdl_write_probe_result)
+endif()
 set(_cna_sdl_wayland_build_capable OFF)
 if(EMSCRIPTEN)
     if(CNA_ENABLE_EMSCRIPTEN_THREADS)
@@ -104,13 +122,13 @@ if(EMSCRIPTEN)
         # cannot be linked together. Keep both persistent installs reusable without ever
         # selecting the wrong ABI merely because that cache was built first.
         set(_cna_sdl_prebuilt_default
-            "${CMAKE_CURRENT_SOURCE_DIR}/.sdl-prebuilt-emscripten-pthreads")
+            "${_cna_sdl_prebuilt_parent}/.sdl-prebuilt-emscripten-pthreads")
         set(_cna_sdl_prebuilt_legacy_default
-            "${CMAKE_CURRENT_SOURCE_DIR}/.sdl-prebuilt-emscripten")
+            "${_cna_sdl_prebuilt_parent}/.sdl-prebuilt-emscripten")
     else()
-        set(_cna_sdl_prebuilt_default "${CMAKE_CURRENT_SOURCE_DIR}/.sdl-prebuilt-emscripten")
+        set(_cna_sdl_prebuilt_default "${_cna_sdl_prebuilt_parent}/.sdl-prebuilt-emscripten")
         set(_cna_sdl_prebuilt_legacy_default
-            "${CMAKE_CURRENT_SOURCE_DIR}/.sdl-prebuilt-emscripten-pthreads")
+            "${_cna_sdl_prebuilt_parent}/.sdl-prebuilt-emscripten-pthreads")
     endif()
 else()
     # Keyed by target platform/arch so a cross-build (e.g. Windows via mingw-w64) cannot
@@ -168,11 +186,11 @@ else()
     endif()
 
     set(_cna_sdl_prebuilt_legacy_default
-        "${CMAKE_CURRENT_SOURCE_DIR}/.sdl-prebuilt-${_cna_sdl_key}")
+        "${_cna_sdl_prebuilt_parent}/.sdl-prebuilt-${_cna_sdl_key}")
     if(_cna_sdl_wayland_build_capable)
         set(_cna_sdl_key "${_cna_sdl_key}-wayland")
     endif()
-    set(_cna_sdl_prebuilt_default "${CMAKE_CURRENT_SOURCE_DIR}/.sdl-prebuilt-${_cna_sdl_key}")
+    set(_cna_sdl_prebuilt_default "${_cna_sdl_prebuilt_parent}/.sdl-prebuilt-${_cna_sdl_key}")
 endif()
 
 # Migrate only a value equal to the old generated default. A distinct caller-supplied cache root

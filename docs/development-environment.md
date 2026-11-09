@@ -43,7 +43,9 @@ sudo apt-get install -y \
 | `libfreetype-dev`, `doxygen` | FreeType enables the optional build-time .spritefont pipeline (CNA_ENABLE_FONT_PIPELINE=AUTO); CnaXnbDependencyBoundary checks its isolation. C API coverage pins use Doxygen 1.9.x; point CNA_C_API_DOXYGEN at that version when needed. [Trixie ships 1.9.8](https://packages.debian.org/trixie/doxygen). Availability/skip behavior follows each registered gate. |
 
 The vendored SDL3 is cached by target/capability key in a `.sdl-prebuilt-<key>/` directory in the
-source tree and shared by every build tree. Installing an SDL prerequisite later does not rebuild
+source tree and shared by every build tree. When CNA's source tree is not writable (a consumer
+taking CNA from a read-only checkout), the default moves into the consumer's binary tree; an
+explicit `CNA_SDL_PREBUILT_ROOT` always wins. Installing an SDL prerequisite later does not rebuild
 it, so install the SDL packages before the first configure. If you add one afterwards, remove the
 cache directory the configure output names (other build trees use it too) and reconfigure. The
 Wayland packages below are the exception, because they select a different key.
