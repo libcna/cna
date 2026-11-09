@@ -8,6 +8,7 @@
 #include "Microsoft/Xna/Framework/Vector3.hpp"
 #include "Microsoft/Xna/Framework/Vector4.hpp"
 #include "CNA/Internal/Renderers/Common/IGraphicsRenderer.hpp"
+#include "../Internal/StockCloneCubeAccess.hpp"
 #include "System/ArgumentException.hpp"
 #include "System/ArgumentNullException.hpp"
 #include "System/InvalidOperationException.hpp"
@@ -1304,7 +1305,10 @@ namespace Microsoft::Xna::Framework::Graphics
         if (const EffectParameter* texture = find("Texture2"))
             snapshot.texture1 = texture->GetValueTexture2D();
         else if (const EffectParameter* environmentMap = find("EnvironmentMap"))
-            snapshot.texture1 = environmentMap->GetValueTextureCube();
+        {
+            if (const auto* cubes = CNA::Internal::Graphics::stockCloneCubeAccess.load())
+                snapshot.texture1 = cubes->environmentMap(*environmentMap);
+        }
         return snapshot;
     }
 
@@ -1473,8 +1477,9 @@ namespace Microsoft::Xna::Framework::Graphics
                 p.fresnelEnabled = (index & 2) != 0;
                 p.specularEnabled = (index & 4) != 0;
                 p.texture0 = sampled2D(0, s->texture0);
-                if (auto* cube = dynamic_cast<TextureCube*>(SampledStockTextureInternal(1, s->texture1)))
-                    p.envMap = cube->GetRendererRaw();
+                if (const auto* cubes = CNA::Internal::Graphics::stockCloneCubeAccess.load())
+                    if (auto* cube = cubes->asCube(SampledStockTextureInternal(1, s->texture1)))
+                        p.envMap = cube->GetRendererRaw();
                 lights((index & 8) != 0, false);
                 copy3(p.emissiveColor, s->emissiveColor);
                 copy3(p.envMapSpecular, s->environmentMapSpecular);

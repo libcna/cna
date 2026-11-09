@@ -9,6 +9,7 @@
 #include "Microsoft/Xna/Framework/Vector4.hpp"
 #include "CNA/Internal/Renderers/Common/IGraphicsRenderer.hpp"
 #include "System/NotSupportedException.hpp"
+#include "../Internal/StockCloneCubeAccess.hpp"
 
 namespace Microsoft::Xna::Framework::Graphics
 {
@@ -23,6 +24,14 @@ namespace Microsoft::Xna::Framework::Graphics
         constexpr int DirtyShaderIndex = 128;
         constexpr int DirtyAll         = -1;
 
+        // A stock clone of this effect samples its cube through these (StockCloneCubeAccess.hpp).
+        // This file is linked whenever an EnvironmentMapEffect can exist, so they are installed
+        // before any clone of one.
+        constexpr CNA::Internal::Graphics::StockCloneCubeAccess StockCloneCubes{
+            [](const EffectParameter& parameter) { return parameter.GetValueTextureCube(); },
+            [](Texture* texture) { return dynamic_cast<TextureCube*>(texture); }};
+        [[maybe_unused]] const bool StockCloneCubesInstalled =
+            (CNA::Internal::Graphics::stockCloneCubeAccess.store(&StockCloneCubes), true);
     }
 
     EnvironmentMapEffect::EnvironmentMapEffect(GraphicsDevice& device)
