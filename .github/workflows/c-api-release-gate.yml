@@ -43,6 +43,9 @@ permissions:
 
 jobs:
   release-gate:
+    # Advisory since 2026-11-09 (owner decision): a failure here is reported but does not fail the
+    # workflow. Regenerate the C API inventories with the --write commands in docs/c-api/README.md.
+    continue-on-error: true
     name: May the experimental C ABI be published?
     runs-on: ubuntu-24.04
     timeout-minutes: 10

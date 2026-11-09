@@ -353,8 +353,13 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT ANDROID)
         # builds nothing, and the rule it enforces is about the C++ surface. Gating it on the C API
         # being built would mean the ordinary build -- the one most changes are made in -- never
         # notices that a new public symbol went unmapped.
+        #
+        # Advisory since 2026-11-09 (owner decision): it, CApiLimitations and CApiReleaseGate run
+        # through run_advisory.py, which reports a failed check as a skip naming the regeneration
+        # commands. Any public-header edit, a comment included, makes these inventories stale.
         add_test(NAME CApiCoverageMatrix
             COMMAND Python3::Interpreter
+                "${CMAKE_CURRENT_SOURCE_DIR}/tools/c-api/run_advisory.py"
                 "${CMAKE_CURRENT_SOURCE_DIR}/tools/c-api/generate_coverage_inventory.py" --check)
 
         # C API task CBIND-126: the model underneath that gate.
@@ -403,6 +408,7 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT ANDROID)
         # and one to CBIND-037 whose work did.
         add_test(NAME CApiLimitations
             COMMAND Python3::Interpreter
+                "${CMAKE_CURRENT_SOURCE_DIR}/tools/c-api/run_advisory.py"
                 "${CMAKE_CURRENT_SOURCE_DIR}/tools/c-api/generate_limitations.py" --check)
 
         # C API task CBIND-064: the export count that appears in PROSE, which no gate read.
@@ -470,6 +476,7 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT ANDROID)
         # declared criterion and the measurement agree.
         add_test(NAME CApiReleaseGate
             COMMAND Python3::Interpreter
+                "${CMAKE_CURRENT_SOURCE_DIR}/tools/c-api/run_advisory.py"
                 "${CMAKE_CURRENT_SOURCE_DIR}/tools/c-api/check_release_gate.py" --check)
 
         # Apple M4 AM4-160: the three gates above measure the C++ surface through

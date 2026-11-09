@@ -4,7 +4,7 @@
 
 ## Coverage contract
 
-The mandatory coverage gate derives the complete public C++ declaration inventory from
+The coverage check derives the complete public C++ declaration inventory from
 `modules/*/include/{Microsoft,CNA}/**/*.hpp` and maps every symbol through
 `tools/c-api/coverage_mappings.json`. Every module is classified as runtime C API scope or
 out of it by `MODULE_SCOPE`, which is a total function over the modules that exist: a new
@@ -55,7 +55,7 @@ not counted above, and their declarations are not missing C bindings.
 | `modules/content/CNA/Content/Import` | 1 | CBIND-117, owner decision 2026-09-18: build-time asset importers |
 | `modules/content/CNA/Content/Pipeline` | 14 | CBIND-117, owner decision 2026-09-18: build-time content compilers and build configuration |
 
-Full inventory SHA-256: `c0e364eb3e7b3eaf135bc9abd868ee00a0957ecb10a5f415d8f43ef9544fe362`.
+Full inventory SHA-256: `ea4a9969841ee2c287bdbb4e9f38b331375a1b9770deb9a21538d794a5967c8c`.
 
 The complete per-symbol Markdown is generated on demand into the ignored build tree so
 that a multi-megabyte derived file is not recommitted whenever one public declaration moves:

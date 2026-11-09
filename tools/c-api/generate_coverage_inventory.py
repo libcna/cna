@@ -7,8 +7,9 @@ The scanner deliberately uses Doxygen's C++ parser instead of a collection of re
 expressions.  Doxygen expands CNA's SharpRuntime property macros, preserves overload signatures,
 reports access levels and emits stable source locations. ``docs/c-api/COVERAGE.md`` is a compact,
 reviewable summary; the multi-megabyte per-symbol matrix is an ignored build artifact generated on
-demand. ``--check`` is a mandatory gate (CBIND-043): the CTest test ``CApiCoverageMatrix`` and the
-``c-api-coverage-gate`` workflow both run it.
+demand. ``--check`` (CBIND-043) is advisory since 2026-11-09: the CTest test ``CApiCoverageMatrix``
+reports a failure as a skip (through ``run_advisory.py``) and the ``c-api-coverage-gate`` workflow
+does not fail on it.
 """
 
 from __future__ import annotations
@@ -1344,9 +1345,9 @@ def render_full_markdown(
         "python3 tools/c-api/generate_coverage_inventory.py --check",
         "```",
         "",
-        "`--check` is a mandatory gate (CBIND-043), enforced in two places: the CTest test",
-        "`CApiCoverageMatrix`, registered under `CNA_BUILD_TESTS`, and the build-free",
-        "`.github/workflows/c-api-coverage-gate.yml` workflow, which runs on every push.",
+        "`--check` (CBIND-043) is advisory since 2026-11-09: the CTest test `CApiCoverageMatrix`",
+        "reports a failure as a skip, and the build-free",
+        "`.github/workflows/c-api-coverage-gate.yml` workflow does not fail on it.",
         "",
         "## Module summary",
         "",
@@ -1491,7 +1492,7 @@ def render_summary_markdown(
         "",
         "## Coverage contract",
         "",
-        "The mandatory coverage gate derives the complete public C++ declaration inventory from",
+        "The coverage check derives the complete public C++ declaration inventory from",
         "`modules/*/include/{Microsoft,CNA}/**/*.hpp` and maps every symbol through",
         "`tools/c-api/coverage_mappings.json`. Every module is classified as runtime C API scope or",
         "out of it by `MODULE_SCOPE`, which is a total function over the modules that exist: a new",
