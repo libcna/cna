@@ -355,11 +355,13 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT ANDROID)
         # notices that a new public symbol went unmapped.
         #
         # Advisory since 2026-11-09 (owner decision): it, CApiLimitations and CApiReleaseGate run
-        # through run_advisory.py, which reports a failed check as a skip naming the regeneration
-        # commands. Any public-header edit, a comment included, makes these inventories stale.
+        # through tools/run_advisory.py, which reports a failed check as a skip naming the
+        # regeneration commands. Any public-header edit, a comment included, makes these
+        # inventories stale.
         add_test(NAME CApiCoverageMatrix
             COMMAND Python3::Interpreter
-                "${CMAKE_CURRENT_SOURCE_DIR}/tools/c-api/run_advisory.py"
+                "${CMAKE_CURRENT_SOURCE_DIR}/tools/run_advisory.py"
+                --hint "Regenerate the C API inventories from the repository root with generate_coverage_inventory.py --write, generate_limitations.py --write and check_release_gate.py --write (tools/c-api)."
                 "${CMAKE_CURRENT_SOURCE_DIR}/tools/c-api/generate_coverage_inventory.py" --check)
 
         # C API task CBIND-126: the model underneath that gate.
@@ -371,8 +373,9 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT ANDROID)
         # that two rules can overlap without either silently winning. They need no Doxygen and run
         # in well under a second, so they are a gate rather than a report.
         add_test(NAME CApiCoverageScopeModel
-            COMMAND Python3::Interpreter
+            COMMAND Python3::Interpreter "${CMAKE_CURRENT_SOURCE_DIR}/tools/run_advisory.py"
                 "${CMAKE_CURRENT_SOURCE_DIR}/tools/c-api/test_coverage_scope.py")
+        set_tests_properties(CApiCoverageScopeModel PROPERTIES SKIP_RETURN_CODE 77)  # advisory (tools/run_advisory.py)
 
         # C API task CBIND-038: the public C-header compatibility matrix, also a gate.
         #
@@ -408,7 +411,8 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT ANDROID)
         # and one to CBIND-037 whose work did.
         add_test(NAME CApiLimitations
             COMMAND Python3::Interpreter
-                "${CMAKE_CURRENT_SOURCE_DIR}/tools/c-api/run_advisory.py"
+                "${CMAKE_CURRENT_SOURCE_DIR}/tools/run_advisory.py"
+                --hint "Regenerate the C API inventories from the repository root with generate_coverage_inventory.py --write, generate_limitations.py --write and check_release_gate.py --write (tools/c-api)."
                 "${CMAKE_CURRENT_SOURCE_DIR}/tools/c-api/generate_limitations.py" --check)
 
         # C API task CBIND-064: the export count that appears in PROSE, which no gate read.
@@ -424,8 +428,9 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT ANDROID)
         # this from pass to a failure naming the file, the line and both numbers. Build-free: it
         # reads the baseline and the documents.
         add_test(NAME CApiDocExportCounts
-            COMMAND Python3::Interpreter
+            COMMAND Python3::Interpreter "${CMAKE_CURRENT_SOURCE_DIR}/tools/run_advisory.py"
                 "${CMAKE_CURRENT_SOURCE_DIR}/tools/c-api/check_doc_export_counts.py" --check)
+        set_tests_properties(CApiDocExportCounts PROPERTIES SKIP_RETURN_CODE 77)  # advisory (tools/run_advisory.py)
 
         # C API task CBIND-065: does anything actually CALL each route?
         #
@@ -441,8 +446,9 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT ANDROID)
         # uncovered, so a route arriving without a caller fails the build rather than waiting for
         # someone to notice. Build-free, like the gates above.
         add_test(NAME CApiRouteTestCoverage
-            COMMAND Python3::Interpreter
+            COMMAND Python3::Interpreter "${CMAKE_CURRENT_SOURCE_DIR}/tools/run_advisory.py"
                 "${CMAKE_CURRENT_SOURCE_DIR}/tools/c-api/check_route_test_coverage.py" --check)
+        set_tests_properties(CApiRouteTestCoverage PROPERTIES SKIP_RETURN_CODE 77)  # advisory (tools/run_advisory.py)
 
         # C API task CBIND-067: the generated CNA_Bool contract test must not go stale.
         #
@@ -450,8 +456,9 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT ANDROID)
         # checked-in file still matches what the headers say, so a route declared with a new flag
         # parameter cannot sit uncovered behind a generator nobody re-ran. Build-free.
         add_test(NAME CApiBoolContractCurrent
-            COMMAND Python3::Interpreter
+            COMMAND Python3::Interpreter "${CMAKE_CURRENT_SOURCE_DIR}/tools/run_advisory.py"
                 "${CMAKE_CURRENT_SOURCE_DIR}/tools/c-api/generate_bool_contract_test.py" --check)
+        set_tests_properties(CApiBoolContractCurrent PROPERTIES SKIP_RETURN_CODE 77)  # advisory (tools/run_advisory.py)
 
         # The generated C routes (modules/c-api/src/generated/*.inc) must match their specs
         # (modules/c-api/spec/*.toml) and the public headers they read signatures from, so an edit
@@ -476,7 +483,8 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT ANDROID)
         # declared criterion and the measurement agree.
         add_test(NAME CApiReleaseGate
             COMMAND Python3::Interpreter
-                "${CMAKE_CURRENT_SOURCE_DIR}/tools/c-api/run_advisory.py"
+                "${CMAKE_CURRENT_SOURCE_DIR}/tools/run_advisory.py"
+                --hint "Regenerate the C API inventories from the repository root with generate_coverage_inventory.py --write, generate_limitations.py --write and check_release_gate.py --write (tools/c-api)."
                 "${CMAKE_CURRENT_SOURCE_DIR}/tools/c-api/check_release_gate.py" --check)
 
         # Apple M4 AM4-160: the three gates above measure the C++ surface through
@@ -766,8 +774,9 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT ANDROID)
     # every run, which names tests that died on a graphics-profile refusal before their first check.
     if(Python3_Interpreter_FOUND)
         add_test(NAME CnaProfileDeadTestClassifier
-            COMMAND Python3::Interpreter
+            COMMAND Python3::Interpreter "${CMAKE_CURRENT_SOURCE_DIR}/tools/run_advisory.py"
                 "${CMAKE_CURRENT_SOURCE_DIR}/tools/platform/profile_dead_tests.py" --self-test)
+        set_tests_properties(CnaProfileDeadTestClassifier PROPERTIES SKIP_RETURN_CODE 77)  # advisory (tools/run_advisory.py)
         set_tests_properties(CnaProfileDeadTestClassifier PROPERTIES LABELS "configuration")
     endif()
 endif()

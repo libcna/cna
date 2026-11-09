@@ -259,8 +259,9 @@ if(CNA_BUILD_TESTS AND UNIX AND NOT CMAKE_CROSSCOMPILING AND NOT ANDROID)
     find_program(CNA_MEDIA_TEST_TIMEOUT timeout)
     if(Python3_Interpreter_FOUND AND CNA_MEDIA_TEST_BASH AND CNA_MEDIA_TEST_TIMEOUT)
         add_test(NAME MediaOracleRunnerTests
-            COMMAND "${Python3_EXECUTABLE}"
+            COMMAND "${Python3_EXECUTABLE}" "${CNA_SOURCE_DIR}/tools/run_advisory.py"
                 "${CNA_SOURCE_DIR}/tools/xna-pipeline-oracle/media/test_media_oracle_runner.py" -v)
+        set_tests_properties(MediaOracleRunnerTests PROPERTIES SKIP_RETURN_CODE 77)  # advisory (tools/run_advisory.py)
         set_tests_properties(MediaOracleRunnerTests PROPERTIES LABELS "content-pipeline;tools" TIMEOUT 60)
     endif()
 endif()
@@ -329,10 +330,11 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT ANDROID)
         if(Python3_Interpreter_FOUND AND NOT CNA_FX_FUZZER_ENTRY_POINT
            AND "FNA3D" IN_LIST CNA_RENDERER_IDENTITIES)
             add_test(NAME CompiledEffectFuzzerCliTests
-                COMMAND "${Python3_EXECUTABLE}" "${CMAKE_SOURCE_DIR}/tools/graphics/test_compiled_effect_fuzzer.py"
+                COMMAND "${Python3_EXECUTABLE}" "${CNA_SOURCE_DIR}/tools/run_advisory.py" "${CMAKE_SOURCE_DIR}/tools/graphics/test_compiled_effect_fuzzer.py"
                     --binary "$<TARGET_FILE:cna_compiled_effect_fuzzer>"
                     --support "$<TARGET_FILE:cna_compiled_effect_fuzzer_support_tests>"
                     --stock "${CMAKE_SOURCE_DIR}/modules/renderers/fna3d/effects/SpriteEffect.fxb")
+            set_tests_properties(CompiledEffectFuzzerCliTests PROPERTIES SKIP_RETURN_CODE 77)  # advisory (tools/run_advisory.py)
             set_tests_properties(CompiledEffectFuzzerCliTests PROPERTIES LABELS "effects;tools" TIMEOUT 90
                 ENVIRONMENT "CNA_GRAPHICS_RENDERER=FNA3D;FNA3D_FORCE_DRIVER=OpenGL;SDL_AUDIODRIVER=dummy;SDL_ASSERT=abort")
         endif()

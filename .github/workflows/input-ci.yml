@@ -77,6 +77,8 @@ jobs:
 
       - name: Check generated input reports
         if: matrix.name == 'OPENGLES3'
+        # Advisory since 2026-11-09 (owner decision): a stale generated report does not fail the job.
+        continue-on-error: true
         run: |
           python3 tools/input_parity/check_input_test_coverage.py --check
           python3 tools/input_parity/gen_input_parity_matrix.py --fna "${RUNNER_TEMP}/FNA" --check

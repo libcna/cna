@@ -39,18 +39,20 @@ if(NOT EXISTS "${_xnapp_oracle}/parity_report.py")
 endif()
 
 add_test(NAME XnaPipelineParityReportIsCurrent
-         COMMAND "${Python3_EXECUTABLE}" "${_xnapp_oracle}/parity_report.py"
+         COMMAND "${Python3_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/tools/run_advisory.py" "${_xnapp_oracle}/parity_report.py"
                  --inventory "${_xnapp_reference}/content-pipeline-api.json"
                  --map "${_xnapp_reference}/content-pipeline-parity-map.json"
                  --inputs "${_xnapp_reference}/content-pipeline-inputs.json"
                  --output "${CMAKE_CURRENT_SOURCE_DIR}/docs/xna-content-pipeline-parity-report.md"
                  --check)
+set_tests_properties(XnaPipelineParityReportIsCurrent PROPERTIES SKIP_RETURN_CODE 77)  # advisory (tools/run_advisory.py)
 
 add_test(NAME XnaPipelineInputParityMatrixIsCurrent
-         COMMAND "${Python3_EXECUTABLE}" "${_xnapp_oracle}/inputs_matrix.py" check
+         COMMAND "${Python3_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/tools/run_advisory.py" "${_xnapp_oracle}/inputs_matrix.py" check
                  --inventory "${_xnapp_reference}/content-pipeline-api.json"
                  --matrix "${_xnapp_reference}/content-pipeline-inputs.json"
                  --repo "${CMAKE_CURRENT_SOURCE_DIR}")
+set_tests_properties(XnaPipelineInputParityMatrixIsCurrent PROPERTIES SKIP_RETURN_CODE 77)  # advisory (tools/run_advisory.py)
 
 set_tests_properties(XnaPipelineParityReportIsCurrent XnaPipelineInputParityMatrixIsCurrent
                      PROPERTIES LABELS "parity;xnapipeline")
@@ -61,12 +63,13 @@ set_tests_properties(XnaPipelineParityReportIsCurrent XnaPipelineInputParityMatr
 # default changes, or one CNA stops spelling, fails here rather than being read by somebody a year
 # later as though it were still true.
 add_test(NAME XnaPipelineComponentReferenceIsCurrent
-         COMMAND "${Python3_EXECUTABLE}" "${_xnapp_oracle}/component_reference.py"
+         COMMAND "${Python3_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/tools/run_advisory.py" "${_xnapp_oracle}/component_reference.py"
                  --inventory "${_xnapp_reference}/content-pipeline-api.json"
                  --map "${_xnapp_reference}/content-pipeline-parity-map.json"
                  --inputs "${_xnapp_reference}/content-pipeline-inputs.json"
                  --output "${CMAKE_CURRENT_SOURCE_DIR}/docs/xna-content-pipeline-components.md"
                  --check)
+set_tests_properties(XnaPipelineComponentReferenceIsCurrent PROPERTIES SKIP_RETURN_CODE 77)  # advisory (tools/run_advisory.py)
 set_tests_properties(XnaPipelineComponentReferenceIsCurrent PROPERTIES LABELS "parity;xnapipeline")
 
 # =====================================================================================
@@ -80,21 +83,23 @@ set_tests_properties(XnaPipelineComponentReferenceIsCurrent PROPERTIES LABELS "p
 # never rewrite the committed document (XnaPipelineParityReportIsCurrent above compares that one).
 # =====================================================================================
 add_test(NAME XnaPipelineParityGateIsGreen
-         COMMAND "${Python3_EXECUTABLE}" "${_xnapp_oracle}/parity_report.py"
+         COMMAND "${Python3_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/tools/run_advisory.py" "${_xnapp_oracle}/parity_report.py"
                  --inventory "${_xnapp_reference}/content-pipeline-api.json"
                  --map "${_xnapp_reference}/content-pipeline-parity-map.json"
                  --inputs "${_xnapp_reference}/content-pipeline-inputs.json"
                  --output "${CMAKE_CURRENT_BINARY_DIR}/xna-content-pipeline-parity-report.gate.md"
                  --gate)
+set_tests_properties(XnaPipelineParityGateIsGreen PROPERTIES SKIP_RETURN_CODE 77)  # advisory (tools/run_advisory.py)
 
 # The denominator is frozen at the measurement it was read from (XNAPP-016). Three things are
 # compared and each fails for a different reason: the assemblies by digest and MVID, the counts, and
 # the inventory file itself -- which may change only by recording the new digest as an event with a
 # date and a reason.
 add_test(NAME XnaPipelineInventoryIsFrozen
-         COMMAND "${Python3_EXECUTABLE}" "${_xnapp_oracle}/inventory_freeze.py" check
+         COMMAND "${Python3_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/tools/run_advisory.py" "${_xnapp_oracle}/inventory_freeze.py" check
                  --inventory "${_xnapp_reference}/content-pipeline-api.json"
                  --freeze "${_xnapp_reference}/content-pipeline-api.freeze.json")
+set_tests_properties(XnaPipelineInventoryIsFrozen PROPERTIES SKIP_RETURN_CODE 77)  # advisory (tools/run_advisory.py)
 set_tests_properties(XnaPipelineInventoryIsFrozen PROPERTIES LABELS "parity;xnapipeline")
 
 # Every processor property's default, asserted in C++ against the value Microsoft's own class

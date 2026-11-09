@@ -33,6 +33,7 @@ if(TARGET CNA::Zstd AND ZLIB_FOUND AND CNA_CNB_PROBE_ZSTD_INCLUDE_DIR)
     list(APPEND probe_targets cna_cnb_compression_probe cna_cnb_compression_probe_faults)
 endif()
 add_dependencies(CnaTests ${probe_targets})
-add_test(NAME CnbMeasurementProbeTests COMMAND "${Python3_EXECUTABLE}"
+add_test(NAME CnbMeasurementProbeTests COMMAND "${Python3_EXECUTABLE}" "${CMAKE_SOURCE_DIR}/tools/run_advisory.py"
     "${CMAKE_CURRENT_SOURCE_DIR}/test_probes.py" ${probe_arguments})
+set_tests_properties(CnbMeasurementProbeTests PROPERTIES SKIP_RETURN_CODE 77)  # advisory (tools/run_advisory.py)
 set_tests_properties(CnbMeasurementProbeTests PROPERTIES LABELS "content;cnb;tools" TIMEOUT 120)

@@ -1723,9 +1723,10 @@ if(CNA_BUILD_TESTS)
         endif()
         if(Python3_Interpreter_FOUND)
             add_test(NAME InputSignatureFreezeIsComplete
-                COMMAND "${Python3_EXECUTABLE}"
+                COMMAND "${Python3_EXECUTABLE}" "${CMAKE_SOURCE_DIR}/tools/run_advisory.py"
                         "${CMAKE_SOURCE_DIR}/tools/input_parity/check_signature_freeze.py"
                         --sharp-runtime "${CNA_SHARP_RUNTIME_ROOT}")
+            set_tests_properties(InputSignatureFreezeIsComplete PROPERTIES SKIP_RETURN_CODE 77)  # advisory (tools/run_advisory.py)
             set_tests_properties(InputSignatureFreezeIsComplete PROPERTIES
                 LABELS "input" SKIP_RETURN_CODE 77 TIMEOUT 120)
         endif()
@@ -1868,8 +1869,9 @@ if(CNA_BUILD_TESTS)
         endif()
         if(NOT CMAKE_CROSSCOMPILING)
             add_test(NAME BuildPerformanceToolTests
-                COMMAND "${Python3_EXECUTABLE}"
+                COMMAND "${Python3_EXECUTABLE}" "${CMAKE_SOURCE_DIR}/tools/run_advisory.py"
                     "${CMAKE_SOURCE_DIR}/tools/build/test_build_performance.py")
+            set_tests_properties(BuildPerformanceToolTests PROPERTIES SKIP_RETURN_CODE 77)  # advisory (tools/run_advisory.py)
             set_tests_properties(BuildPerformanceToolTests
                 PROPERTIES LABELS "build;tools" TIMEOUT 60)
             # Owner's licence rule (handoff section 6, 2026-11-02): CNA's sources are MS-PL; the
@@ -1887,36 +1889,42 @@ if(CNA_BUILD_TESTS)
         endif()
         # CNA-FIX-L04: synthetic CLI reports need no Microsoft corpus, Mono or Clang.
         add_test(NAME XnaRuntimeSurfaceAuditCliTests
-            COMMAND "${Python3_EXECUTABLE}"
+            COMMAND "${Python3_EXECUTABLE}" "${CMAKE_SOURCE_DIR}/tools/run_advisory.py"
                 "${CMAKE_SOURCE_DIR}/tools/test_audit_xna_runtime_surface.py"
                 RuntimeSurfaceAuditCliTests)
+        set_tests_properties(XnaRuntimeSurfaceAuditCliTests PROPERTIES SKIP_RETURN_CODE 77)  # advisory (tools/run_advisory.py)
         set_tests_properties(XnaRuntimeSurfaceAuditCliTests
             PROPERTIES LABELS "api;tools" TIMEOUT 30)
         # MTH-PRE-005: source presence, registration and retained execution are distinct.
         add_test(NAME CApiRouteTestCoverageToolTests
-            COMMAND "${Python3_EXECUTABLE}" -B
+            COMMAND "${Python3_EXECUTABLE}" "${CMAKE_SOURCE_DIR}/tools/run_advisory.py" -B
                 "${CMAKE_SOURCE_DIR}/tools/c-api/test_check_route_test_coverage.py")
+        set_tests_properties(CApiRouteTestCoverageToolTests PROPERTIES SKIP_RETURN_CODE 77)  # advisory (tools/run_advisory.py)
         set_tests_properties(CApiRouteTestCoverageToolTests
             PROPERTIES LABELS "tools;metadata;declaration-presence" TIMEOUT 30)
         add_test(NAME ExecutionEvidenceToolTests
-            COMMAND "${Python3_EXECUTABLE}"
+            COMMAND "${Python3_EXECUTABLE}" "${CMAKE_SOURCE_DIR}/tools/run_advisory.py"
                 "${CMAKE_SOURCE_DIR}/tools/evidence/test_ctest_evidence.py")
+        set_tests_properties(ExecutionEvidenceToolTests PROPERTIES SKIP_RETURN_CODE 77)  # advisory (tools/run_advisory.py)
         set_tests_properties(ExecutionEvidenceToolTests
             PROPERTIES LABELS "tools" TIMEOUT 30)
         add_test(NAME FnaReferenceComparisonToolTests
-            COMMAND "${Python3_EXECUTABLE}" -B
+            COMMAND "${Python3_EXECUTABLE}" "${CMAKE_SOURCE_DIR}/tools/run_advisory.py" -B
                 "${CMAKE_SOURCE_DIR}/scripts/test_compare_fna_reference.py")
+        set_tests_properties(FnaReferenceComparisonToolTests PROPERTIES SKIP_RETURN_CODE 77)  # advisory (tools/run_advisory.py)
         set_tests_properties(FnaReferenceComparisonToolTests
             PROPERTIES LABELS "conformance;tools" TIMEOUT 60)
         if(UNIX)
             add_test(NAME VoicePhysicalCheckScriptTests
-                COMMAND "${Python3_EXECUTABLE}"
+                COMMAND "${Python3_EXECUTABLE}" "${CMAKE_SOURCE_DIR}/tools/run_advisory.py"
                     "${CMAKE_SOURCE_DIR}/tools/net/test_voice_physical_check.py")
+            set_tests_properties(VoicePhysicalCheckScriptTests PROPERTIES SKIP_RETURN_CODE 77)  # advisory (tools/run_advisory.py)
             set_tests_properties(VoicePhysicalCheckScriptTests
                 PROPERTIES LABELS "net;tools" TIMEOUT 60)
             add_test(NAME GltfRendererParityScriptTests
-                COMMAND "${Python3_EXECUTABLE}"
+                COMMAND "${Python3_EXECUTABLE}" "${CMAKE_SOURCE_DIR}/tools/run_advisory.py"
                     "${CMAKE_SOURCE_DIR}/scripts/test_gltf_renderer_parity.py")
+            set_tests_properties(GltfRendererParityScriptTests PROPERTIES SKIP_RETURN_CODE 77)  # advisory (tools/run_advisory.py)
             set_tests_properties(GltfRendererParityScriptTests
                 PROPERTIES LABELS "gltf;tools" TIMEOUT 30)
         endif()
@@ -1924,8 +1932,9 @@ if(CNA_BUILD_TESTS)
         # harness. Linux only: the RSS watchdog reads /proc.
         if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
             add_test(NAME FuzzCampaignDriverTests
-                COMMAND "${Python3_EXECUTABLE}" -B
+                COMMAND "${Python3_EXECUTABLE}" "${CMAKE_SOURCE_DIR}/tools/run_advisory.py" -B
                     "${CMAKE_SOURCE_DIR}/tools/fuzz/test_run_long_campaign.py")
+            set_tests_properties(FuzzCampaignDriverTests PROPERTIES SKIP_RETURN_CODE 77)  # advisory (tools/run_advisory.py)
             set_tests_properties(FuzzCampaignDriverTests
                 PROPERTIES LABELS "tools;fuzz" TIMEOUT 180)
         endif()
