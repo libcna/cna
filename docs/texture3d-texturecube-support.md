@@ -143,9 +143,10 @@ shadows, and disposal removes the resource from the recovery registry.
 `EasyGL_Texture3D_ContextLoss_OPENGL33` and `EasyGL_Texture3D_ContextLoss_OPENGLES3` sample the
 same volume objects across two real native context destroy/recreate cycles. They cover distinct
 voxels and all mips, box updates before and after restoration, odd-width Alpha8, packed Bgr565,
-Single float storage, exact CPU readback and disposal before loss. A fresh custom sampling shader
-is created for each context because custom-effect recovery remains a separate limitation in
-[`ieffect-renderer-audit.md`](ieffect-renderer-audit.md). These Linux native tests exercise the
-shared registry path; they do not establish Android lifecycle or asynchronous browser event
-qualification for volume textures.
+Single float storage, exact CPU readback and disposal before loss. The test compiles a fresh
+custom sampling shader for each context, so it isolates texture recovery; custom
+`ShaderEffect` programs themselves relink and restore their uniform values after a context loss
+(see [`graphics-resource-lifetime.md`](graphics-resource-lifetime.md) §8). These Linux native
+tests exercise the shared registry path; they do not establish Android lifecycle or asynchronous
+browser event qualification for volume textures.
 

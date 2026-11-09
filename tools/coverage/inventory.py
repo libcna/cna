@@ -93,7 +93,7 @@ def lane(path):
     if path.startswith('tools/c-api/test_check_route_test_coverage'):
         return ('general-tests-ci.yml: CApiRouteTestCoverageToolTests via unfiltered ctest', 'Tool tests; route presence is metadata, not behavior.')
     if path.startswith('tools/xna-pipeline-oracle/'):
-        return ('general-tests-ci.yml: XnaPipelineFinalAuditToolTests via unfiltered ctest', 'Tool fixture/controls, not runtime qualification.')
+        return ('general-tests-ci.yml: XnaPipeline* parity gates via unfiltered ctest', 'Oracle tools and generated-report checks, not runtime qualification.')
     if path.startswith('cmake/Tests/'):
         if 'InstalledRuntimeProbe' in path or path.endswith('/ModuleProbes.cmake'):
             if path.endswith('/CheckRelocationAudit.py') or path.endswith('/ModuleProbes.cmake'):

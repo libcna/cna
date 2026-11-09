@@ -419,7 +419,7 @@ static int validate_index_cursor(const CNA_Handle game)
         REC_EQ(order, 30);
         REC_EQ(cna_game_components_add(game, current), CNA_RESULT_INVALID_HANDLE);
         REC_EQ(cna_game_components_insert(game, 0, current), CNA_RESULT_INVALID_HANDLE);
-        /* Oracle: runtime_components.h / CLOSURE_059: each Current call returns an owned,
+        /* Oracle: runtime_components.h: each Current call returns an owned,
          * independently releasable view, even after the original member token is gone. */
         CNA_GameComponentHandle second_view = 0;
         const CNA_Handle old_cursor = cursor;

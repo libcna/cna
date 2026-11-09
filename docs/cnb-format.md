@@ -455,23 +455,63 @@ header alone, and different platforms can make different choices about the same 
 quietly deleted.** It read: *"most of what a game ships is already compressed (PNG, Ogg)"*. True of
 the source files, false of what CNB stores — a PNG becomes raw `Rgba8` at compile time and an Ogg
 becomes raw `Pcm16` on those decoded routes. Current standalone Texture2D also has BC variants;
-the old raw-payload observation is not every schema's encoding. The historical 2026-08-27 samples
-and simplified serial I/O model ([measurement details](cnb-compression-measurements.md)) give:
-
-| payload | ratio | break-even device read speed |
-|---|---|---|
-| `Rgba8` photograph | 51 % | 456 MiB/s |
-| `Pcm16` audio | 27 % | 1469 MiB/s |
-| `f32` vertex data | 15 % | 1073 MiB/s |
-
-These payload ratios and modeled thresholds do not predict every file, storage device or
-end-to-end load: actual corpus, CRC/copy/allocation, package/transport compression and I/O overlap
-matter. The retained design is an optional codec, off by default for writing, with per-chunk
-storage decisions. No universal NVMe slowdown or fixed distribution/install saving is claimed.
+the old raw-payload observation is not every schema's encoding. §8.1 records the measurements that
+replaced it. The retained design is an optional codec, off by default for writing, with per-chunk
+storage decisions.
 
 **A compressed chunk cannot be read by a CNA older than the codec.** Every reader written before a
 codec landed rejects a non-zero `compression`, so enabling it raises the minimum runtime version
 for that file. That is a deliberate property of an opt-in feature, not an oversight.
+
+### 8.1 The measurements behind the default (`CNBF-105`)
+
+Historical measurements from 2026-08-27 (commit `0149f1910`) on the development machine: AMD,
+NVMe, Debian 13, GCC `-O2`. The payload files, their hashes, the codec versions and the raw
+repeated-run output were not retained, so these tables cannot be replayed exactly; the probe can
+measure new inputs. "MB/s" in the original record was bytes/1,048,576, so it is written MiB/s here.
+
+Compressed ÷ raw size, so **lower is better**:
+
+| payload | raw bytes | zstd-3 bytes | zstd-3 | zstd-19 | zlib-6 |
+|---|---|---|---|---|---|
+| `Texture2D` `Rgba8`, 1024×1024 photograph | 4 194 304 | 2 144 512 | **51.1 %** | 41.4 % | 49.7 % |
+| `Texture2D` `Rgba8`, 512×512 normal map | 1 048 576 | 603 166 | **57.5 %** | 42.3 % | 59.8 % |
+| `SoundEffect` `Pcm16`, 2 s 44.1 kHz mono | 176 400 | 47 320 | **26.8 %** | 18.8 % | 55.0 % |
+| `Model` vertex bytes, 32 768 verts × 32 B | 1 048 576 | 158 171 | **15.1 %** | 13.0 % | 42.1 % |
+| `Model` index bytes, 65 536 triangles | 786 432 | 223 683 | **28.4 %** | 22.2 % | 27.0 % |
+
+zlib-6 was smaller than zstd-3 for the photograph and the index data, zstd-3 for the other three.
+Compression times were not retained, and five samples do not rank codecs for all content.
+
+zstd-3 decompression (the original five-run median and spread; the retained probe prints one
+adaptively repeated mean per invocation) and the modelled break-even device read speed:
+
+| payload | decompress | throughput (spread) | break-even read speed |
+|---|---|---|---|
+| `Rgba8` photograph, 4 MiB | 4.29 ms | 932 MiB/s (696–1085) | **456 MiB/s** |
+| `f32` vertex bytes, 1 MiB | 0.79 ms | 1264 MiB/s (1166–1517) | **1073 MiB/s** |
+| `Pcm16` audio, 172 KiB | 0.08 ms | 2007 MiB/s (1627–2223) | **1469 MiB/s** |
+
+The break-even is a serial model, not a measured CNB load: with raw size `S`, compressed/raw ratio
+`r`, read throughput `B` and decompression throughput `D` (raw bytes/s), compare `S/B` with
+`r·S/B + S/D`; compression wins when `B < D·(1−r)`. It leaves out allocation and copying, CRC over
+the stored bytes, per-chunk overhead, CPU contention, I/O overlap, downstream decoding/upload and
+filesystem/transport compression, and the parser keeps both the stored and the expanded buffer.
+That machine's storage was recorded (without a retained test log) at 2.5 GB/s cold and 4.4 GB/s
+from page cache — above every threshold, so the model predicted slower loads there for these
+samples.
+
+Conclusion: the samples shrank by roughly half (photograph), three quarters (audio) and six
+sevenths (vertex data) — payload savings, not a fixed install or download saving — but load time
+improves only on storage slower than the break-even speed. Hence an optional codec, off by default
+for writing, chosen per chunk. No universal NVMe slowdown is claimed.
+
+Measure representative content. The first run used the placeholder image
+`tests/assets/media/thumbnails/large_400x300.png` (405 unique colours in 120,000 pixels) as the
+"photograph" and reported 0.6 %, a ratio about 85× smaller than the real photograph's.
+
+The probe compares raw payload buffers and does not extract `.cnb` chunks; its recipe and limits
+are in [`spikes/cnb-compression-spike/README.md`](../spikes/cnb-compression-spike/README.md).
 
 ---
 
@@ -1259,11 +1299,11 @@ A type can be fully readable at runtime and still have no supported way to *prod
   embedded SpriteFont atlases remain `Rgba8`-only.
 * ~~Chunk compression (§8).~~ **Implemented** — Zstandard, codec 2, opt-in per chunk and off by
   default, available when CNA is built with libzstd. See §8.
-* Memory-mapped chunk storage is not implemented. The original CNBF-108 campaign closed in favor
-  of hardware CRC-32C, based on one historical 32 MiB workload; it did not prove mmap can never
-  help. The probe's sparse touches, minimum-of-three timing and missing original inputs limit
-  that conclusion. See [the measurement record](cnb-mmap-measurements.md). The alignment field
-  keeps its meaning and mapped file storage would not itself remove decompression/GPU copies.
+* Memory-mapped chunk storage is not implemented. The original CNBF-108 investigation chose
+  hardware CRC-32C instead, based on one historical 32 MiB workload; it did not prove mmap can
+  never help. The probe's sparse touches, minimum-of-three timing and missing original inputs
+  limit that conclusion (§15.3). The alignment field keeps its meaning and mapped file storage
+  would not itself remove decompression/GPU copies.
 * A package format bundling many assets (`.cnapak`, `CNBF-107`). That would be a different format
   and a separate project; one `.cnb` stays one logical asset (Appendix A, D8).
 * No general load-time advantage is established. The original small-fixture campaign counted
@@ -1331,6 +1371,37 @@ for an unsigned value, the range is checked before any narrowing, and a NaN or a
 refused by name. An option that does not apply to the asset kind being produced is an error rather
 than something ignored, and a failing invocation exits non-zero without leaving a partial file
 behind.
+
+### 15.3 Why hardware CRC-32C came before mapped storage (`CNBF-108`)
+
+Historical record from 2026-08-27 (commit `21ceccfe1`) on the development machine: AMD, NVMe,
+Debian 13, GCC `-O2`. One 32 MiB file of eight 4 MiB `Rgba8` payloads; the input, the exact
+commands and the raw logs were not retained. The probe reports the **minimum of three** runs (the
+original record called it a median of five), in bytes/1,048,576, i.e. MiB/s.
+
+| step | recorded time | throughput |
+|---|---:|---:|
+| read the whole file into an allocated buffer | 7.02 ms | 4560 MiB/s |
+| `mmap` and touch one byte per 4096-byte interval | 2.31 ms | 13,850 MiB/s of mapped extent, not bytes read |
+| `mmap`/unmap without touching data | 0.005 ms | — |
+| CRC-32C, portable byte table | 62.51 ms | 512 MiB/s |
+| CRC-32C, SSE4.2 | 3.28 ms | 9756 MiB/s |
+
+Mapping could save an estimated 4.71 ms of the read; hardware CRC saved an estimated 59.23 ms,
+about 12.6 times as much. Hardware CRC-32C was therefore implemented first (Appendix A, D5) and
+mapped storage was not. The end-to-end `cna_tool_cnb_info` record (20 runs, process startup
+included) fell from 127.3 ms per run with the table CRC to 19.8 ms with hardware CRC, about 6.4×;
+it has not been re-run since, and the remaining 19.8 ms was not profiled.
+
+These are component timings, not a mapped parser with the fast CRC: the mapped loop touched one
+byte per page, and the CRC rows scan one buffer while the parser checks each stored chunk. They
+do not show that mmap can never help. Measure again for a CPU without CRC instructions, for many
+small or cold loads, or for cross-process sharing. A lazy or partial reader would need its own
+validation contract: `CnbDocument::ParseFile` reads the file into owned bytes, and a successful
+parse means every stored chunk's CRC was checked before eager decompression.
+
+The probe's recipe and limits are in
+[`spikes/cnb-mmap-spike/README.md`](../spikes/cnb-mmap-spike/README.md).
 
 ---
 

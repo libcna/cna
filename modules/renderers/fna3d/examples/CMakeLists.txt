@@ -102,7 +102,7 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "FNA3D")
     # is the only permanent coverage DualTextureEffect, EnvironmentMapEffect and SkinnedEffect have
     # under this renderer. The script gates on a scene failing to RENDER, not on pixel equality --
     # the corpus carries a host-wide XNA-vs-GL divergence that is not renderer-specific, and
-    # docs/fna3d-parity-report.md holds the per-scene numbers against the EasyGL baseline.
+    # docs/fna3d-renderer.md gives the last per-scene result against the EasyGL baseline.
     cna_register_renderer_test(
         NAME Fna3d_XNA_Oracle
         COMMAND "${CNA_SOURCE_DIR}/scripts/run-oracle-corpus-diff-fna3d.sh"

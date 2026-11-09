@@ -358,7 +358,7 @@ TEST_F(PlatformInputBridgeTextInputTest, TextInputEventDecodesCzechDiacritics)
     // Task 852 (headless part): Czech diacritics are 2-byte UTF-8 (U+00xx / U+01xx) — the decode
     // must yield one BMP code unit each. "žluťoučký": ž U+017E, ť U+0165, č U+010D, ý U+00FD.
     // (Real IME/keyboard typing of these is a separate, human-gated check — see
-    // docs/input-manual-verification-results.md.)
+    // docs/demo-input-checklist.md, hardware verification record.)
     std::u16string captured;
     TextInputEXT::TextInput = [&captured](charcs c) { captured += c; };
 

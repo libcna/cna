@@ -184,8 +184,8 @@ Keep platform dispatch outside primitive/vertex/pixel loops, reuse event/snapsho
 present completed CPU frames. This is a design policy, not a universal allocation-free guarantee
 for every provider or enabled extension. hot_path_lint recognizes platform calls in selected loop
 shapes; it is not an allocator profiler or proof of every runtime call path.
-[platform-performance.md](platform-performance.md) records historical bounded measurements, not
-a performance baseline for today's entire tree.
+The historical PLAT-7/PLAT-120 platform-abstraction measurements were removed on 2026-11-09 and
+are in Git history; they were never a performance baseline for today's tree.
 
 ## Adding an implementation
 

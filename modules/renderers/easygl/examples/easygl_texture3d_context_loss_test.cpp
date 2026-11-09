@@ -123,7 +123,7 @@ protected:
         {
             if (epoch != 0) device.GetRenderer().DebugSimulateContextLoss();
             const std::string label = "epoch " + std::to_string(epoch);
-            // Custom-program recovery is a separate limitation (CNA-FIX-L47). Compile a fresh
+            // Custom programs recover too (CNA-FIX-L47); to isolate textures, compile a fresh
             // sampling program for each context while retaining the original texture objects.
             ShaderEffect effect(device, vertexSource, fragmentSource);
             if (!ExpectTrue((label + " volume sampling shader compiles").c_str(),

@@ -1,7 +1,7 @@
 <!-- SPDX-License-Identifier: MS-PL -->
 # Building and Testing CNA Input
 
-> **Related input docs (INP-0003):** [backend](input-backend.md) · [FNA fidelity + deviations](input-fna-fidelity.md) · [member-parity matrix](input-member-parity-matrix.md) · [frozen API + tier glossary](input-public-api-frozen.md) · [test coverage](input-test-coverage.md) · [build & test](input-build-and-test.md) · [platform notes](platform-input-notes.md) · [manual results](input-manual-verification-results.md) · [demo checklist](demo-input-checklist.md)
+> **Related input docs (INP-0003):** [backend](input-backend.md) · [FNA fidelity + deviations](input-fna-fidelity.md) · [member-parity matrix](input-member-parity-matrix.md) · [frozen API + tier glossary](input-public-api-frozen.md) · [test coverage](input-test-coverage.md) · [build & test](input-build-and-test.md) · [platform notes](platform-input-notes.md) · [manual hardware checks](demo-input-checklist.md#hardware-verification-record) · [demo checklist](demo-input-checklist.md)
 
 This document explains how to build and run the CNA `Input` unit tests from a **complete** checkout,
 and — importantly — what **cannot** be verified from a source-only archive or in a headless CI
@@ -201,7 +201,7 @@ of the translation logic only, and are otherwise manual/hardware-gated:
   contract: pure SDL mapping helpers plus a complete canned `IPlatformGamepad` drive public
   `GamePad` without hardware. What these tests cannot prove is that the physical device *acts* —
   that stays manual/hardware-gated. See the input plan's
-  Phase I15 (Git history) and `docs/input-manual-verification-results.md`.
+  Phase I15 (Git history) and the hardware verification record of `docs/demo-input-checklist.md`.
   - **Startup invariant:** the SDL gamepad subsystem is initialized explicitly in
     `Game::DoInitialize()` — before the first event pump and snapshot update — through
     `IPlatform::AcquireSubsystem(Gamepad)`. The matching reference is released by explicit disposal

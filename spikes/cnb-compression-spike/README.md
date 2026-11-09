@@ -1,9 +1,9 @@
 # CNBF-105 compression probe
 
 This standalone exploratory program compares byte buffers using zstd levels 1/3/9/19 and zlib-6.
-It does not parse/extract CNB files. The [historical measurement record](../../docs/cnb-compression-measurements.md)
-contains the 2026-08-27 table and its limitations; the original payloads/raw samples are not retained
-here.
+It does not parse/extract CNB files. [`docs/cnb-format.md` §8.1](../../docs/cnb-format.md) holds
+the historical 2026-08-27 tables and their limitations; the original payloads/raw samples are not
+retained.
 
 The listed zstd-3 compressed/raw ratios were 51.1% for one photograph, 26.8% for audio and 15.1%
 for vertex bytes: approximately 49%, 73% and 85% **saved**, respectively. These are sample payload

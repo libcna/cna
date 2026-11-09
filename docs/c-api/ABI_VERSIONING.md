@@ -92,8 +92,9 @@ Two existing route behaviors are corrected under the experimental minor-version 
 and preserves cached Current after collection mutation; MoveNext/Reset now refuse native version
 changes. `cna_sound_effect_create_from_encoded_ext` uses the System::IO::Stream strict PCM WAV
 factory, so non-WAV formats previously accepted by the std::istream extension are refused.
-[CLOSURE_059.md](CLOSURE_059.md) lists the exact declarations, lifetime rules, strict-C regressions
-and retained owner device execution. No partial owner approval or release readiness is implied.
+The exact declarations, lifetime rules, strict-C regressions and owner device execution were
+recorded in `docs/c-api/CLOSURE_059.md`, now in Git history. No partial owner approval or release
+readiness is implied.
 
 ## ABI change ledger
 

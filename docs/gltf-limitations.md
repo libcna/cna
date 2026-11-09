@@ -219,5 +219,5 @@ rather than applied is a scope decision recorded in the API-change review, not a
 
 See also: `docs/gltf-conventions.md` (every decision with its rationale),
 `docs/gltf-conformance.md` (the oracle ladder and the corpus), `docs/gltf-api-change-review.md`
-(what may become public API), and `docs/gltf-campaign-retrospective.md` (the campaign; its row-by-row
-record is in Git history).
+(what may become public API). The campaign retrospective and its row-by-row record are in Git
+history.

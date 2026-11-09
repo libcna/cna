@@ -139,7 +139,7 @@ def render(rows_public, rows_internal) -> tuple[str, list]:
                "[frozen API + tier glossary](input-public-api-frozen.md) · "
                "[test coverage](input-test-coverage.md) · [build & test](input-build-and-test.md) · "
                "[platform notes](platform-input-notes.md) · "
-               "[manual results](input-manual-verification-results.md) · "
+               "[manual hardware checks](demo-input-checklist.md#hardware-verification-record) · "
                "[demo checklist](demo-input-checklist.md)")
     out.append("")
     out.append("> **Generated** by `tools/input_parity/check_input_test_coverage.py`. Maps each Input")

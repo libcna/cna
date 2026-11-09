@@ -251,7 +251,7 @@ The current audit runs these C tests through the private SDLGPU runner. The text
 only a raw handle after reset and accepts an inactive result; it does not prove real IME activation.
 Native `TextInputEXTTest` cases separately exercise published handle/id pairs through a test
 platform. Physical gamepad, touch, sensor and force-feedback behavior requires the hardware/platform
-evidence in [`input-manual-verification-results.md`](../input-manual-verification-results.md).
+evidence in the [hardware verification record](../demo-input-checklist.md#hardware-verification-record).
 
 C API coverage is tracked in [`COVERAGE.md`](COVERAGE.md); the input module still has planned
 rows. A mapped declaration or passing absent-device smoke does not establish complete hardware

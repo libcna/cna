@@ -1,10 +1,10 @@
 # `demo_input` — Manual Input Verification Checklist
 
-> **Related input docs (INP-0003):** [backend](input-backend.md) · [FNA fidelity + deviations](input-fna-fidelity.md) · [member-parity matrix](input-member-parity-matrix.md) · [frozen API + tier glossary](input-public-api-frozen.md) · [test coverage](input-test-coverage.md) · [build & test](input-build-and-test.md) · [platform notes](platform-input-notes.md) · [manual results](input-manual-verification-results.md) · [demo checklist](demo-input-checklist.md)
+> **Related input docs (INP-0003):** [backend](input-backend.md) · [FNA fidelity + deviations](input-fna-fidelity.md) · [member-parity matrix](input-member-parity-matrix.md) · [frozen API + tier glossary](input-public-api-frozen.md) · [test coverage](input-test-coverage.md) · [build & test](input-build-and-test.md) · [platform notes](platform-input-notes.md) · [manual hardware checks](demo-input-checklist.md#hardware-verification-record) · [demo checklist](demo-input-checklist.md)
 
 `modules/input/examples/demo_input` (`cna_demo_input`) is the interactive input demo. The unit suite
 (`CnaTests`) exercises the input pipeline headlessly, but some behavior can only be confirmed with
-real hardware and a real window — that's what this checklist is for (INPUT-TEST-018 / the input plan's Phase 11 manual-verification tasks, whose open checks are in `input-manual-verification-results.md`). Work through it on
+real hardware and a real window — that's what this checklist is for (INPUT-TEST-018 / the input plan's Phase 11 manual-verification tasks; results go in [Hardware verification record](#hardware-verification-record)). Work through it on
 each platform you care about; pair it with the platform-specific caveats in
 [`docs/platform-input-notes.md`](platform-input-notes.md).
 
@@ -93,7 +93,7 @@ The demo was extended to **exercise** these EXT paths end-to-end (they are in th
 relative mouse mode + cursor warp (F2/F3, INP-0219), recognized-gesture readout via `ReadGesture`
 (INP-0220), and gamepad light-bar cycling + gyro/accelerometer readout (INP-0221). The demo builds and
 smoke-launches crash-free (2026-07-06, EasyGL/Xvfb). **Their visual/behavioral correctness on real
-hardware is still human/hardware-gated** — see `input-manual-verification-results.md`.
+hardware is still human/hardware-gated** — see [Hardware verification record](#hardware-verification-record).
 
 ## Still requires separate verification
 
@@ -117,3 +117,69 @@ hardware is still human/hardware-gated** — see `input-manual-verification-resu
   opens a haptic device, so the effect families and gain/autocenter/pause/resume are verified only
   against a canned platform service (`SdlHapticBackendTests.cpp`); actuation on a real force-feedback
   wheel or joystick has not been checked.
+
+## Hardware verification record
+
+The headless suites prove the input pipeline's translation and bookkeeping; they cannot prove
+that a physical device acts. These checks are implemented in code but **not verified on real
+hardware** until a dated run below says so: gamepad rumble, trigger haptics, light bar, gyro and
+accelerometer, hotplug, analog input and button mapping on real controllers, `GetGUIDEXT` on a
+real controller, real IME composition, touch hardware, four simultaneous controllers, and the
+OS-cursor landing point of `Mouse::SetPosition` on native Wayland (`SDL_GetGlobalMouseState`
+returns (0,0) there; the conversion is unit-tested and the warp was pixel-exact under X11). Earlier
+automated-only logs (2026-07-04, 2026-07-06, 2026-10-31) are in Git history.
+
+### Hardware verification matrix
+
+Status: ✅ verified · ⬜ not yet verified · n/a. Fill a cell only from a real run on that family, and
+add a dated entry under *Recorded runs* below. All cells are ⬜: no run on real hardware has been recorded.
+
+| Controller family | Buttons/DPad | Analog sticks/triggers | Rumble | Trigger haptics | Light bar | Gyro/Accel | GUID | Hotplug |
+|-------------------|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|
+| Xbox (XInput) | ⬜ | ⬜ | ⬜ | ⬜ | n/a | n/a | ⬜ (`xinput`) | ⬜ |
+| PlayStation (DS4/DualSense) | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ (hex) | ⬜ |
+| Nintendo Switch Pro | ⬜ | ⬜ | ⬜ | n/a | n/a | ⬜ | ⬜ | ⬜ |
+| Generic / DirectInput | ⬜ | ⬜ | ⬜ | n/a | n/a | n/a | ⬜ | ⬜ |
+| Bluetooth (any) | ⬜ | ⬜ | ⬜ | — | — | — | ⬜ | ⬜ (pair) |
+
+| Other hardware | Multi-touch | Gestures | IME composition | Non-US layout |
+|----------------|:---:|:---:|:---:|:---:|
+| Touchscreen | ⬜ | ⬜ | — | — |
+| IME (JP/CN/KR) | — | — | ⬜ | — |
+| Czech keyboard | — | — | — | ⬜ |
+
+| Other check (the input plan's Phase 11) | Status | What a run must show |
+|-----------------------------------------|:---:|----------------------|
+| Non-QWERTY layout, e.g. AZERTY or Dvorak (P11-003) | ⬜ | Keyboard input behaves correctly on that physical layout |
+| Mouse with side buttons (P11-005) | ⬜ | `XButton1`/`XButton2` report presses from the real buttons |
+| High-DPI display (P11-015) | ⬜ | Mouse and touch coordinates land correctly on a real high-DPI display |
+
+### Recording a run
+
+Add a new `#### Entry — YYYY-MM-DD` block under *Recorded runs* and fill it. Required fields per entry:
+**Date · OS (kernel/distro) · Display server · Graphics renderer · Toolchain + SDL rev · Hardware present.**
+For each hardware check, record **Check · Method · Result (Pass/Fail + notes)**, and update the matrix
+cell(s). Never mark a cell ✅ without a dated row backing it.
+
+### Supported-controllers checklist
+
+- [ ] Xbox One / Series (XInput) — verify all 15 buttons, DPad, 2 sticks, 2 triggers, rumble, `GetGUIDEXT`=`xinput`, hotplug.
+- [ ] PlayStation DualShock 4 — + light bar (`SetLightBarEXT`), trigger haptics off, gyro/accel.
+- [ ] PlayStation DualSense — + adaptive-trigger haptics (`SetTriggerVibrationEXT`), light bar, sensors.
+- [ ] Nintendo Switch Pro — button remap (SDL mapping), gyro.
+- [ ] Generic / DirectInput pad — mapping via SDL `gamecontrollerdb`; unmapped devices not reported.
+- [ ] Bluetooth controller — pairing + hotplug add/remove.
+
+### Supported-OS checklist
+
+- [ ] Linux / X11 (or Xvfb) — cursor warp landing, relative capture, global mouse position. *(automated subset green here)*
+- [ ] Linux / Wayland — virtual XNA recentering and relative mode (pointer lock);
+  `SDL_GetGlobalMouseState` returns (0,0), and the visible OS cursor remains compositor-controlled.
+- [ ] Windows — XInput `GetGUIDEXT`=`xinput`, IME composition window, rumble/trigger-rumble/light-bar.
+- [ ] macOS — Cocoa warp + global position; relative mode.
+- [ ] Android — touch primary (device seen after first touch); on-screen keyboard; attached-HW gamepad.
+- [ ] iOS — touch-only, no cursor; on-screen keyboard; MFi/BT gamepad.
+
+### Recorded runs
+
+None yet.

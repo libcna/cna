@@ -104,17 +104,15 @@ page under `docs/` (index: `docs/README.md`), deliberate divergences from FNA an
   obtain native-Windows measurements with working WMA positive controls before treating the
   prefix-limited result as the complete Microsoft contract. No new regression/runtime change
   was added in this documentation task.
-- XnaPipelineFinalAuditIsGreen remains an evidence-metadata gate, not runtime qualification
-  (CNA-FIX-L05 / MTH-PRE-005). Both it and CApiRouteTestCoverage now separate declaration presence,
-  configured CTest registration and validated retained execution. Source scans exclude comments,
+- CApiRouteTestCoverage is an evidence-metadata gate, not runtime qualification
+  (CNA-FIX-L05 / MTH-PRE-005). It separates declaration presence, configured CTest registration and
+  validated retained execution. Source scans exclude comments,
   literals and literal false branches; unknown conditions, macro expansion and build inclusion
   remain unevaluated. Optional --execution-record joins ctest_evidence.py artifacts; the explicit
   --require-execution gate refuses missing/disabled/skipped witnesses and wrong evidence categories.
   Passing empty bodies still establish no assertion coverage: runtime qualification stays
-  not-established and assertion counts unknown. The 23 new CPU-only regression cases and five
-  selected metadata CTests pass in the software tree; no broader runtime/interop/sanitizer or GPU
-  qualification is claimed. See docs/xna-content-pipeline-final-audit.md and the route-presence
-  evidence section in docs/c-api/README.md for scope and capture identity limits.
+  not-established and assertion counts unknown. See the route-presence evidence section in
+  docs/c-api/README.md for scope and capture identity limits.
 - CNB read limits are not a total process-memory budget. Owned input, expanded chunks, decoded
   objects and GPU resources can coexist, and concurrent asset loads remain application-owned.
   Shared animation ranges additionally obey materialized track/key element totals; see
@@ -123,7 +121,7 @@ page under `docs/` (index: `docs/README.md`), deliberate divergences from FNA an
   tables cannot be replayed exactly. Corrected probes validate covered I/O/codec paths for new
   stable inputs; they do not establish full CNB-load performance. Production CRC tests compare
   selected dispatch against the table, not every forced hardware/fallback architecture; see
-  `docs/cnb-compression-measurements.md` and `docs/cnb-mmap-measurements.md`.
+  `docs/cnb-format.md` §8.1 and §15.3.
 - The historical August clean-build matrix cannot be reconstructed from current defaults alone.
   Current benchmark/report tools record effective cache values and source/dependency identities;
   those hashes are not source/package archives or a capture of every transitive configuration

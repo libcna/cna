@@ -275,9 +275,24 @@ Some resources (e.g. `BlendState`, `SamplerState`) may be constructed without a
 - EasyGL's resource registry discards stale native names on context loss and recreates registered
   objects after restoration. Textures, including cube and volume mip chains, restore retained CPU
   uploads; render-target allocation recovery does not promise preservation of rendered pixels.
-  A normal window resize is separate from context loss. Custom `ShaderEffect` programs remain
-  outside this registry; their recovery boundary is recorded in
-  [the effect audit](ieffect-renderer-audit.md).
+  A normal window resize is separate from context loss.
+- A live custom `ShaderEffect` (`EasyGLEffectRenderer`) is a registered recoverable resource too.
+  It keeps its GLSL source and the last value written through each uniform setter; after a context
+  loss it relinks from that source and writes those values again, as XNA keeps an effect's
+  parameters across a device reset.
+- Mutation contract: no caller receives a mutable `easygl::Program&`. The program is linked only
+  by `CompileProgram()` and by context recovery, and each link clears the per-name uniform-location
+  cache (misses and the `name[0]` array spelling included) and the `uRtFlipV`/`uRtCubeFlipV` upload
+  state, so a location resolved once stays valid until the next link. `CompileProgram()` links a
+  new program and replaces the live one only on success; a failed compile or link keeps the
+  previous program, sources and recorded values. A successful recompile discards the recorded
+  values. `GetUniformLocationQueryCountEXT()` counts GL location queries for tests;
+  `EasyGLShaderEffectLifecycleTest` covers caching, recompilation and recovery.
+- The stock SpriteBatch program resolves `projection`, `uChannelMask` and `uChannelFill` once per
+  link; a custom sprite effect writes them through its own cache. `ShaderEffect::SetTexture` may
+  run before `Apply()` while another program is current, so the effect's `uRtFlipV` upload first
+  makes its own program current (`EasyGL_ShaderEffect_SpriteBatch_Uniform` pins this with two
+  programs).
 
 ---
 

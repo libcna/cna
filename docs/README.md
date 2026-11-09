@@ -58,8 +58,6 @@ their stated metadata/source checks, rather than proving complete behavioral par
 - [xna-4-runtime-member-coverage.md](xna-4-runtime-member-coverage.md) — Generated current
   declaration census against Microsoft reference metadata; presence does not establish behavior or
   test coverage.
-- [xna-4-runtime-member-coverage-baseline.md](xna-4-runtime-member-coverage-baseline.md) — Frozen
-  historical member census and its original gaps, retained for comparison.
 - [xna-4-enumerator-reference.md](xna-4-enumerator-reference.md) — Typed and boxed
   collection-enumerator contracts, cursor state and reference evidence.
 - [xna4-runtime-compatibility.md](xna4-runtime-compatibility.md) — Process-wide Framework-style
@@ -89,12 +87,8 @@ their stated metadata/source checks, rather than proving complete behavioral par
   current dispositions.
 - [fna3d-renderer.md](fna3d-renderer.md) — Experimental FNA3D family, pinned dependencies, driver
   selection and compiled-effect route.
-- [fna3d-parity-report.md](fna3d-parity-report.md) — Dated FNA3D/XNA image-corpus evidence and its
-  qualification limits.
 - [software-renderer.md](software-renderer.md) — Experimental CPU rasterizer, presentation paths,
   resource limits and effect execution boundaries.
-- [software-easygl-parity-ledger.md](software-easygl-parity-ledger.md) — Maintained Software
-  evidence map and recovery instructions for the full historical task ledger.
 - [headless-renderer.md](headless-renderer.md) — HEADLESS rendering contract, simulated resources
   and test boundaries.
 - [stub-renderer.md](stub-renderer.md) — STUB no-op renderer, accepted surface and intentional
@@ -152,8 +146,6 @@ their stated metadata/source checks, rather than proving complete behavioral par
   bindings and ShaderEffect layout contract.
 - [fx-bytecode-fuzzing.md](fx-bytecode-fuzzing.md) — Compiled-effect byte-boundary fuzzing, corpus
   and reproduction scope.
-- [ieffect-renderer-audit.md](ieffect-renderer-audit.md) — Dated IEffectRenderer repair/performance
-  record with its focused source recheck.
 - [cnaext-engine-layer.md](cnaext-engine-layer.md) — Standalone graphics extensions and the
   retirement of the former modern engine layer.
 - [ascii-post-process-effect.md](ascii-post-process-effect.md) — Renderer-neutral ASCII/glyph
@@ -177,12 +169,8 @@ their stated metadata/source checks, rather than proving complete behavioral par
   neutral textures and renderer-specific evidence.
 - [gltf-performance.md](gltf-performance.md) — Import performance/lifetime records and their
   measurement scope.
-- [gltf-center-collapse-verdict.md](gltf-center-collapse-verdict.md) — Historical geometry-collapse
-  investigation, fixes and retained forensic evidence.
 - [gltf-api-change-review.md](gltf-api-change-review.md) — Historical API-change decisions,
   including retired extension/renderer evidence.
-- [gltf-campaign-retrospective.md](gltf-campaign-retrospective.md) — Completed campaign
-  retrospective; current behavior belongs to the conformance and limitation pages.
 
 ## Content formats and build-time pipeline
 
@@ -192,10 +180,6 @@ their stated metadata/source checks, rather than proving complete behavioral par
   custom loaders.
 - [cnb-format.md](cnb-format.md) — Compiled CNB container, versioned schemas, references and runtime
   loading contract.
-- [cnb-compression-measurements.md](cnb-compression-measurements.md) — Dated chunk-compression
-  measurements and the resulting policy.
-- [cnb-mmap-measurements.md](cnb-mmap-measurements.md) — Dated memory-mapping measurements and the
-  resulting decision.
 - [xnb-content-pipeline-support.md](xnb-content-pipeline-support.md) — Runtime XNB readers, lazy
   registration, object graphs, compression and limitations.
 - [xnb-interoperability.md](xnb-interoperability.md) — Native XNB writer, targets/compression,
@@ -208,8 +192,6 @@ their stated metadata/source checks, rather than proving complete behavioral par
   importer/processor/property reference with XNA defaults and C++ mappings.
 - [xna-content-pipeline-parity-report.md](xna-content-pipeline-parity-report.md) — Generated
   classifications from the maintained member/input map; executable parity evidence is separate.
-- [xna-content-pipeline-final-audit.md](xna-content-pipeline-final-audit.md) — Generated checks of
-  26 local source/metadata conditions; not a runtime qualification report.
 - [xna-intermediate-xml-format.md](xna-intermediate-xml-format.md) — Measured IntermediateSerializer
   format, CNA implementation boundaries and retained corpus.
 - [xna-content-pipeline-media.md](xna-content-pipeline-media.md) — MP3/WMA/WMV processing routes,
@@ -239,8 +221,6 @@ their stated metadata/source checks, rather than proving complete behavioral par
   ownership and teardown.
 - [platform-terminal-analysis.md](platform-terminal-analysis.md) — Implemented terminal
   platform/presentation behavior and limitations.
-- [platform-performance.md](platform-performance.md) — Historical platform-abstraction measurements;
-  retired implementations are not current options.
 - [consoles.md](consoles.md) — Console portability considerations; no CNA console port is
   implemented or qualified.
 
@@ -258,8 +238,6 @@ their stated metadata/source checks, rather than proving complete behavioral par
   guards.
 - [input-pre-merge-checklist.md](input-pre-merge-checklist.md) — Maintained input regression
   checklist.
-- [input-manual-verification-results.md](input-manual-verification-results.md) — Dated
-  manual/platform results; unmeasured hardware remains unqualified.
 - [demo-input-checklist.md](demo-input-checklist.md) — Manual demo-input scenarios and
   result-recording instructions.
 - [platform-input-notes.md](platform-input-notes.md) — Platform-specific input behavior and
@@ -324,8 +302,6 @@ their stated metadata/source checks, rather than proving complete behavioral par
   methodology.
 - [inspector.md](inspector.md) — Optional authenticated out-of-process Inspector, protocol/UI and
   capabilities.
-- [inspector-benchmark.md](inspector-benchmark.md) — Dated Inspector overhead measurements and
-  reproduction scope.
 
 Use the owning page's reproduction route and evidence scope. Run GPU/window tests through
 `tools/platform/run_gpu_tests_private.sh`; repository build and contribution rules are in

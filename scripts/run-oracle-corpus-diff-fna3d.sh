@@ -20,8 +20,8 @@
 # is NOT renderer-specific. docs/opengles1-parity-report.md records EasyGL at 10/39 exact on the
 # same corpus and machine; a renderer at that number is at the established baseline, not broken.
 # The measurement's value is the PER-SCENE comparison against that baseline -- a scene where this
-# renderer is worse than EasyGL is a candidate defect, and docs/fna3d-parity-report.md records
-# which those are.
+# renderer is worse than EasyGL is a candidate defect (none at the 2026-08-11 measurement; see
+# docs/fna3d-renderer.md).
 #
 # Only a scene that fails to RENDER is treated as a hard failure here. Never widen the tolerance to
 # turn a red row green without a per-scene reason (scripts/xna-diff.py's own standing warning).

@@ -457,7 +457,7 @@ def render(per_type: dict, gap_strict: list, gap_fna: list, gap_interface: list)
                "[frozen API + tier glossary](input-public-api-frozen.md) · "
                "[test coverage](input-test-coverage.md) · [build & test](input-build-and-test.md) · "
                "[platform notes](platform-input-notes.md) · "
-               "[manual results](input-manual-verification-results.md) · "
+               "[manual hardware checks](demo-input-checklist.md#hardware-verification-record) · "
                "[demo checklist](demo-input-checklist.md)")
     out.append("")
     out.append("> **Generated** by `tools/input_parity/gen_input_parity_matrix.py` from the public")

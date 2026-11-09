@@ -6,7 +6,7 @@ subsets. A source branch or canned test does not qualify every OS, compositor or
 
 See [input architecture](input-backend.md), [FNA decisions](input-fna-fidelity.md),
 [member parity](input-member-parity-matrix.md), [build/test](input-build-and-test.md) and
-[manual results](input-manual-verification-results.md).
+[manual hardware checks](demo-input-checklist.md#hardware-verification-record).
 
 ## Desktop pointer behavior
 

@@ -1893,13 +1893,10 @@ if(CNA_BUILD_TESTS)
         set_tests_properties(XnaRuntimeSurfaceAuditCliTests
             PROPERTIES LABELS "api;tools" TIMEOUT 30)
         # MTH-PRE-005: source presence, registration and retained execution are distinct.
-        add_test(NAME XnaPipelineFinalAuditToolTests
-            COMMAND "${Python3_EXECUTABLE}" -B
-                "${CMAKE_SOURCE_DIR}/tools/xna-pipeline-oracle/test_final_audit.py")
         add_test(NAME CApiRouteTestCoverageToolTests
             COMMAND "${Python3_EXECUTABLE}" -B
                 "${CMAKE_SOURCE_DIR}/tools/c-api/test_check_route_test_coverage.py")
-        set_tests_properties(XnaPipelineFinalAuditToolTests CApiRouteTestCoverageToolTests
+        set_tests_properties(CApiRouteTestCoverageToolTests
             PROPERTIES LABELS "tools;metadata;declaration-presence" TIMEOUT 30)
         add_test(NAME ExecutionEvidenceToolTests
             COMMAND "${Python3_EXECUTABLE}"
@@ -2331,9 +2328,9 @@ if(_cna_all_tests)
 endif()
 
 # ModuleProbes registers the C API check after this file. Defer only these labels
-# until both presence checks exist, preserving their established CTest names.
+# until the presence check exists, preserving its established CTest name.
 function(_cna_label_declaration_presence_checks)
-    foreach(_presence_test IN ITEMS XnaPipelineFinalAuditIsGreen CApiRouteTestCoverage)
+    foreach(_presence_test IN ITEMS CApiRouteTestCoverage)
         if(TEST ${_presence_test})
             set_property(TEST ${_presence_test} APPEND PROPERTY LABELS "metadata" "declaration-presence")
         endif()

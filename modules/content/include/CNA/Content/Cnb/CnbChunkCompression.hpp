@@ -14,7 +14,7 @@ namespace CNA::Content::Cnb
      * @brief Chunk compression for `.cnb` (`CNBF-105`).
      *
      * Compression is **opt-in and off by default**, and that is a measured decision rather than
-     * caution: `docs/cnb-compression-measurements.md` records roughly half off a texture payload,
+     * caution: `docs/cnb-format.md` §8.1 records roughly half off a texture payload,
      * three quarters off audio and six sevenths off vertex data — but also that decompression only
      * *saves load time* on storage slower than 456–1469 MB/s, so on desktop NVMe it makes loading
      * slower. Size always wins; time only sometimes does. The codec is therefore chosen per chunk,

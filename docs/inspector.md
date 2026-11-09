@@ -309,11 +309,58 @@ the CNA application. Compiled-in support is a separately linked static library; 
 starts work. A linked application that never calls `Agent::Start()` performs no Inspector work. A
 started agent with no client blocks in the operating system and does not call the provider.
 
-Measured results and reproduction commands are in
-[`inspector-benchmark.md`](inspector-benchmark.md). On the recorded system, linked-but-disabled and
-enabled-without-client application loops were within noise of the compiled-out control, with zero
-idle provider calls. Live snapshot/event costs occur on the agent thread. Preview measurements are
-reported separately and do not claim renderer GPU-readback cost.
+On the recorded system, linked-but-disabled and enabled-without-client application loops were
+within noise of the compiled-out control, with zero idle provider calls. Live snapshot/event costs
+occur on the agent thread. Preview measurements are reported separately and do not claim renderer
+GPU-readback cost.
+
+### Benchmarks and recorded figures
+
+Two `Release` benchmarks:
+
+- `modules/inspector/benchmarks/InspectorCompiledOutBenchmark.cpp` has no Inspector include or
+  link dependency and builds even when Inspector support is compiled out;
+- `modules/inspector/benchmarks/InspectorBenchmark.cpp` runs the same application loop before an
+  agent starts and while an agent has no client, then times real authenticated loopback requests:
+  500 snapshot and 200 event round trips averaged per process, and the median of five preview
+  requests 55 ms apart. Its agent uses benchmark limits (1,024 requests/s, 50 ms preview
+  cooldown), not production defaults. The idle-agent case prints the provider-call count, which
+  must stay zero.
+
+```sh
+cmake -S . -B cmake-build-inspector-release -G Ninja -DCMAKE_BUILD_TYPE=Release \
+  -DCNA_BUILD_INSPECTOR=ON -DCNA_BUILD_BENCHMARKS=ON -DCNA_BUILD_TESTS=OFF \
+  -DCNA_DIAGNOSTICS=FULL -DCNA_GRAPHICS_RENDERER=HEADLESS -DCNA_PLATFORM=HEADLESS \
+  -DCNA_AUDIO_PLATFORM=NULL -DCNA_ENABLE_VIDEO=OFF -DCNA_ENABLE_DRACO=OFF \
+  -DCNA_ENABLE_NET=OFF -DCNA_BUILD_EXAMPLES=OFF
+cmake --build cmake-build-inspector-release --target \
+  cna_inspector_compiled_out_benchmark cna_inspector_benchmark --parallel 8
+./cmake-build-inspector-release/modules/inspector/cna_inspector_compiled_out_benchmark
+./cmake-build-inspector-release/modules/inspector/cna_inspector_benchmark
+```
+
+Historical figures from 2026-09-17 (`INSP-0001`), not a current-HEAD qualification: AMD Ryzen 7
+PRO 7840U (8 cores/16 threads), GCC 14.2.0, Linux x86-64, boost enabled, no isolated benchmark
+core. Each executable ran seven times on an otherwise idle machine; the table gives the median of
+the per-process results. Raw distributions were not retained, so these medians do not prove
+statistical equivalence or a universal idle-overhead bound.
+
+| Case | Seven-run median | Interpretation |
+|---|---:|---|
+| Inspector compiled out (control) | 1.144 ns/iteration | No Inspector dependency or code in the executable |
+| Support linked, agent not started | 1.165 ns/iteration | +0.021 ns (1.8 %), within observed run noise |
+| Agent enabled, no client/browser | 1.161 ns/iteration | +0.016 ns (1.4 %), within noise; **0 provider calls** |
+| Live basic statistics view | 71.289 µs/request | One metric and the full 240-frame history; agent thread only |
+| Active profiling view | 121.416 µs/request | 512 resolved zone events; agent thread only |
+| Synthetic preview payload | 1.386 ms/request | Callback, 1 MiB payload and transport only |
+
+The live-view figures are request latency on the agent's network thread, not render-thread
+stalls, and exclude the browser bridge's JSON conversion. Their provider is a canned fixture, not
+a live engine registry, so they do not predict a game with many resources or producers. The
+preview callback fills 1 MiB with byte 0x5A labelled `image/png` (not a decodable image), so it
+measures allocation, protocol and transport, not image encoding, renderer synchronization or GPU
+readback. A future renderer preview provider must issue asynchronous readback and return
+`Pending`, and its GPU cost must be measured per renderer.
 
 ## Verification
 

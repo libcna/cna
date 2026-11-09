@@ -177,7 +177,7 @@ namespace CNA::Content::Cnb
      * `IsCnbCompressionSupported()` answers it. Zstandard is implemented when CNA is built with
      * libzstd (`CNA_CNB_ZSTD`, `AUTO` by default); LZ4 and Deflate have identifiers and no
      * implementation. Compression is opt-in per chunk and off by default — see
-     * `docs/cnb-compression-measurements.md` for why that default is measured rather than cautious.
+     * `docs/cnb-format.md` §8.1 for why that default is measured rather than cautious.
      */
     enum class CnbCompression : std::uint32_t
     {

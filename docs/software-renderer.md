@@ -209,8 +209,7 @@ hardware-observation uncertainties are recorded in
 [KNOWN_ISSUES.md](../KNOWN_ISSUES.md), not duplicated here.
 
 The completed `SOFTWARE-1` through `SOFTWARE-485` implementation campaign is historical. Its
-EasyGL comparison evidence map is
-[`software-easygl-parity-ledger.md`](software-easygl-parity-ledger.md); it points to the complete
-historical tables, deleted plan and individual fixes in Git history. Those records explain how the current contract was
+EasyGL comparison evidence map, the complete historical tables, the deleted plan and the individual
+fixes are in Git history. Those records explain how the current contract was
 established; they are not a second status page and their old test totals are not current release
 criteria.

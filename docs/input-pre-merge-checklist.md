@@ -1,7 +1,7 @@
 <!-- SPDX-License-Identifier: MS-PL -->
 # Input pre-merge regression checklist (INP-0200)
 
-> **Related input docs (INP-0003):** [backend](input-backend.md) · [FNA fidelity + deviations](input-fna-fidelity.md) · [member-parity matrix](input-member-parity-matrix.md) · [frozen API + tier glossary](input-public-api-frozen.md) · [test coverage](input-test-coverage.md) · [build & test](input-build-and-test.md) · [platform notes](platform-input-notes.md) · [manual results](input-manual-verification-results.md) · [demo checklist](demo-input-checklist.md)
+> **Related input docs (INP-0003):** [backend](input-backend.md) · [FNA fidelity + deviations](input-fna-fidelity.md) · [member-parity matrix](input-member-parity-matrix.md) · [frozen API + tier glossary](input-public-api-frozen.md) · [test coverage](input-test-coverage.md) · [build & test](input-build-and-test.md) · [platform notes](platform-input-notes.md) · [manual hardware checks](demo-input-checklist.md#hardware-verification-record) · [demo checklist](demo-input-checklist.md)
 
 Work through this before merging any change that touches `Microsoft::Xna::Framework::Input`
 (or `::Touch`) or its internal bridge. Every gate here is machine-checkable from a clean checkout —
@@ -38,7 +38,7 @@ manual/hardware verification is tracked separately (see the "Input stable" gate,
 
 "Input stable" additionally requires: the current `input-ci.yml` renderer matrix green **and** its
 ASan+UBSan job green **and** determinism (shuffle ×5) green **and** a **current dated
-hardware-verification entry** in
-`docs/input-manual-verification-results.md` that includes at least one real controller family, a real
+hardware-verification entry** in the hardware verification record of
+`docs/demo-input-checklist.md` that includes at least one real controller family, a real
 touchscreen, and a real IME. Until that manual entry exists, the input subsystem is "code-complete +
 headless-verified", **not** "Input stable".

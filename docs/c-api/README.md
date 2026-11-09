@@ -22,8 +22,8 @@ presence, not successful runtime calls or behavior parity.
 These values are summaries, not a second status ledger; [`COVERAGE.md`](COVERAGE.md),
 [`LIMITATIONS.md`](LIMITATIONS.md) and [`RELEASE_GATE.md`](RELEASE_GATE.md) are generated and remain
 the sources of truth.
-The [exact-row evidence review](EXACT_ROW_EVIDENCE.md) records the accepted mappings and the
-retained owner execution, the resolved owner decisions and remaining Windows obligations from MTH-CABI-009.
+The owner decisions of the exact-row review (MTH-CABI-009) are in [CLOSURE_060.md](CLOSURE_060.md);
+what remains open, including the Windows obligations, is in [`LIMITATIONS.md`](LIMITATIONS.md).
 
 Native consumers install the `CNACApi` component and link `CNA::CApi`; supported Unix builds may
 also provide `CNA::CApiStatic`. The installed shared and static consumers are exercised in

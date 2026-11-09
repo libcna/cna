@@ -5,9 +5,8 @@
 library, which selects one of its OpenGL, Direct3D 11 or SDL_GPU drivers at runtime. It is not a
 second name for any of those CNA renderer identities.
 
-This page is the current renderer contract. The dated XNA image comparison is in
-[`fna3d-parity-report.md`](fna3d-parity-report.md), retired `FNA3D-0`..`63` task evidence is in
-Git history, and the authoritative list of current defects is [KNOWN_ISSUES.md](../KNOWN_ISSUES.md).
+This page is the current renderer contract. Retired `FNA3D-0`..`63` task evidence and the dated
+XNA image comparison report are in Git history, and the authoritative list of current defects is [KNOWN_ISSUES.md](../KNOWN_ISSUES.md).
 
 ## Build and test
 
@@ -261,9 +260,12 @@ D3D11-driver findings and every other open item.
   [`apple-platforms.md`](apple-platforms.md), not generalized to iOS.
 - Native Direct3D 11 execution remains an external qualification gate. Cross-compiled and
   Wine-visible coverage does not establish native-Windows driver correctness.
-- The 2026-08-11 39-scene comparison against checked-in real-XNA images is retained as a historical
-  measurement in [`fna3d-parity-report.md`](fna3d-parity-report.md). It is evidence, not a current
-  pass-count dashboard or release gate.
+- The 2026-08-11 39-scene comparison against checked-in real-XNA images (`tools/xna-oracle`,
+  `scripts/xna-diff.py` at tolerance 0, FNA3D's OpenGL driver on Mesa llvmpipe) gave 10/39 exact,
+  29 differing and none failing to render, the same count as EasyGL on that machine; the corpus
+  carries a host-wide GL-vs-XNA divergence. No scene was worse than the EasyGL baseline, and the one
+  defect it found (FNA3D-27a) is fixed. SDLGPU and D3D11 drivers were not measured. This is a
+  historical measurement, not a current pass-count dashboard or release gate.
 
 When rerunning the image corpus, keep it off the live desktop:
 

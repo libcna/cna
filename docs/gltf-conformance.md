@@ -1,7 +1,7 @@
 # glTF 2.0 conformance — specification pin and oracle harness
 
 The glTF campaign's task record (`GLTF-001`…`GLTF-480`, 2026-08) is in Git history; its milestones
-are §8 and its lessons are [`gltf-campaign-retrospective.md`](gltf-campaign-retrospective.md).
+are §8; the campaign retrospective is in Git history too.
 This file pins the campaign's specification reference (`GLTF-002`) and documents the numerical
 oracle harness (`GLTF-003` … `GLTF-006`, `GLTF-041`). Its milestones are project declarations
 over named witnesses, not Khronos certification or exhaustive proof for every legal input.
@@ -523,6 +523,42 @@ The ledger's `status`, closed/remaining tasks, divergent-field sets and executab
 describe its closure. Some retained D6/D7/GLTF-241 summary strings still describe intermediate
 limitations; do not treat every historical summary as today's implementation. Closure of these
 original defects is not a statement that all subsequently discovered defects are fixed.
+
+#### Root cause of the center collapse (`GLTF-011`)
+
+Imported models collapsing toward the centre had two independent causes, both first divergent at
+L4. L2 decoding was correct on every fixture, and an L5 byte check alone could not see either
+cause, because vertex positions stay mesh-local by design and the placement lives in a `ModelBone`.
+
+* **A — node transforms discarded (D1–D3).** The import data model grouped meshes by skin with no
+  node or matrix, so every mesh instance came out in mesh-local space with an identity bone and
+  all parts of a rigid multi-part asset sat at the origin. Each node now gets a real `ModelBone`
+  (instances share one mesh), and the local transform is read through
+  `cgltf_node_transform_local`, so `matrix`-authored and TRS-authored nodes compose identically.
+* **B — skin ancestry dropped (D8).** The nodes above the joint set were dropped from the bind
+  pose while the file's `inverseBindMatrices`, which include them, were kept, so every skinned
+  vertex was multiplied by the *inverse* of the lost transform: a division by the scale of a
+  centimetre-authored or axis-converted armature. The ancestry now rides on a per-root prefix
+  (`BoneOut::parentWorldPrefix`, `SkinningData::SkeletonRootPrefix`) rather than being baked into
+  the bind pose, so an animated root joint replaces only its own local transform. The skinned
+  mesh node's own transform is ignored (specification §3.7.3.2): its bone is kept, not applied.
+
+The L4 oracles (`tools/gltf_fixtures/manifest.py`, `GltfOracleEXT.cpp`) follow the same rule: a
+skinned instance reports the identity placement in `l4.instances` and its skinned result in
+`l4.skin`. That identity is correct; do not "fix" it back to the node's world transform.
+
+Both are guarded by ordinary green tests through the real loader, so a regression is a normal
+test failure naming the fixture:
+
+* A — `GltfConformanceL4` and `GltfSceneGraphBones`: `SharedMeshGetsOneBonePerInstancingNode`
+  (`xf-shared-mesh`, world X `[0,11]`), `DeepHierarchyMapsOntoBonesInLockstep` (`xf-parent-child`,
+  world Y `[6,8]`), `MatrixAuthoredNodeMapsOntoItsBone` (`xf-matrix-node`, world X `[4,5]`) and
+  the `UntransformedControlCase` zero point (`xf-identity`).
+* B — `GltfSkinSpaces`: `RootJointCarriesTheSceneAncestryAboveTheJointSet` and
+  `SkinnedVertexLandsWhereTheSpecificationSaysItDoes` (`skin-armature-ancestor`, joint matrix
+  identity), `MeshNodeTransformIsIgnored` (`skin-mesh-node-transform`: an `M43` of `-50` means the
+  withdrawn inverse term is back, `+50` that the node transform is applied); and
+  `GltfSceneGraphBones.SkinnedMeshKeepsItsNodeBoneButIsNotTransformedByIt`.
 
 ### 3.4 Promoted audit fixtures (`GLTF-004`)
 
@@ -1414,8 +1450,12 @@ task, which is what keeps "no golden" distinguishable from "golden forgotten".
 The campaign declared **`GLTF CORE 2.0 IMPORT/RUNTIME MODEL CORRECT`** on 2026-08-18
 (`GLTF-458`), with renderer coverage stated separately. Retain this as a dated project milestone
 over the listed evidence, not a present guarantee that every glTF input/combination is correct.
-The unqualified `GLTF CORE 2.0 CORRECT` was not claimed; see
-[gltf-campaign-retrospective.md](gltf-campaign-retrospective.md) §4.
+The unqualified `GLTF CORE 2.0 CORRECT` was not claimed. On 2026-08-18 the owner rejected it,
+because a renderer that accepts a valid asset and substitutes the white identity draws a visibly
+wrong surface; the standing bar is that a route evaluates the material or refuses it explicitly
+before any incompatible vertex-layout interpretation and GPU submission
+([gltf-limitations.md](gltf-limitations.md)). The milestone was renamed `GLTF CORE 2.0
+IMPORT/RUNTIME MODEL CORRECT`, with renderer coverage stated separately.
 `GLTF ROBUST` (§8.3) remains undeclared. The later source-found unlit occlusion selection and
 standalone unitScale parsing defects were fixed by CNA-FIX-D07 and CNA-FIX-D08.
 

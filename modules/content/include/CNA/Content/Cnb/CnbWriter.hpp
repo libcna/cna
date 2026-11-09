@@ -105,7 +105,7 @@ namespace CNA::Content::Cnb
          *        (`CNBF-105`).
          *
          * **Off by default, and that is a measured default rather than a cautious one.**
-         * `docs/cnb-compression-measurements.md` records roughly half off a texture payload, three
+         * `docs/cnb-format.md` §8.1 records roughly half off a texture payload, three
          * quarters off audio and six sevenths off vertex data — but decompression only *saves load
          * time* on storage slower than 456–1469 MB/s, so on desktop NVMe it makes loading slower.
          * Size always wins; time only sometimes does.

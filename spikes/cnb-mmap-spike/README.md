@@ -1,7 +1,7 @@
 # CNBF-108 read/mmap/CRC probe
 
 The 2026-08-27 campaign prioritized hardware CRC-32C over a mapped document reader on one 32 MiB
-workload. The [historical record](../../docs/cnb-mmap-measurements.md) retains the timings and
+workload. [`docs/cnb-format.md` §15.3](../../docs/cnb-format.md) retains the timings and
 limits; it does not rule out mmap for every future workload. Current CNB storage remains owned
 bytes with eager validation/decompression.
 

@@ -141,8 +141,8 @@ uncompressed size or ceiling. This does not bypass document safety; full documen
 the configured chunk and total-size limits to stored and compressed chunks alike. Compressed
 streams must expand to exactly their declared size or parsing returns `CNA_RESULT_IO`.
 
-Compression's measured size and loading tradeoffs are kept separately in
-[`cnb-compression-measurements.md`](../cnb-compression-measurements.md).
+Compression's measured size and loading tradeoffs are recorded in
+[`cnb-format.md`](../cnb-format.md) §8.1.
 
 ## Texture descriptions
 

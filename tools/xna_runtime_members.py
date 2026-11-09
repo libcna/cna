@@ -912,8 +912,7 @@ def markdown(report: dict, type_total: int, type_represented: int, baseline: boo
             "> **Generated signature-coverage report.**",
             "> [Machine-readable findings](xna-4-runtime-member-coverage.json) are produced by",
             "> `python3 tools/audit_xna_runtime_surface.py --write-reports` from the local Microsoft",
-            "> reference files and current CNA headers. Keep headers unchanged during its Clang pass.",
-            "> This is separate from the [frozen baseline](xna-4-runtime-member-coverage-baseline.md).", ""]
+            "> reference files and current CNA headers. Keep headers unchanged during its Clang pass.", ""]
     lines += [
              "Microsoft runtime XML defines the documented census. Matching Microsoft DLL metadata supplies",
              "return types, static ownership, visibility, accessor shape, and enum values. Clang parses CNA",

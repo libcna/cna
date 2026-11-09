@@ -1,7 +1,7 @@
 <!-- SPDX-License-Identifier: MS-PL -->
 # CNA Input — FNA Fidelity Notes
 
-> **Related input docs (INP-0003):** [backend](input-backend.md) · [FNA fidelity + deviations](input-fna-fidelity.md) · [member-parity matrix](input-member-parity-matrix.md) · [frozen API + tier glossary](input-public-api-frozen.md) · [test coverage](input-test-coverage.md) · [build & test](input-build-and-test.md) · [platform notes](platform-input-notes.md) · [manual results](input-manual-verification-results.md) · [demo checklist](demo-input-checklist.md)
+> **Related input docs (INP-0003):** [backend](input-backend.md) · [FNA fidelity + deviations](input-fna-fidelity.md) · [member-parity matrix](input-member-parity-matrix.md) · [frozen API + tier glossary](input-public-api-frozen.md) · [test coverage](input-test-coverage.md) · [build & test](input-build-and-test.md) · [platform notes](platform-input-notes.md) · [manual hardware checks](demo-input-checklist.md#hardware-verification-record) · [demo checklist](demo-input-checklist.md)
 
 CNA's `Input` namespace uses FNA as its readable reference, with shipped XNA 4.0 behavior
 taking precedence where they differ. This document records FNA agreement, measured XNA decisions,
@@ -251,7 +251,7 @@ identity and GUID formatting (xinput / vendor+product little-endian / Valve over
 **Remaining gaps (real hardware / manual only — NOT a code gap):** the fake proves CNA's
 *translation and bookkeeping* are correct; it cannot prove the *physical device acts* — an actual
 rumble motor spinning, real trigger haptics, a real sensor's live values, or genuine OS hot-plug /
-per-controller GUID. Those stay in `docs/input-manual-verification-results.md`, kept **separate**
+per-controller GUID. Those stay in the hardware verification record of `docs/demo-input-checklist.md`, kept **separate**
 from the fake-backend unit tests above.
 
 ---
@@ -515,7 +515,7 @@ Input is "done" when **all** of these hold — not before:
 
 Coverage is **not** claimed as "100% FNA fidelity". Gamepad translation and public contract mapping
 are headless-tested; real-hardware *actuation* remains manual-only. The open hardware checks are in
-`input-manual-verification-results.md`.
+the hardware verification record of `demo-input-checklist.md`.
 
 ---
 
@@ -546,5 +546,5 @@ Throughout the input docs, a claim is either a **✅ verified fact** (backed by 
 tool — the default for statements citing a `…Test`, the parity/coverage generators, or a compile guard) or
 a **🎯 intended behavior** (implemented and FNA-faithful in code but **not** machine-verified here — e.g.
 real-hardware actuation, live IME, native-Wayland cursor landing). Hardware/human-gated items are recorded
-as 🎯/"not verified" in `input-manual-verification-results.md`, never asserted as ✅. Do not upgrade a 🎯 to
+as 🎯/"not verified" in the hardware verification record of `demo-input-checklist.md`, never asserted as ✅. Do not upgrade a 🎯 to
 ✅ without a green test or a dated manual entry.

@@ -2,7 +2,7 @@
 //
 // CNBF-105: opt-in per-chunk compression.
 //
-// The measurement that justified this is in docs/cnb-compression-measurements.md. What is tested
+// The measurement that justified this is in docs/cnb-format.md §8.1. What is tested
 // here is the part a benchmark cannot check: that turning it on changes nothing a reader can
 // observe, that leaving it off changes nothing at all, and that a hostile compressed chunk is
 // refused before it can allocate anything.

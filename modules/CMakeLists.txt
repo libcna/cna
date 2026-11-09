@@ -39,7 +39,7 @@ option(CNA_USE_SYSTEM_DRACO "Use a system Draco package instead of CNA's pinned 
 # naming the missing codec, exactly as it did before any codec existed, and the writer cannot
 # produce one -- so a build without zstd reads and writes every file it could read and write
 # before. Compression is opt-in per chunk and OFF by default even when the library IS present:
-# docs/cnb-compression-measurements.md shows it costs load time on fast storage.
+# docs/cnb-format.md §8.1 shows it costs load time on fast storage.
 set(CNA_CNB_ZSTD "AUTO" CACHE STRING "Zstandard support for .cnb chunk compression (AUTO/ON/OFF)")
 set_property(CACHE CNA_CNB_ZSTD PROPERTY STRINGS AUTO ON OFF)
 
