@@ -1212,8 +1212,77 @@ TEST(GameTest, RunOneFrameTicksWithoutInitializingOrBeginningARun)
     EXPECT_EQ(game.trace, (std::vector<std::string>{"update", "update"}));
     game.trace.clear();
     ASSERT_TRUE(game.RunFrameEXT());
-    EXPECT_EQ(game.trace, (std::vector<std::string>{"initialize", "load", "begin", "update"}));
+    // No GraphicsDeviceManager, so no IGraphicsDeviceService: XNA's Initialize does not load
+    // content (IL_0032-0048, HND-TQ-19).
+    EXPECT_EQ(game.trace, (std::vector<std::string>{"initialize", "begin", "update"}));
     game.trace.clear();
     game.RunOneFrame();
     EXPECT_EQ(game.trace, (std::vector<std::string>{"update"}));
+}
+
+// HND-TQ-19: XNA Game.Initialize IL_0032-0048 calls LoadContent only through an
+// IGraphicsDeviceService that already has a device. A game without one -- CNA still gives it a
+// device of its own (a CNAEXT) -- is not loaded, and a game with a GraphicsDeviceManager is.
+TEST(GameTest, InitializeLoadsContentOnlyThroughAGraphicsDeviceService)
+{
+    if (!CNA::Runtime::Testing::DefaultPlatformCanCreateWindow()) GTEST_SKIP();
+    class LoadCountingGame final : public Game {
+    public:
+        explicit LoadCountingGame(const bool withManager)
+        {
+            if (withManager) manager = std::make_unique<GraphicsDeviceManager>(this);
+        }
+        std::unique_ptr<GraphicsDeviceManager> manager;
+        int loads = 0;
+    protected:
+        void LoadContent() override { ++loads; }
+        bool BeginDraw() override { return false; }
+    };
+    {
+        LoadCountingGame game(false);
+        game.setIsFixedTimeStepProperty(false);
+        ASSERT_TRUE(game.RunFrameEXT());
+        EXPECT_EQ(game.loads, 0);
+    }
+    {
+        LoadCountingGame game(true);
+        game.setIsFixedTimeStepProperty(false);
+        ASSERT_TRUE(game.RunFrameEXT());
+        EXPECT_EQ(game.loads, 1);
+    }
+}
+
+// HND-TQ-19: XNA Game.Initialize IL_0000-0001 hooks the device service (HookDeviceEvents
+// IL_0000-007f) before its components initialize (IL_0008-0030), so a service a component
+// registers from its own Initialize is not the game's: the game subscribes to none of its events.
+TEST(GameTest, TheGraphicsDeviceServiceIsHookedBeforeComponentsInitialize)
+{
+    if (!CNA::Runtime::Testing::DefaultPlatformCanCreateWindow()) GTEST_SKIP();
+    class RegisteringComponent final : public GameComponent {
+    public:
+        RegisteringComponent(Game& game, Graphics::IGraphicsDeviceService& service)
+            : GameComponent(game), game_(game), service_(service) {}
+        void Initialize() override
+        {
+            game_.getServicesProperty().AddService<Graphics::IGraphicsDeviceService>(&service_);
+            GameComponent::Initialize();
+        }
+    private:
+        Game& game_;
+        Graphics::IGraphicsDeviceService& service_;
+    };
+    class QuietGame final : public Game {
+    protected:
+        bool BeginDraw() override { return false; }
+    };
+    GraphicsDeviceManager lateService;
+    QuietGame game;
+    game.setIsFixedTimeStepProperty(false);
+    RegisteringComponent component(game, lateService);
+    game.getComponentsProperty().Add(&component);
+    ASSERT_TRUE(game.RunFrameEXT());
+    EXPECT_TRUE(lateService.getDeviceCreatedEvent().Empty());
+    EXPECT_TRUE(lateService.getDeviceDisposingEvent().Empty());
+    game.getComponentsProperty().Remove(&component);
+    game.getServicesProperty().RemoveService<Graphics::IGraphicsDeviceService>();
 }
