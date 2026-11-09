@@ -221,23 +221,16 @@ template<typename TCollection, typename TElement>
         result != CNA_RESULT_SUCCESS) {
         return result;
     }
-    // The canonical enumeration hands back raw owning pointers, and the canonical constructor
-    // does NOT adopt the one it is given -- it copies that source's kind and name into its own
-    // object. Sanitizer evidence, not an assumption: leaving the selected source to the
-    // library leaked it. So every enumerated source is destroyed here, the selected one after
-    // the library has copied it.
-    std::vector<MediaSource*> sources = MediaSource::GetAvailableMediaSources();
-    std::vector<std::unique_ptr<MediaSource>> owned;
-    owned.reserve(sources.size());
-    for (MediaSource* const source : sources) {
-        owned.emplace_back(source);
-    }
-    if (static_cast<std::size_t>(sourceIndex) >= owned.size()) {
+    // The canonical enumeration hands back shared sources and the library keeps the one it is
+    // given (HND-TQ-39): the selected source lives as long as the library, the others are
+    // released when this list goes.
+    std::vector<std::shared_ptr<MediaSource>> sources = MediaSource::GetAvailableMediaSources();
+    if (static_cast<std::size_t>(sourceIndex) >= sources.size()) {
         return InvalidArgument("The media source index is out of range.");
     }
     return CreateResourceHandle<MediaLibraryResource>(
         ObjectKind::MediaLibrary,
-        std::make_unique<MediaLibrary>(owned[static_cast<std::size_t>(sourceIndex)].get()),
+        std::make_unique<MediaLibrary>(sources[static_cast<std::size_t>(sourceIndex)]),
         outLibrary);
 }
 
@@ -250,7 +243,7 @@ template<typename TCollection, typename TElement>
         result != CNA_RESULT_SUCCESS) {
         return result;
     }
-    const MediaSource* const source = resource->value->getMediaSourceProperty();
+    const std::shared_ptr<MediaSource> source = resource->value->getMediaSourceProperty();
     if (source == nullptr) {
         return InvalidState("The media library has no media source.");
     }

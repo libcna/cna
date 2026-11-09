@@ -63380,7 +63380,7 @@
         "operator": false,
         "assembly": "Microsoft.Xna.Framework",
         "xna_signature": "Microsoft.Xna.Framework.Media.MediaLibrary.#ctor(Microsoft.Xna.Framework.Media.MediaSource)",
-        "cna_symbol": "modules/media/include/Microsoft/Xna/Framework/Media/MediaLibrary.hpp::MediaLibrary(MediaSource *)",
+        "cna_symbol": "modules/media/include/Microsoft/Xna/Framework/Media/MediaLibrary.hpp::MediaLibrary(std::shared_ptr<MediaSource>)",
         "notes": "",
         "metadata": {
           "kind": "constructor",

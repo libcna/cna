@@ -44,9 +44,12 @@ namespace Microsoft::Xna::Framework::Media
         /**
          * @brief Constructs a MediaLibrary using the specified media source.
          *
-         * @param mediaSource The media source to enumerate.
+         * The library keeps this very source (shared ownership) and returns it from
+         * getMediaSourceProperty(), as XNA stores the reference it is given.
+         *
+         * @param mediaSource The media source to enumerate; may be null.
          */
-        explicit MediaLibrary(MediaSource* mediaSource);
+        explicit MediaLibrary(std::shared_ptr<MediaSource> mediaSource);
 
         /** @brief Releases the resources used by this media library. */
         void Dispose() override;
@@ -82,9 +85,10 @@ namespace Microsoft::Xna::Framework::Media
         /**
          * @brief Gets the media source this library was opened with.
          *
-         * @return Pointer to the MediaSource.
+         * @return The source given to the constructor (the same object), the default library's own
+         *         local-device source, or null when the library was opened on a null source.
          */
-        [[nodiscard]] MediaSource* getMediaSourceProperty() const;
+        [[nodiscard]] std::shared_ptr<MediaSource> getMediaSourceProperty() const;
 
         /**
          * @brief Gets the collection of pictures in this library.
@@ -178,7 +182,7 @@ namespace Microsoft::Xna::Framework::Media
         bool isDisposed_ = false;
         std::string pictureRoot_;
 
-        std::unique_ptr<MediaSource> mediaSource_;
+        std::shared_ptr<MediaSource> mediaSource_;
 
         std::vector<std::unique_ptr<Song>> ownedSongs_;
         std::vector<std::unique_ptr<Genre>> ownedGenres_;

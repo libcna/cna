@@ -20,12 +20,15 @@ namespace Microsoft::Xna::Framework::Media
         return name_;
     }
 
-    std::vector<MediaSource*> MediaSource::GetAvailableMediaSources()
+    std::vector<std::shared_ptr<MediaSource>> MediaSource::GetAvailableMediaSources()
     {
         // No real "device enumeration" concept on desktop -- there is exactly one real source,
         // the local device itself (MEDIA-61; no FNA logic to port, see plan §0).
         // Refresh MediaSource::.ctor IL_000e..0013: English WmpMediaSource resource.
-        return { new MediaSource(MediaSourceType::LocalDevice, "Local Windows Media Player library") };
+        // HND-TQ-39: a managed reference, so shared ownership -- the caller and any MediaLibrary
+        // opened on it hold the same object (owner decision 2026-11-09).
+        return { std::shared_ptr<MediaSource>(
+            new MediaSource(MediaSourceType::LocalDevice, "Local Windows Media Player library")) };
     }
 
     std::string MediaSource::ToString() const

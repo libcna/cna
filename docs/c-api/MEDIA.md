@@ -74,8 +74,9 @@ libraries likewise remain available; “every member except IsDisposed fails” 
 ## The library catalog and pictures
 
 Opening a library scans the platform's music/picture locations. An empty catalog is an ordinary
-result. Source-based creation accepts an enumeration index, copies the chosen source identity/name
-into the native library, then deletes the temporary source list. Only LocalDevice is supported.
+result. Source-based creation accepts an enumeration index; the native library keeps that very
+enumerated source (shared ownership) and the rest of the list is released. Only LocalDevice is
+supported.
 
 Albums, artists, genres, playlists, songs, pictures, picture albums and collections are native
 library-owned objects reached through separately owned C view handles. Album equality includes

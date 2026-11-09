@@ -36,8 +36,8 @@ using Microsoft::Xna::Framework::Media::Song;
 using Microsoft::Xna::Framework::Media::SongCollection;
 using Microsoft::Xna::Framework::Media::VisualizationData;
 
-// The canonical enumeration hands back raw `new`-ed sources its caller must delete. This owns that
-// list for the length of one call so no ownership — and no leak — crosses the ABI.
+// The canonical enumeration hands back shared sources; this holds that list for the length of one
+// call, so no ownership crosses the ABI.
 class OwnedMediaSources final {
 public:
     OwnedMediaSources()
@@ -48,22 +48,17 @@ public:
     OwnedMediaSources(const OwnedMediaSources&) = delete;
     OwnedMediaSources& operator=(const OwnedMediaSources&) = delete;
 
-    ~OwnedMediaSources()
-    {
-        for (MediaSource* const source : sources_) {
-            delete source;
-        }
-    }
+    ~OwnedMediaSources() = default;
 
     [[nodiscard]] std::size_t Count() const noexcept { return sources_.size(); }
 
     [[nodiscard]] const MediaSource* At(const std::size_t index) const noexcept
     {
-        return sources_[index];
+        return sources_[index].get();
     }
 
 private:
-    std::vector<MediaSource*> sources_;
+    std::vector<std::shared_ptr<MediaSource>> sources_;
 };
 
 template<typename TRead>

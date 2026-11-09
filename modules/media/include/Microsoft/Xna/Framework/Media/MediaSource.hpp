@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MS-PL
 #pragma once
 
+#include <memory>
 #include <string>
 #include <vector>
 
@@ -33,9 +34,12 @@ namespace Microsoft::Xna::Framework::Media
         /**
          * @brief Returns all available media sources on the current device.
          *
-         * @return Vector of available MediaSource pointers.
+         * Every call creates fresh source objects, as XNA's does. They are shared: a MediaLibrary
+         * opened on one keeps that very object alive and returns it from getMediaSourceProperty().
+         *
+         * @return The available media sources.
          */
-        static std::vector<MediaSource*> GetAvailableMediaSources();
+        static std::vector<std::shared_ptr<MediaSource>> GetAvailableMediaSources();
 
         /**
          * @brief Returns a string representation of this media source.

@@ -86,17 +86,17 @@ namespace Microsoft::Xna::Framework::Media
     MediaLibrary::MediaLibrary()
     {
         // Refresh MediaSource::.ctor IL_000e..0013: English WmpMediaSource resource.
-        mediaSource_ = std::unique_ptr<MediaSource>(
+        mediaSource_ = std::shared_ptr<MediaSource>(
             new MediaSource(MediaSourceType::LocalDevice, "Local Windows Media Player library"));
         BuildFromRoots(CNA::Internal::Media::MediaLibraryPaths::GetMusicRoot(),
                         CNA::Internal::Media::MediaLibraryPaths::GetPictureRoot());
     }
 
-    MediaLibrary::MediaLibrary(MediaSource* mediaSource)
+    MediaLibrary::MediaLibrary(std::shared_ptr<MediaSource> mediaSource)
     {
-        // Refresh MediaLibrary::.ctor(MediaSource) IL_005e..0065 accepts null.
-        // Keep CNA's existing owned-copy policy for non-null inputs; managed reference
-        // identity and native lifetime mapping are a separate unresolved decision.
+        // Refresh MediaLibrary::.ctor(MediaSource) IL_005e..0065 accepts null and stores the exact
+        // reference; get_MediaSource IL_001e..0024 returns it. Shared ownership keeps that identity
+        // and keeps the source alive as long as the library (HND-TQ-39, owner decision 2026-11-09).
         if (mediaSource != nullptr)
         {
             if (mediaSource->getMediaSourceTypeProperty() != MediaSourceType::LocalDevice)
@@ -104,8 +104,7 @@ namespace Microsoft::Xna::Framework::Media
                 throw System::NotSupportedException(
                     "Only MediaSourceType::LocalDevice is supported.");
             }
-            mediaSource_ = std::unique_ptr<MediaSource>(
-                new MediaSource(mediaSource->getMediaSourceTypeProperty(), mediaSource->getNameProperty()));
+            mediaSource_ = std::move(mediaSource);
         }
         BuildFromRoots(CNA::Internal::Media::MediaLibraryPaths::GetMusicRoot(),
                         CNA::Internal::Media::MediaLibraryPaths::GetPictureRoot());
@@ -465,10 +464,10 @@ namespace Microsoft::Xna::Framework::Media
         return isDisposed_;
     }
 
-    MediaSource* MediaLibrary::getMediaSourceProperty() const
+    std::shared_ptr<MediaSource> MediaLibrary::getMediaSourceProperty() const
     {
         ThrowIfDisposed(isDisposed_, "MediaLibrary");
-        return mediaSource_.get();
+        return mediaSource_;
     }
 
     PictureCollection* MediaLibrary::getPicturesProperty() const

@@ -52,7 +52,35 @@ TEST_F(MediaLibraryTestFixture, MediaSourceConstructorAcceptsTheRealLocalDeviceS
     EXPECT_EQ(fromSource.getMediaSourceProperty()->getNameProperty(), "Local Windows Media Player library");
     EXPECT_EQ(library->getMediaSourceProperty()->ToString(), "Local Windows Media Player library");
     EXPECT_GT(fromSource.getSongsProperty()->getCountProperty(), 0);
-    delete sources[0];
+}
+
+// HND-TQ-39 (owner decision 2026-11-09): Refresh MediaLibrary::.ctor(MediaSource) IL_005e..0065
+// stores the exact reference and get_MediaSource IL_001e..0024 returns it. CNA's library shares
+// the very object it was given, so identity holds and the source outlives the caller's own copy.
+TEST_F(MediaLibraryTestFixture, TheLibraryReturnsTheVerySourceItWasOpenedOnAndKeepsItAlive)
+{
+    auto sources = MediaSource::GetAvailableMediaSources();
+    ASSERT_EQ(sources.size(), 1u);
+    const MediaSource* const given = sources[0].get();
+    MediaLibrary library(sources[0]);
+    EXPECT_EQ(library.getMediaSourceProperty().get(), given);
+    EXPECT_TRUE(library.getMediaSourceProperty()->Equals(given));
+
+    // Another enumeration is another object, and a library opened on it returns that one.
+    auto again = MediaSource::GetAvailableMediaSources();
+    MediaLibrary other(again[0]);
+    EXPECT_EQ(other.getMediaSourceProperty().get(), again[0].get());
+    EXPECT_NE(other.getMediaSourceProperty().get(), given);
+
+    // The caller lets go of its sources; the libraries still hold theirs.
+    const std::weak_ptr<MediaSource> watched = sources[0];
+    sources.clear();
+    again.clear();
+    ASSERT_FALSE(watched.expired());
+    EXPECT_EQ(library.getMediaSourceProperty().get(), given);
+    EXPECT_EQ(library.getMediaSourceProperty()->getNameProperty(), "Local Windows Media Player library");
+    library.Dispose();
+    EXPECT_FALSE(watched.expired()) << "disposal is not destruction; the C++ object owns the reference";
 }
 
 TEST_F(MediaLibraryTestFixture, NullSourceConstructorRetainsNullAsRefreshDoes)
