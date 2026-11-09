@@ -261,11 +261,21 @@ namespace Microsoft::Xna::Framework::Graphics
 
     void Texture::Dispose(bool disposing)
     {
-        if (!isDisposed_ && graphicsDevice_ != nullptr)
+        // A texture whose device's disposal released it may outlive the device object itself.
+        if (!isDisposed_ && graphicsDevice_ != nullptr && !graphicsDeviceLifetime_.expired())
         {
             graphicsDevice_->getTexturesProperty().RemoveDisposedTexture(this);
             graphicsDevice_->getVertexTexturesProperty().RemoveDisposedTexture(this);
         }
         GraphicsResource::Dispose(disposing);
+    }
+
+    void Texture::ReleaseNativeResourcesForDeviceTeardown()
+    {
+        if (graphicsDevice_ != nullptr && !graphicsDeviceLifetime_.expired())
+        {
+            graphicsDevice_->getTexturesProperty().RemoveDisposedTexture(this);
+            graphicsDevice_->getVertexTexturesProperty().RemoveDisposedTexture(this);
+        }
     }
 }

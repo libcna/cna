@@ -1216,34 +1216,62 @@ namespace Microsoft::Xna::Framework::Graphics
             return;
         }
 
-        // Match FNA's lifecycle boundary: the device becomes disposed before callbacks or owned
-        // resources run. This makes reentrant Dispose idempotent and prevents a Disposing handler
-        // from issuing work against native objects that are in the process of being torn down.
+        // Refresh '!GraphicsDevice' IL_000b-000d publishes isDisposed before anything else, which
+        // makes reentrant Dispose idempotent.
         isDisposed_ = true;
 
-        // Only an explicit disposal notifies subscribers; XNA's finalizer path takes the native
-        // teardown without raising the event.
+        // '!GraphicsDevice' IL_0012-0020 -> DeviceResourceManager::ReleaseAllDeviceResources
+        // IL_009e-00a7: every tracked child gets ReleaseNativeObject(false). Only its native object
+        // goes; it stays IsDisposed == false, raises neither Disposing nor ResourceDestroyed, and a
+        // later use or Dispose of it finds the native object gone. FNA instead disposes every child
+        // (GraphicsDevice.Dispose(bool)); XNA wins.
+        ReleaseTrackedResourcesForTeardownInternal();
+
+        // '~GraphicsDevice' IL_0008-0021 raises Disposing only after that release, and only for an
+        // explicit disposal: the finalizer path Dispose(false) does not notify. The renderer is
+        // destroyed after the event, so CNA-internal subscribers (GraphicsDeviceManager's frame
+        // context lease) still release renderer state while it exists; what a handler can observe
+        // of the device and its resources is XNA's released state.
+        std::exception_ptr disposingFailure;
         if (disposing)
         {
-            Disposing.Raise(this, System::EventArgs::Empty);
+            try
+            {
+                Disposing.Raise(this, System::EventArgs::Empty);
+            }
+            catch (...)
+            {
+                // XNA's native teardown is complete before the event, so a throwing handler cannot
+                // keep the renderer alive here either.
+                disposingFailure = std::current_exception();
+            }
+            // A handler may have copied a released texture; no wrapper may outlive the renderer
+            // holding native ownership.
+            ReleaseTrackedResourcesForTeardownInternal();
         }
-
-        // Copy and clear the resource list before iterating.
-        // This makes RemoveResourceReference a no-op when called re-entrantly
-        // from within the resources' own Dispose() methods (matches FNA pattern).
-        std::vector<GraphicsResource*> toDispose;
-        {
-            const std::scoped_lock lock(resourcesMutex_);
-            toDispose = std::move(resources_);
-            resources_.clear();
-        }
-
-        for (GraphicsResource* res : toDispose)
-            static_cast<System::IDisposable*>(res)->Dispose();
 
         // Order matters: the window goes first, because the video subsystem is what backs it.
         destroyNativeResources();
         setVideoSubsystemAcquired(false);
+        if (disposingFailure)
+            std::rethrow_exception(disposingFailure);
+    }
+
+    void GraphicsDevice::ReleaseTrackedResourcesForTeardownInternal()
+    {
+        // Taking the list makes RemoveResourceReference a no-op for these children afterwards.
+        std::vector<GraphicsResource*> toRelease;
+        {
+            const std::scoped_lock lock(resourcesMutex_);
+            toRelease = std::move(resources_);
+            resources_.clear();
+        }
+        if (toRelease.empty())
+            return;
+        // Renderer members release native handles in this device's own context.
+        const auto contextLease = AcquireRendererThreadContextLease();
+        for (GraphicsResource* resource : toRelease)
+            resource->ReleaseNativeObjectForDeviceTeardownInternal();
     }
 
     void GraphicsDevice::OnResourceCreated(System::Object* resource)

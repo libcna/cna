@@ -179,6 +179,30 @@ namespace Microsoft::Xna::Framework::Graphics
             const CNA::Diagnostics::ResourceDescriptor& descriptor) noexcept;
 #endif
 
+        /**
+         * @brief Releases this resource's renderer objects because its device is being disposed.
+         *
+         * Refresh `DeviceResourceManager::ReleaseAllDeviceResources` IL_009e-00a7 calls each
+         * tracked child's `ReleaseNativeObject(false)`: the native object goes, but the managed
+         * object keeps `IsDisposed == false` and raises neither `Disposing` nor the device's
+         * `ResourceDestroyed` (`ReleaseAllReferences` IL_0040-0041 skips it for `false`). An
+         * override releases what its own Dispose(bool) would release natively, and chains to its
+         * base. It runs once, while the device's renderer still exists.
+         */
+        virtual void ReleaseNativeResourcesForDeviceTeardown();
+
+        /**
+         * @brief Whether this resource has no native object left.
+         *
+         * True after disposal and after the owning device's disposal released it. XNA refuses both
+         * the same way: its members call `Helpers.CheckDisposed(this, pComPtr)`, which throws
+         * `ObjectDisposedException` for a null native pointer (Microsoft.Xna.Framework.dll
+         * `Helpers::CheckDisposed` IL_0000-001d), whatever the managed `IsDisposed` says.
+         *
+         * @return True when the native object is gone.
+         */
+        [[nodiscard]] bool IsNativeObjectReleasedInternal() const noexcept;
+
     private:
         friend class GraphicsDevice;
         struct SharedIdentity;
@@ -186,7 +210,10 @@ namespace Microsoft::Xna::Framework::Graphics
 
         // Untracked identities may still own native children of the device's renderer.
         static void ReleaseDeviceNativeResources(GraphicsDevice& device);
-        virtual void ReleaseNativeResourcesForDeviceTeardown();
+
+        // GraphicsDevice::Dispose(bool) calls this once per tracked child: it records the release
+        // and runs ReleaseNativeResourcesForDeviceTeardown(), leaving the managed state untouched.
+        void ReleaseNativeObjectForDeviceTeardownInternal();
 
         [[nodiscard]] std::shared_ptr<SharedIdentity> EnsureSharedIdentity() const;
         void DetachSharedIdentity();
@@ -219,5 +246,7 @@ namespace Microsoft::Xna::Framework::Graphics
     private:
         mutable std::shared_ptr<SharedIdentity> sharedIdentity_;
         mutable std::shared_ptr<SharedMetadata> sharedMetadata_;
+        // XNA's null pComPtr after ReleaseAllDeviceResources: set by device teardown, never cleared.
+        bool nativeObjectReleasedByDevice_ = false;
     };
 }

@@ -109,7 +109,7 @@ namespace Microsoft::Xna::Framework::Graphics
          * @brief Releases the native query renderer before the base class marks this resource
          * disposed (SOKOL-42).
          *
-         * `GraphicsDevice::Dispose()` disposes tracked resources before tearing down the renderer
+         * `GraphicsDevice::Dispose()` releases tracked resources before tearing down the renderer
          * device/GL context; without this override the renderer_ object below would only be
          * destroyed whenever this OcclusionQuery's own C++ destructor happens to run, which may be
          * long after that teardown -- e.g. a raw `glDeleteQueries` call after `sg_shutdown()` and
@@ -118,6 +118,12 @@ namespace Microsoft::Xna::Framework::Graphics
          * @param disposing True when called from Dispose(); false when called from the finalizer.
          */
         void Dispose(bool disposing) override;
+
+        /**
+         * @brief Releases the renderer query when the owning device is disposed, leaving the query
+         *        undisposed (Refresh OcclusionQuery::ReleaseNativeObject IL_0000-0032).
+         */
+        void ReleaseNativeResourcesForDeviceTeardown() override;
 
     private:
         /**

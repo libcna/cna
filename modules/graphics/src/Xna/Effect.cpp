@@ -1006,10 +1006,22 @@ namespace Microsoft::Xna::Framework::Graphics
     {
         if (!isDisposed_)
         {
-            if (device_ != nullptr) device_->ClearCurrentEffectIf(this);
+            // An effect released by its device's disposal may outlive the device object itself.
+            if (device_ != nullptr && !graphicsDeviceLifetime_.expired())
+                device_->ClearCurrentEffectIf(this);
             compiledRuntime_.reset();
         }
         GraphicsResource::Dispose(disposing);
+    }
+
+    void Effect::ReleaseNativeResourcesForDeviceTeardown()
+    {
+        // Effect::ReleaseNativeObject IL_000e-0034 releases the ID3DXEffect and nothing managed:
+        // techniques, parameters and their values stay readable, while EffectPass.Apply, the
+        // CurrentTechnique setter and Clone refuse through CheckDisposed (pComPtr is null).
+        if (device_ != nullptr && !graphicsDeviceLifetime_.expired())
+            device_->ClearCurrentEffectIf(this);
+        compiledRuntime_.reset();
     }
 
     bool Effect::RaisesDisposingEventInternal() const noexcept
@@ -1023,7 +1035,8 @@ namespace Microsoft::Xna::Framework::Graphics
 
     void Effect::ThrowIfDisposedForCloneInternal() const
     {
-        if (isDisposed_)
+        // Effect::.ctor(Effect) CheckDisposed(cloneSource, pComPtr): disposal or device release.
+        if (IsNativeObjectReleasedInternal())
             throw System::ObjectDisposedException(getNameProperty());
     }
 
@@ -1044,7 +1057,8 @@ namespace Microsoft::Xna::Framework::Graphics
 
     void Effect::setCurrentTechniqueProperty(EffectTechnique* value)
     {
-        if (isDisposed_)
+        // set_CurrentTechnique's CheckDisposed tests pComPtr: disposal or device release.
+        if (IsNativeObjectReleasedInternal())
             throw System::ObjectDisposedException(getNameProperty());
         if (value == nullptr)
             throw System::ArgumentNullException("value");
@@ -1073,7 +1087,7 @@ namespace Microsoft::Xna::Framework::Graphics
 
     void Effect::ApplyPassInternal(std::uint32_t passIndex)
     {
-        if (isDisposed_)
+        if (IsNativeObjectReleasedInternal())
             throw System::ObjectDisposedException(getNameProperty());
         OnApply();
 

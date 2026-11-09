@@ -256,7 +256,8 @@ namespace Microsoft::Xna::Framework::Graphics
 
     void RenderTarget2D::Dispose(bool disposing)
     {
-        if (!isDisposed_ && graphicsDevice_ != nullptr &&
+        // A target released by its device's disposal may outlive the device object itself.
+        if (!isDisposed_ && graphicsDevice_ != nullptr && !graphicsDeviceLifetime_.expired() &&
             !graphicsDevice_->getIsDisposedProperty())
         {
             for (const auto& binding : graphicsDevice_->GetRenderTargets())
@@ -270,6 +271,14 @@ namespace Microsoft::Xna::Framework::Graphics
         // into the object owned by Texture2D::renderer_ (a shared_ptr, just reset() above) --
         // left uncleared, GetRenderTargetRenderer() would return a dangling pointer after
         // disposal, a use-after-free the instant any caller dereferenced it.
+        rtRenderer_ = nullptr;
+    }
+
+    void RenderTarget2D::ReleaseNativeResourcesForDeviceTeardown()
+    {
+        // RenderTarget2D::ReleaseNativeObject IL_0000-0012: Texture2D's release, then the
+        // RenderTargetHelper surfaces. rtRenderer_ points into the object just released.
+        Texture2D::ReleaseNativeResourcesForDeviceTeardown();
         rtRenderer_ = nullptr;
     }
 }

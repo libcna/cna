@@ -135,6 +135,8 @@ namespace Microsoft::Xna::Framework::Graphics
         , tag_(other.getTagProperty())
         , isDisposed_(false)
         , sharedMetadata_(other.sharedMetadata_)
+        // A copy wraps the same native object, so it shares that object's release by the device.
+        , nativeObjectReleasedByDevice_(other.nativeObjectReleasedByDevice_)
         // Disposing handlers deliberately not copied: each object owns its lifecycle
     {
 #if CNA_DIAGNOSTICS_LEVEL >= 1
@@ -157,6 +159,7 @@ namespace Microsoft::Xna::Framework::Graphics
             tag_ = other.getTagProperty();
             sharedMetadata_ = other.sharedMetadata_;
             isDisposed_ = false;
+            nativeObjectReleasedByDevice_ = other.nativeObjectReleasedByDevice_;
             // No diagnostic registration is made here. Every caller of this operator (BlendState,
             // DepthStencilState, RasterizerState, SamplerState, VertexDeclaration) follows it with
             // ShareResourceIdentityWith(), which makes this object an alias of `other` and drops
@@ -180,6 +183,7 @@ namespace Microsoft::Xna::Framework::Graphics
         , diagnosticResource_(std::move(other.diagnosticResource_))
 #endif
         , sharedMetadata_(std::move(other.sharedMetadata_))
+        , nativeObjectReleasedByDevice_(other.nativeObjectReleasedByDevice_)
     {
         if (other.sharedIdentity_)
         {
@@ -224,6 +228,7 @@ namespace Microsoft::Xna::Framework::Graphics
                 name_ = std::move(other.name_);
                 tag_ = other.tag_;
                 isDisposed_ = other.isDisposed_;
+                nativeObjectReleasedByDevice_ = other.nativeObjectReleasedByDevice_;
 #if CNA_DIAGNOSTICS_LEVEL >= 1
                 diagnosticResource_ = std::move(other.diagnosticResource_);
 #endif
@@ -263,6 +268,7 @@ namespace Microsoft::Xna::Framework::Graphics
             name_ = std::move(other.name_);
             tag_ = other.tag_;
             isDisposed_ = other.isDisposed_;
+            nativeObjectReleasedByDevice_ = other.nativeObjectReleasedByDevice_;
 #if CNA_DIAGNOSTICS_LEVEL >= 1
             diagnosticResource_ = std::move(other.diagnosticResource_);
 #endif
@@ -443,11 +449,15 @@ namespace Microsoft::Xna::Framework::Graphics
         // ResourceDestroyed subscriber throws; an exception from Disposing replaces that one.
         // A resource whose constructor never announced it is not reported as destroyed either:
         // XNA's DeviceResourceManager::ReleaseAllReferences IL_0021-0026 finds no tracked entry.
+        // Nor is one whose native object the device's disposal already released: Texture2D,
+        // VertexBuffer and the other ReleaseNativeObject overrides (e.g. Texture2D IL_0027-003c)
+        // reach ReleaseAllReferences -- and so FireDestroyedEvent -- only for a live pComPtr.
         const bool announced = !TakeUnannounced(this);
         std::exception_ptr destroyedFailure;
         try
         {
-            if (announced && graphicsDevice_ && !graphicsDeviceLifetime_.expired())
+            if (announced && !nativeObjectReleasedByDevice_ && graphicsDevice_ &&
+                !graphicsDeviceLifetime_.expired())
                 graphicsDevice_->OnResourceDestroyed(getNameProperty(), getTagProperty());
         }
         catch (...)
@@ -602,6 +612,20 @@ namespace Microsoft::Xna::Framework::Graphics
 
     void GraphicsResource::ReleaseNativeResourcesForDeviceTeardown()
     {
+    }
+
+    void GraphicsResource::ReleaseNativeObjectForDeviceTeardownInternal()
+    {
+        // ReleaseAllDeviceResources IL_009e-00a3 skips an entry already released as disposed.
+        if (isDisposed_ || nativeObjectReleasedByDevice_)
+            return;
+        nativeObjectReleasedByDevice_ = true;
+        ReleaseNativeResourcesForDeviceTeardown();
+    }
+
+    bool GraphicsResource::IsNativeObjectReleasedInternal() const noexcept
+    {
+        return nativeObjectReleasedByDevice_ || getIsDisposedProperty();
     }
 
     std::unique_ptr<CNA::Internal::Renderers::IRendererThreadContextLease>

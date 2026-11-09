@@ -3,6 +3,7 @@
 #include "CNA/TestSupport/EmptyServiceProvider.hpp"
 #include <gtest/gtest.h>
 #include "System/InvalidOperationException.hpp"
+#include "System/ObjectDisposedException.hpp"
 
 #include "CNA/GraphicsCapability.hpp"
 #include "CNA/Internal/Json.hpp"
@@ -1427,7 +1428,13 @@ TEST(Fna3dCompiledEffectTest, DeviceDisposalReleasesCompiledEffectBeforeRenderer
     effect->getCurrentTechniqueProperty()->getPassesProperty()[0]->Apply();
 
     EXPECT_NO_THROW(device.Dispose());
-    EXPECT_TRUE(effect->getIsDisposedProperty());
+    // HND-TQ-47 R2: Refresh ReleaseAllDeviceResources IL_009e-00a7 releases the effect's native
+    // object (Effect::ReleaseNativeObject IL_000e-0034) before the renderer goes, without
+    // disposing the effect; EffectPass.Apply IL_0000-001c then refuses it.
+    EXPECT_FALSE(effect->getIsDisposedProperty());
+    EXPECT_EQ(effect->GetCompiledRuntimePtr(), nullptr);
+    EXPECT_THROW(effect->getCurrentTechniqueProperty()->getPassesProperty()[0]->Apply(),
+                 System::ObjectDisposedException);
     EXPECT_NO_THROW(effect.reset());
 }
 

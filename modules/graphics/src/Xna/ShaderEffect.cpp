@@ -153,6 +153,12 @@ namespace Microsoft::Xna::Framework::Graphics
         Effect::Dispose(disposing);
     }
 
+    void ShaderEffect::ReleaseNativeResourcesForDeviceTeardown()
+    {
+        effectRenderer_.reset();
+        Effect::ReleaseNativeResourcesForDeviceTeardown();
+    }
+
     const std::string& ShaderEffect::getVertexSourceProperty() const { return vertSrc_; }
     const std::string& ShaderEffect::getFragmentSourceProperty() const { return fragSrc_; }
     const std::string& ShaderEffect::GetVertexSource() const { return vertSrc_; }

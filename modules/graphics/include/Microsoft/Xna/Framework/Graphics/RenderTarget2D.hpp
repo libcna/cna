@@ -66,6 +66,12 @@ namespace Microsoft::Xna::Framework::Graphics
          */
         void Dispose(bool disposing) override;
 
+        /**
+         * @brief Releases the target's renderer surfaces when the owning device is disposed,
+         *        leaving it undisposed (Refresh RenderTarget2D::ReleaseNativeObject IL_0000-0012).
+         */
+        void ReleaseNativeResourcesForDeviceTeardown() override;
+
         /** @brief Copy construction is unavailable because a render target has unique wrapper identity. */
         CNAEXT RenderTarget2D(const RenderTarget2D&) = delete;
         /** @brief Copy assignment is unavailable because a render target has unique wrapper identity. */

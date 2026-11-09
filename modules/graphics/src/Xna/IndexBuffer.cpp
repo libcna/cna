@@ -299,6 +299,13 @@ namespace Microsoft::Xna::Framework::Graphics
         GraphicsResource::Dispose(disposing);
     }
 
+    void IndexBuffer::ReleaseNativeResourcesForDeviceTeardown()
+    {
+        // IndexBuffer::ReleaseNativeObject IL_0000-002b: the native buffer only. The device's
+        // lease is already held.
+        renderer_.reset();
+    }
+
     GetTypeNameCPP(IndexBuffer, "Microsoft.Xna.Framework.Graphics.IndexBuffer")
 
     void IndexBuffer::SetData(const std::uint16_t* data, int count)
@@ -365,7 +372,7 @@ namespace Microsoft::Xna::Framework::Graphics
                                         const int elementCount,
                                         const IndexElementSize dataElementSize)
     {
-        if (getIsDisposedProperty())
+        if (IsNativeObjectReleasedInternal())
             throw System::ObjectDisposedException(DisposedObjectName(*this));
         if (dataElementSize != indexElementSize_)
             throw System::ArgumentException(
@@ -396,7 +403,7 @@ namespace Microsoft::Xna::Framework::Graphics
                                              const bool useOptions)
     {
         const auto contextLease = LeaseRendererContext();
-        if (getIsDisposedProperty())
+        if (IsNativeObjectReleasedInternal())
             throw System::ObjectDisposedException(DisposedObjectName(*this));
         if (data == nullptr)
             throw System::ArgumentNullException(
@@ -500,7 +507,7 @@ namespace Microsoft::Xna::Framework::Graphics
                                              const int elementCount,
                                              const std::size_t elementSize) const
     {
-        if (getIsDisposedProperty())
+        if (IsNativeObjectReleasedInternal())
             throw System::ObjectDisposedException(DisposedObjectName(*this));
         if (data == nullptr)
             throw System::ArgumentNullException(

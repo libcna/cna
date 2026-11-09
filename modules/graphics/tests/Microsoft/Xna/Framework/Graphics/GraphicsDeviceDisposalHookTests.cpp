@@ -110,21 +110,24 @@ TEST(GraphicsDeviceDisposalHookTest, TheDeviceIsAlreadyDisposedWhenDisposingIsRa
     EXPECT_EQ(notifications, 1);
 }
 
-TEST(GraphicsDeviceDisposalHookTest, DisposingHandlersStillSeeTheDevicesResourcesAlive)
+TEST(GraphicsDeviceDisposalHookTest, DisposingHandlersSeeTheResourcesReleasedButNotDisposed)
 {
-    // XNA raises Disposing before the owned-resource cascade, which is the whole point of the
-    // event: a handler gets one last look at resources that are still valid. Had the cascade run
-    // first, every handler written against XNA would be touching disposed objects.
+    // HND-TQ-47 R2: Refresh '~GraphicsDevice' IL_0008-0021 raises Disposing only after
+    // '!GraphicsDevice' IL_0012-0020 ran ReleaseAllDeviceResources, which releases each child's
+    // native object (ReleaseNativeObject(false)) without disposing the child.
     GraphicsDevice device;
     Texture2D texture(device, 4, 4);
-    bool textureAliveInsideHandler = false;
+    bool releasedInsideHandler = false;
+    bool undisposedInsideHandler = false;
     device.Disposing += [&](System::Object*, const System::EventArgs&) {
-        textureAliveInsideHandler = !texture.getIsDisposedProperty();
+        releasedInsideHandler = !texture.HasRenderer();
+        undisposedInsideHandler = !texture.getIsDisposedProperty();
     };
 
     device.Dispose();
-    EXPECT_TRUE(textureAliveInsideHandler);
-    EXPECT_TRUE(texture.getIsDisposedProperty());
+    EXPECT_TRUE(releasedInsideHandler);
+    EXPECT_TRUE(undisposedInsideHandler);
+    EXPECT_FALSE(texture.getIsDisposedProperty());
 }
 
 TEST(GraphicsDeviceDisposalHookTest, TheHookRaisesDisposingOnlyForAnExplicitDisposal)
@@ -142,17 +145,19 @@ TEST(GraphicsDeviceDisposalHookTest, TheHookRaisesDisposingOnlyForAnExplicitDisp
     EXPECT_FALSE(probe.lastDisposing);
 }
 
-TEST(GraphicsDeviceDisposalHookTest, OwnedResourcesAreStillDisposedThroughTheHook)
+TEST(GraphicsDeviceDisposalHookTest, OwnedResourcesAreStillReleasedThroughTheHook)
 {
-    // The resource cascade is the part of disposal a caller depends on most, so it is asserted
-    // through the subclass seam rather than only through the public method.
+    // The native release of owned resources is the part of disposal a caller depends on most, so
+    // it is asserted through the subclass seam rather than only through the public method.
     DeviceDisposeProbe probe;
     Texture2D texture(probe, 4, 4);
-    ASSERT_FALSE(texture.getIsDisposedProperty());
+    ASSERT_TRUE(texture.HasRenderer());
 
     probe.Dispose();
     EXPECT_EQ(probe.hookCalls, 1);
     EXPECT_TRUE(probe.getIsDisposedProperty());
-    EXPECT_TRUE(texture.getIsDisposedProperty())
-        << "a device disposal must still cascade to the resources it owns";
+    EXPECT_FALSE(texture.HasRenderer())
+        << "a device disposal must release the native objects of the resources it owns";
+    // ReleaseAllDeviceResources IL_009e-00a7 -> ReleaseNativeObject(false): released, not disposed.
+    EXPECT_FALSE(texture.getIsDisposedProperty());
 }

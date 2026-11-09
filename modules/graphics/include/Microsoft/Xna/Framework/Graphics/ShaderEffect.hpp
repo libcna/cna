@@ -342,7 +342,7 @@ namespace Microsoft::Xna::Framework::Graphics
          * disposed (SOKOL-42).
          *
          * `Effect::Dispose(bool)` only reaches `GraphicsResource::Dispose(bool)`, which never
-         * touches `effectRenderer_`. `GraphicsDevice::Dispose()` disposes tracked resources before
+         * touches `effectRenderer_`. `GraphicsDevice::Dispose()` releases tracked resources before
          * tearing down the renderer device/GL context, so without this override effectRenderer_ is
          * only destroyed whenever this ShaderEffect's own C++ destructor happens to run -- possibly
          * long after that teardown -- e.g. a raw `glDeleteProgram` call after `sg_shutdown()` and
@@ -351,6 +351,12 @@ namespace Microsoft::Xna::Framework::Graphics
          * @param disposing True when called from Dispose(); false when called from the finalizer.
          */
         void Dispose(bool disposing) override;
+
+        /**
+         * @brief Releases the program when the owning device is disposed, leaving the effect
+         *        undisposed (as Effect's own device-teardown release).
+         */
+        void ReleaseNativeResourcesForDeviceTeardown() override;
 
     private:
 #ifdef CNA_CNAEXT

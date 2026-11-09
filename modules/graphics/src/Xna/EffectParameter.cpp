@@ -542,7 +542,9 @@ namespace Microsoft::Xna::Framework::Graphics
     void EffectParameter::RequireTextureValueUsable(Texture* value) const
     {
         if (value == nullptr) return;
-        if (value->getIsDisposedProperty())
+        // Refresh SetValue(Texture) IL_0005-0015: CheckDisposed(value, value.pStateTracker), which
+        // the device's disposal also cleared (Texture2D::ReleaseNativeObject IL_0000-0018).
+        if (value->IsNativeObjectReleasedInternal())
             throw System::ObjectDisposedException(value->getNameProperty());
 
         GraphicsDevice* const device = value->getGraphicsDeviceProperty();

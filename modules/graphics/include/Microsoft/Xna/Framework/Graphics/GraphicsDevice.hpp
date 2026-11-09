@@ -2283,6 +2283,9 @@ namespace Microsoft::Xna::Framework::Graphics
          */
         void discardOwnedWindow();
         void destroyNativeResources();
+        // Disposal's ReleaseAllDeviceResources: takes the tracked list and releases each child's
+        // native object only (GraphicsResource::ReleaseNativeObjectForDeviceTeardownInternal).
+        void ReleaseTrackedResourcesForTeardownInternal();
         void UpdateViewportFromWindow();
         void SetVirtualResolution(int width, int height);
         void SetPresentationMode(int mode);

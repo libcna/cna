@@ -163,7 +163,8 @@ namespace Microsoft::Xna::Framework::Graphics
 
     void RenderTargetCube::Dispose(bool disposing)
     {
-        if (!isDisposed_ && graphicsDevice_ != nullptr &&
+        // A target released by its device's disposal may outlive the device object itself.
+        if (!isDisposed_ && graphicsDevice_ != nullptr && !graphicsDeviceLifetime_.expired() &&
             !graphicsDevice_->getIsDisposedProperty())
         {
             for (const auto& binding : graphicsDevice_->GetRenderTargets())
@@ -173,6 +174,14 @@ namespace Microsoft::Xna::Framework::Graphics
             }
         }
         TextureCube::Dispose(disposing);
+        rtCubeRenderer_ = nullptr;
+    }
+
+    void RenderTargetCube::ReleaseNativeResourcesForDeviceTeardown()
+    {
+        // RenderTargetCube::ReleaseNativeObject IL_0000-0012: TextureCube's release, then the
+        // RenderTargetHelper surfaces. rtCubeRenderer_ points into the object just released.
+        TextureCube::ReleaseNativeResourcesForDeviceTeardown();
         rtCubeRenderer_ = nullptr;
     }
 

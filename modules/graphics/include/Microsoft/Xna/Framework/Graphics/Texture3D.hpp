@@ -505,6 +505,12 @@ namespace Microsoft::Xna::Framework::Graphics
         /** @brief Releases the renderer 3D texture handle when the resource is disposed. */
         void Dispose(bool disposing) override;
 
+        /**
+         * @brief Releases the renderer 3D texture handle when the owning device is disposed,
+         *        leaving the texture undisposed (Refresh Texture3D::ReleaseNativeObject).
+         */
+        void ReleaseNativeResourcesForDeviceTeardown() override;
+
     private:
         [[nodiscard]] int ValidateTypedTransferEXT(
             const char* api, bool setting, int level, int left, int top, int right, int bottom,

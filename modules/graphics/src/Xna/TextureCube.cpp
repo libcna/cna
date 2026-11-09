@@ -330,6 +330,16 @@ namespace Microsoft::Xna::Framework::Graphics
         Texture::Dispose(disposing);
     }
 
+    void TextureCube::ReleaseNativeResourcesForDeviceTeardown()
+    {
+        // Refresh TextureCube::ReleaseNativeObject IL_0000-0048: the native cube goes, nothing
+        // managed. The device's lease is already held.
+        if (graphicsDevice_ != nullptr && !graphicsDeviceLifetime_.expired())
+            graphicsDevice_->DetachDestroyedRenderTarget(this);
+        renderer_.reset();
+        Texture::ReleaseNativeResourcesForDeviceTeardown();
+    }
+
     std::shared_ptr<System::IDisposable> TextureCube::GetContentDisposalRecord() const
     {
         if (auto record = contentOwnership_.Record()) return record;
@@ -407,7 +417,9 @@ namespace Microsoft::Xna::Framework::Graphics
         const char* api, bool setting, int level, const void* data,
         int startIndex, int elementCount) const
     {
-        if (getIsDisposedProperty())
+        // CheckDisposed tests the native pointer: refused after disposal and after the device's
+        // disposal released it (TextureCube::CopyData, Helpers::CheckDisposed IL_0000-001d).
+        if (IsNativeObjectReleasedInternal())
             throw System::ObjectDisposedException(DisposedObjectName(*this));
         if (data == nullptr)
             throw System::ArgumentNullException("data");

@@ -238,7 +238,9 @@ namespace Microsoft::Xna::Framework::Graphics
 
     // XNA Helpers.CheckDisposed (Microsoft.Xna.Framework.dll IL_000d-0018) throws
     // ObjectDisposedException(obj.GetType().Name), so a disposed RenderTarget2D is reported as
-    // "RenderTarget2D" by the transfers it inherits, not as "Texture2D".
+    // "RenderTarget2D" by the transfers it inherits, not as "Texture2D". It tests the native
+    // pointer (Texture2D::CopyData), so a texture whose device's disposal released it is refused
+    // the same way although its IsDisposed is still false.
     [[nodiscard]] static std::string DisposedObjectName(const Texture& texture)
     {
         const std::string& qualified = texture.GetTypeName();
@@ -660,6 +662,16 @@ namespace Microsoft::Xna::Framework::Graphics
         Texture::Dispose(disposing);
     }
 
+    void Texture2D::ReleaseNativeResourcesForDeviceTeardown()
+    {
+        // Refresh Texture2D::ReleaseNativeObject IL_0000-0048 releases the state tracker and the
+        // IDirect3DTexture9 and nothing managed. The device's lease is already held.
+        if (graphicsDevice_ != nullptr && !graphicsDeviceLifetime_.expired())
+            graphicsDevice_->DetachDestroyedRenderTarget(this);
+        renderer_.reset();
+        Texture::ReleaseNativeResourcesForDeviceTeardown();
+    }
+
     std::shared_ptr<System::IDisposable> Texture2D::GetContentDisposalRecord() const
     {
         if (auto record = contentOwnership_.Record()) return record;
@@ -711,7 +723,7 @@ namespace Microsoft::Xna::Framework::Graphics
         const char* api, bool setting, int level, const void* data,
         int startIndex, int elementCount) const
     {
-        if (isDisposed_)
+        if (IsNativeObjectReleasedInternal())
             throw System::ObjectDisposedException(DisposedObjectName(*this));
         if (!data)
             throw System::ArgumentNullException("data");
@@ -939,7 +951,7 @@ namespace Microsoft::Xna::Framework::Graphics
                                  int startIndex, int elementCount, int elementBytes)
     {
         const auto contextLease = LeaseRendererContext();
-        if (isDisposed_)
+        if (IsNativeObjectReleasedInternal())
             throw System::ObjectDisposedException(DisposedObjectName(*this));
         ValidateCopyArguments(data, startIndex, elementCount);
         ThrowIfDataTransferResourceInUseEXT(true);
@@ -1067,7 +1079,7 @@ namespace Microsoft::Xna::Framework::Graphics
                                            int elementCount)
     {
         const auto contextLease = LeaseRendererContext();
-        if (isDisposed_)
+        if (IsNativeObjectReleasedInternal())
             throw System::ObjectDisposedException(DisposedObjectName(*this));
         ValidateCopyArguments(data, startIndex, elementCount);
         ThrowIfDataTransferResourceInUseEXT(true);
@@ -1667,7 +1679,7 @@ namespace Microsoft::Xna::Framework::Graphics
     void Texture2D::SetDataRGBA(const uint8_t* data, int pixelCount)
     {
         const auto contextLease = LeaseRendererContext();
-        if (isDisposed_)
+        if (IsNativeObjectReleasedInternal())
             throw System::ObjectDisposedException(DisposedObjectName(*this));
         if (format_ != SurfaceFormat::Color)
             throw System::ArgumentException(
@@ -1955,7 +1967,7 @@ namespace Microsoft::Xna::Framework::Graphics
                                  int startIndex, int elementCount, int elementBytes) const
     {
         const auto contextLease = LeaseRendererContext();
-        if (isDisposed_)
+        if (IsNativeObjectReleasedInternal())
             throw System::ObjectDisposedException(DisposedObjectName(*this));
         ValidateCopyArguments(data, startIndex, elementCount);
         ThrowIfDataTransferResourceInUseEXT(false);
@@ -2032,7 +2044,7 @@ namespace Microsoft::Xna::Framework::Graphics
                                            int startIndex, int elementCount) const
     {
         const auto contextLease = LeaseRendererContext();
-        if (isDisposed_)
+        if (IsNativeObjectReleasedInternal())
             throw System::ObjectDisposedException(DisposedObjectName(*this));
         ValidateCopyArguments(data, startIndex, elementCount);
         ThrowIfDataTransferResourceInUseEXT(false);

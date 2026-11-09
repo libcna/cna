@@ -52,6 +52,14 @@ namespace Microsoft::Xna::Framework::Graphics
         GraphicsResource::Dispose(disposing);
     }
 
+    void OcclusionQuery::ReleaseNativeResourcesForDeviceTeardown()
+    {
+        // OcclusionQuery::ReleaseNativeObject IL_0024-0032 clears _isAvailable and pComPtr only.
+        // Begin/End then call through the missing query and IsComplete answers false, exactly as
+        // after Dispose; IsDisposed stays false.
+        renderer_.reset();
+    }
+
     bool OcclusionQuery::getIsCompleteProperty() const
     {
         // XNA records the observation even when the native result is still unavailable. A caller

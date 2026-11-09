@@ -380,6 +380,12 @@ namespace Microsoft::Xna::Framework::Graphics
         /** @brief Releases the GPU index buffer handle when the resource is disposed. */
         void Dispose(bool disposing) override;
 
+        /**
+         * @brief Releases the GPU index buffer handle when the owning device is disposed, leaving
+         *        the buffer undisposed (Refresh IndexBuffer::ReleaseNativeObject IL_0000-002b).
+         */
+        void ReleaseNativeResourcesForDeviceTeardown() override;
+
     private:
         void ThrowIfSetDataResourceInUse(SetDataOptions options, bool useOptions) const;
         void GetDataBytesAtInternal(int offsetInBytes,

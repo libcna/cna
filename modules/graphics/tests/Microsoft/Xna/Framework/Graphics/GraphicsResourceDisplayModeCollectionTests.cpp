@@ -16,6 +16,7 @@
 
 #include <gtest/gtest.h>
 #include "System/ArgumentOutOfRangeException.hpp"
+#include <array>
 #include <memory>
 #include <optional>
 #include <stdexcept>
@@ -32,7 +33,12 @@
 #include "Microsoft/Xna/Framework/Graphics/TextureCube.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexBuffer.hpp"
 #include "System/InvalidOperationException.hpp"
+#include "System/ObjectDisposedException.hpp"
+#include "Microsoft/Xna/Framework/Color.hpp"
+#include "Microsoft/Xna/Framework/Graphics/CubeMapFace.hpp"
 
+using Microsoft::Xna::Framework::Color;
+using Microsoft::Xna::Framework::Graphics::CubeMapFace;
 using Microsoft::Xna::Framework::Graphics::DisplayMode;
 using Microsoft::Xna::Framework::Graphics::DisplayModeCollection;
 using Microsoft::Xna::Framework::Graphics::GraphicsDevice;
@@ -267,8 +273,16 @@ TEST(GraphicsResourceTest, CopiedTexturesAreTrackedAndCanOutliveOwningDevice)
         EXPECT_EQ(device->GetTrackedResourceCount(), baseline + 4);
     }
 
-    EXPECT_TRUE(survivingCopy->getIsDisposedProperty());
-    EXPECT_TRUE(survivingCubeCopy->getIsDisposedProperty());
+    // HND-TQ-47 R2: the device's disposal released each tracked copy's native object without
+    // disposing it (Refresh ReleaseAllDeviceResources IL_009e-00a7); a later use is refused.
+    EXPECT_FALSE(survivingCopy->getIsDisposedProperty());
+    EXPECT_FALSE(survivingCubeCopy->getIsDisposedProperty());
+    EXPECT_FALSE(survivingCopy->HasRenderer());
+    Color pixel;
+    EXPECT_THROW(survivingCopy->GetData(&pixel, 1), System::ObjectDisposedException);
+    std::array<Color, 1> face{};
+    EXPECT_THROW(survivingCubeCopy->GetData(CubeMapFace::PositiveX, face.data(), 1),
+                 System::ObjectDisposedException);
     EXPECT_NO_THROW(survivingCopy.reset());
     EXPECT_NO_THROW(survivingCubeCopy.reset());
 }

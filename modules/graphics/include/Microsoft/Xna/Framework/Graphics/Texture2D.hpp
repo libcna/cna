@@ -731,6 +731,12 @@ namespace Microsoft::Xna::Framework::Graphics
         /** @brief Releases the GPU texture handle when the resource is disposed. */
         void Dispose(bool disposing) override;
 
+        /**
+         * @brief Releases the GPU texture handle when the owning device is disposed, leaving the
+         *        texture undisposed (Refresh Texture2D::ReleaseNativeObject IL_0000-0048).
+         */
+        void ReleaseNativeResourcesForDeviceTeardown() override;
+
     public:
         /**
          * @brief Returns true while the GPU texture handle is allocated.

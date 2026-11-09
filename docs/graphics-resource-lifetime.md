@@ -162,31 +162,42 @@ holds a raw (non-owning) pointer to every resource created with that device.
 `RemoveResourceReference` uses swap-and-pop for O(1) removal; insertion order is not
 preserved.
 
-### Safe disposal order during `GraphicsDevice::Dispose()`
+### What `GraphicsDevice::Dispose()` does to the resources it tracks
 
-The device copies and clears the list before iterating:
+It releases them, it does not dispose them (HND-TQ-47 R2, owner decision 2026-11-09). Refresh
+`'!GraphicsDevice'` IL_0012-0020 calls `DeviceResourceManager::ReleaseAllDeviceResources`, whose
+IL_009e-00a7 call each tracked child's `ReleaseNativeObject(false)`; FNA disposes every child instead.
+CNA follows XNA:
 
 ```cpp
-std::vector<GraphicsResource*> toDispose = std::move(resources_);
-resources_.clear();
-for (GraphicsResource* res : toDispose)
-    static_cast<System::IDisposable*>(res)->Dispose();
-destroyNativeResources();   // SDL context, GPU device, etc.
+isDisposed_ = true;
+ReleaseTrackedResourcesForTeardownInternal();   // each child: ReleaseNativeResourcesForDeviceTeardown()
+if (disposing) Disposing.Raise(...);            // '~GraphicsDevice' IL_0008-0021: after the release
+destroyNativeResources();                       // SDL context, GPU device, etc.
 ```
 
 This means:
 
-1. All public resource-renderer ownership is released **before** the device renderer is torn down.
-   The renderer drains or abandons its native retirement records while its context/device is still
-   valid.
-2. `RemoveResourceReference` is a no-op during device disposal (the list is already
-   empty), so re-entrancy is safe.
-3. The device renderer (`destroyNativeResources()`) is destroyed last.
+1. Every tracked resource's renderer objects are released **before** the device renderer is torn
+   down, under the device's own context lease. The list is taken first, so a later
+   `RemoveResourceReference` is a no-op.
+2. The resource itself is **not** disposed: `IsDisposed` stays false, and neither its `Disposing`
+   nor the device's `ResourceDestroyed` is raised (`ReleaseAllReferences(handle, false)` IL_0040-0041
+   skips `FireDestroyedEvent`). `GraphicsDevice` still returns the device.
+3. A later use refuses the way XNA's `Helpers.CheckDisposed(this, pComPtr)` refuses a null native
+   pointer: `ObjectDisposedException` from every texture/buffer `SetData`/`GetData`, `EffectPass.Apply`,
+   the `CurrentTechnique` setter, `Effect::Clone`, `EffectParameter::SetValue(Texture)` and the
+   texture-collection setter (`GraphicsResource::IsNativeObjectReleasedInternal()`). OcclusionQuery
+   behaves as after its own disposal (TQ-035: `Begin`/`End` throw `NullReferenceException`).
+4. A later `Dispose()` is safe: there is nothing native left to release, `ResourceDestroyed` is not
+   raised, `IsDisposed` becomes true and `Disposing` is raised once (never for Effect/OcclusionQuery).
+5. The device's `Disposing` handlers observe that released state. The renderer itself is destroyed
+   after the event, so CNA-internal subscribers can still release renderer-side state; a handler that
+   throws does not stop the teardown (its exception is rethrown afterwards).
 
-Tracked resources are disposed by `GraphicsDevice::Dispose()`, so their later C++ destructors see
-an already-disposed wrapper. A resource must not outlive the `GraphicsDevice` that owns it: the
-resource keeps a non-owning device pointer, and escaping device tracking (including the move caveat
-below) invalidates that protection.
+A resource may therefore outlive the `GraphicsDevice` object: its own `Dispose(bool)` and destructor
+consult the non-owning device lifetime token before touching the device. Escaping device tracking
+(including the move caveat below) still means its renderer objects are not released with the device.
 
 ---
 
@@ -288,8 +299,9 @@ Some resources (e.g. `BlendState`, `SamplerState`) may be constructed without a
 | When does public ownership end? | On `Dispose()`, with destructor fallback |
 | When is the native handle freed? | Immediately if unused, otherwise after the renderer's completion token/fence |
 | Is double-dispose safe? | Yes — `isDisposed_` guard makes it a no-op |
-| What happens when the device is disposed? | All tracked resources are disposed first, then the device renderer |
+| What happens when the device is disposed? | Every tracked resource's native object is released, then `Disposing` is raised, then the device renderer goes; the resources stay undisposed (XNA `ReleaseAllDeviceResources`) |
 | Do events fire on destructor path? | `ResourceDestroyed` does; `Disposing` does not |
 | Does move transfer the tracking pointer? | Yes — tracking and applicable bindings move to the destination address |
 | Can I use a resource after `Dispose()`? | No — `isDisposed_` is set; GPU handle is null |
+| Can I use a resource after its device's `Dispose()`? | No — transfers, effect application and cloning throw `ObjectDisposedException`; `Dispose()` itself is safe |
 | Must the caller wait for the GPU before disposal? | No — fence/completion-safe retirement is renderer-owned |

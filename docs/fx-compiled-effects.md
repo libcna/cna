@@ -249,8 +249,10 @@ or independently own those textures. Native immutable shader artifacts may be sh
 
 - Disposing an effect that is currently selected removes it from the device; a later draw cannot
   use the dead runtime.
-- Disposing the device disposes the effects it owns, in an order that never dereferences a dead
-  backend.
+- Disposing the device releases the native runtime of every effect it owns before its backend goes,
+  without disposing the effect (XNA `ReleaseAllDeviceResources`): `IsDisposed` stays false, and
+  application, cloning and technique changes then throw ObjectDisposedException. A later `Dispose`
+  is safe.
 - Ordinary presentation-reset tests retain the logical effect. Native context/device recovery
   is a separate path and may rebuild its runtime from retained state; a reset pass is not proof
   of arbitrary driver-loss recovery on every renderer.

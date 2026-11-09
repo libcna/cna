@@ -726,6 +726,12 @@ namespace Microsoft::Xna::Framework::Graphics
         /** @brief Releases the GPU buffer handle when the resource is disposed. */
         void Dispose(bool disposing) override;
 
+        /**
+         * @brief Releases the GPU buffer handle when the owning device is disposed, leaving the
+         *        buffer undisposed (Refresh VertexBuffer::ReleaseNativeObject IL_0000-002b).
+         */
+        void ReleaseNativeResourcesForDeviceTeardown() override;
+
     private:
         static std::unique_ptr<CNA::Internal::Renderers::IVertexBufferRenderer>
         CreateRenderer(GraphicsDevice& device,

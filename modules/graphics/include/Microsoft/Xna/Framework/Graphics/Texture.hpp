@@ -8,12 +8,19 @@
 
 namespace Microsoft::Xna::Framework::Graphics
 {
+    class EffectParameter;
     class Texture3D;
+    class TextureCollection;
     class TextureCube;
 
     /** @brief Abstract base class for all texture types. */
     class Texture : public GraphicsResource
     {
+        // EffectParameter::SetValue(Texture) and TextureCollection's setter refuse a texture with
+        // no native object, as XNA's CheckDisposed on its native pointer does.
+        friend class EffectParameter;
+        friend class TextureCollection;
+
     public:
         using GraphicsResource::Dispose;
 
@@ -188,6 +195,12 @@ namespace Microsoft::Xna::Framework::Graphics
          * @param disposing True when called from Dispose(); false from destructor.
          */
         void Dispose(bool disposing) override;
+
+        /**
+         * @brief Removes this texture from the device's sampler slots when the device's disposal
+         *        releases its native object, as Dispose(bool) does, without disposing it.
+         */
+        void ReleaseNativeResourcesForDeviceTeardown() override;
 
         SurfaceFormat format_ = SurfaceFormat::Color;
         int levelCount_ = 1;

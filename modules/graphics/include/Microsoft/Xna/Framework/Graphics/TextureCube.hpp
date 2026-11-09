@@ -721,6 +721,12 @@ namespace Microsoft::Xna::Framework::Graphics
         /** @brief Releases the renderer cube texture handle when the resource is disposed. */
         void Dispose(bool disposing) override;
 
+        /**
+         * @brief Releases the renderer cube texture handle when the owning device is disposed,
+         *        leaving the texture undisposed (Refresh TextureCube::ReleaseNativeObject).
+         */
+        void ReleaseNativeResourcesForDeviceTeardown() override;
+
     private:
         friend class EnvironmentMapEffect;
         friend struct CNA::Internal::ContentOwnershipAccess;

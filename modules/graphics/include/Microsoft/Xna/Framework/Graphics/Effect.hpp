@@ -285,6 +285,12 @@ namespace Microsoft::Xna::Framework::Graphics
         void Dispose(bool disposing) override;
 
         /**
+         * @brief Releases the compiled runtime when the owning device is disposed, leaving the
+         *        effect undisposed (Refresh Effect::ReleaseNativeObject IL_0000-0049).
+         */
+        void ReleaseNativeResourcesForDeviceTeardown() override;
+
+        /**
          * @brief Throws when this effect cannot be used as a clone source because it is disposed.
          *
          * @throws System::ObjectDisposedException If this effect has been disposed.

@@ -467,6 +467,25 @@ TEST(EffectReflectedApiTest, StringValuesAreIndependentAcrossClones)
     EXPECT_EQ(cp.GetValueString(), "clone-only");
 }
 
+TEST(EffectReflectedApiTest, ATextureReleasedByItsDevicesDisposalIsRefused)
+{
+    // HND-TQ-47 R2: Refresh SetValue(Texture) IL_0005-0015 calls CheckDisposed(value,
+    // value.pStateTracker), which Texture2D::ReleaseNativeObject IL_0000-0018 cleared when the
+    // texture's device was disposed; the texture itself is not disposed.
+    GraphicsDevice released;
+    Texture2D texture(released, 1, 1);
+    released.Dispose();
+    ASSERT_FALSE(texture.getIsDisposedProperty());
+
+    GraphicsDevice device;
+    auto desc = Numeric(EffectParameterClass::Object, EffectParameterType::Texture2D, 1, 1);
+    desc.rawValue.resize(4);
+    auto effect = FromTable(device, std::move(desc));
+    auto& p = *effect->getParametersProperty()[0];
+    EXPECT_THROW(p.SetValue(static_cast<Texture*>(&texture)), System::ObjectDisposedException);
+    EXPECT_THROW(p.SetValue(&texture), System::ObjectDisposedException);
+}
+
 TEST(EffectReflectedApiTest, ActiveTargetRefusalUsesRefreshMessageAndPrecedesParameterType)
 {
     GraphicsDevice device;

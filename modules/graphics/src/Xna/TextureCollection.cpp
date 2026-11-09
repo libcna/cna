@@ -48,7 +48,9 @@ namespace Microsoft::Xna::Framework::Graphics
     {
         if (graphicsDevice_ != nullptr && graphicsDevice_->getIsDisposedProperty())
             throw System::ObjectDisposedException("GraphicsDevice");
-        if (texture != nullptr && texture->getIsDisposedProperty())
+        // Refresh set_Item IL_0025-0039 checks Texture::GetComPtr(): disposal and the release by
+        // its device's disposal are refused alike.
+        if (texture != nullptr && texture->IsNativeObjectReleasedInternal())
         {
             // Refresh Framework Helpers::CheckDisposed IL_000d-001d uses runtime type Name.
             throw System::ObjectDisposedException(texture->GetTypeName().substr(texture->GetTypeName().find_last_of('.') + 1));

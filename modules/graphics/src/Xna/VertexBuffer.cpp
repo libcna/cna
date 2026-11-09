@@ -91,7 +91,8 @@ namespace Microsoft::Xna::Framework::Graphics
 
         // XNA VertexBuffer.CopyData IL_000d-0010 calls Helpers.CheckDisposed(this, ...), which
         // throws ObjectDisposedException(obj.GetType().Name) (Microsoft.Xna.Framework.dll
-        // IL_000d-0018): a disposed DynamicVertexBuffer is named "DynamicVertexBuffer".
+        // IL_000d-0018): a disposed DynamicVertexBuffer is named "DynamicVertexBuffer". The check
+        // is of pComPtr, so a buffer whose device's disposal released it is refused the same way.
         [[nodiscard]] std::string DisposedObjectName(const VertexBuffer& buffer)
         {
             const std::string& qualified = buffer.GetTypeName();
@@ -100,13 +101,14 @@ namespace Microsoft::Xna::Framework::Graphics
         }
 
         void ValidateClassicGetDataArguments(const VertexBuffer& buffer,
+                                             bool nativeObjectReleased,
                                              bool writeOnly,
                                              const void* data,
                                              int startIndex,
                                              int elementCount,
                                              std::size_t elementSize)
         {
-            if (buffer.getIsDisposedProperty())
+            if (nativeObjectReleased)
                 throw System::ObjectDisposedException(DisposedObjectName(buffer));
             if (data == nullptr)
                 throw System::ArgumentNullException(
@@ -315,6 +317,13 @@ namespace Microsoft::Xna::Framework::Graphics
         GraphicsResource::Dispose(disposing);
     }
 
+    void VertexBuffer::ReleaseNativeResourcesForDeviceTeardown()
+    {
+        // VertexBuffer::ReleaseNativeObject IL_0000-002b: the native buffer only. The device's
+        // lease is already held.
+        renderer_.reset();
+    }
+
     GetTypeNameCPP(VertexBuffer, "Microsoft.Xna.Framework.Graphics.VertexBuffer")
 
     bool VertexBuffer::ValidateSetDataRange(const void* data,
@@ -327,7 +336,7 @@ namespace Microsoft::Xna::Framework::Graphics
                                             bool useOptions,
                                             int vertexStride) const
     {
-        if (getIsDisposedProperty())
+        if (IsNativeObjectReleasedInternal())
             throw System::ObjectDisposedException(DisposedObjectName(*this));
 
         if (!rawUpload)
@@ -560,7 +569,7 @@ namespace Microsoft::Xna::Framework::Graphics
     {
         using GpuVertex = CNA::Internal::Graphics::PositionColorStream;
         ValidateClassicGetDataArguments(
-            *this, bufferUsage_ == BufferUsage::WriteOnly,
+            *this, IsNativeObjectReleasedInternal(), bufferUsage_ == BufferUsage::WriteOnly,
             data, startIndex, elementCount, sizeof(GpuVertex));
         std::vector<GpuVertex> packed(static_cast<std::size_t>(elementCount));
         GetDataElementsAtInternal(offsetInBytes, packed.data(), 0, elementCount,
@@ -660,7 +669,7 @@ namespace Microsoft::Xna::Framework::Graphics
     {
         using GpuVertex = CNA::Internal::Graphics::PositionColorTextureStream;
         ValidateClassicGetDataArguments(
-            *this, bufferUsage_ == BufferUsage::WriteOnly,
+            *this, IsNativeObjectReleasedInternal(), bufferUsage_ == BufferUsage::WriteOnly,
             data, startIndex, elementCount, sizeof(GpuVertex));
         std::vector<GpuVertex> packed(static_cast<std::size_t>(elementCount));
         GetDataElementsAtInternal(offsetInBytes, packed.data(), 0, elementCount,
@@ -759,7 +768,7 @@ namespace Microsoft::Xna::Framework::Graphics
     {
         using GpuVertex = CNA::Internal::Graphics::PositionNormalTextureStream;
         ValidateClassicGetDataArguments(
-            *this, bufferUsage_ == BufferUsage::WriteOnly,
+            *this, IsNativeObjectReleasedInternal(), bufferUsage_ == BufferUsage::WriteOnly,
             data, startIndex, elementCount, sizeof(GpuVertex));
         std::vector<GpuVertex> packed(static_cast<std::size_t>(elementCount));
         GetDataElementsAtInternal(offsetInBytes, packed.data(), 0, elementCount,
@@ -855,7 +864,7 @@ namespace Microsoft::Xna::Framework::Graphics
     {
         using GpuVertex = CNA::Internal::Graphics::PositionTextureStream;
         ValidateClassicGetDataArguments(
-            *this, bufferUsage_ == BufferUsage::WriteOnly,
+            *this, IsNativeObjectReleasedInternal(), bufferUsage_ == BufferUsage::WriteOnly,
             data, startIndex, elementCount, sizeof(GpuVertex));
         std::vector<GpuVertex> packed(static_cast<std::size_t>(elementCount));
         GetDataElementsAtInternal(offsetInBytes, packed.data(), 0, elementCount,
@@ -941,7 +950,7 @@ namespace Microsoft::Xna::Framework::Graphics
         // InvalidOperationException (IL_00eb-0100).
         using GpuVertex = CNA::Internal::Graphics::PositionNormalTextureSkinnedStream;
         ValidateClassicGetDataArguments(
-            *this, bufferUsage_ == BufferUsage::WriteOnly,
+            *this, IsNativeObjectReleasedInternal(), bufferUsage_ == BufferUsage::WriteOnly,
             data, startIndex, elementCount, sizeof(GpuVertex));
         std::vector<GpuVertex> packed(static_cast<std::size_t>(elementCount));
         GetDataElementsAtInternal(0, packed.data(), 0, elementCount, sizeof(GpuVertex), 0);
@@ -1003,7 +1012,7 @@ namespace Microsoft::Xna::Framework::Graphics
         // TQ-021: the classic GetData<T> contract; see the skinned overload above.
         using GpuVertex = CNA::Internal::Graphics::PositionNormalTangentTextureStream;
         ValidateClassicGetDataArguments(
-            *this, bufferUsage_ == BufferUsage::WriteOnly,
+            *this, IsNativeObjectReleasedInternal(), bufferUsage_ == BufferUsage::WriteOnly,
             data, startIndex, elementCount, sizeof(GpuVertex));
         std::vector<GpuVertex> packed(static_cast<std::size_t>(elementCount));
         GetDataElementsAtInternal(0, packed.data(), 0, elementCount, sizeof(GpuVertex), 0);
@@ -1072,7 +1081,7 @@ namespace Microsoft::Xna::Framework::Graphics
         // TQ-021: the classic GetData<T> contract; see the skinned overload above.
         using GpuVertex = CNA::Internal::Graphics::PositionNormalTangentTextureSkinnedStream;
         ValidateClassicGetDataArguments(
-            *this, bufferUsage_ == BufferUsage::WriteOnly,
+            *this, IsNativeObjectReleasedInternal(), bufferUsage_ == BufferUsage::WriteOnly,
             data, startIndex, elementCount, sizeof(GpuVertex));
         std::vector<GpuVertex> packed(static_cast<std::size_t>(elementCount));
         GetDataElementsAtInternal(0, packed.data(), 0, elementCount, sizeof(GpuVertex), 0);
@@ -1150,7 +1159,7 @@ namespace Microsoft::Xna::Framework::Graphics
                                             SetDataOptions options, bool useOptions)
     {
         const auto contextLease = LeaseRendererContext();
-        if (getIsDisposedProperty())
+        if (IsNativeObjectReleasedInternal())
             throw System::ObjectDisposedException(DisposedObjectName(*this));
         if (stride <= 0)
             throw System::ArgumentException(
@@ -1219,7 +1228,7 @@ namespace Microsoft::Xna::Framework::Graphics
                                                  const bool useOptions)
     {
         const auto contextLease = LeaseRendererContext();
-        if (getIsDisposedProperty())
+        if (IsNativeObjectReleasedInternal())
             throw System::ObjectDisposedException(DisposedObjectName(*this));
         if (data == nullptr)
             throw System::ArgumentNullException(
@@ -1283,7 +1292,7 @@ namespace Microsoft::Xna::Framework::Graphics
                                                  const std::size_t elementSize,
                                                  const int vertexStride) const
     {
-        if (getIsDisposedProperty())
+        if (IsNativeObjectReleasedInternal())
             throw System::ObjectDisposedException(DisposedObjectName(*this));
         if (data == nullptr)
             throw System::ArgumentNullException(
@@ -1334,7 +1343,7 @@ namespace Microsoft::Xna::Framework::Graphics
     void VertexBuffer::GetDataRawEXT(const int offsetInBytes, void* const destination,
                                      const int count, const int stride) const
     {
-        if (getIsDisposedProperty())
+        if (IsNativeObjectReleasedInternal())
             throw System::ObjectDisposedException(DisposedObjectName(*this));
         if (bufferUsage_ == BufferUsage::WriteOnly)
             throw System::NotSupportedException(

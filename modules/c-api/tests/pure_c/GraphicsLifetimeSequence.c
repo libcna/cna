@@ -412,17 +412,28 @@ static int membership_regression(void)
 }
 
 static unsigned exit_disposal_count;
+static unsigned exit_texture_disposal_count;
 
-static void count_exit_disposal(CNA_Handle resource, void* context)
+static void count_exit_disposal(CNA_Handle device, void* context)
 {
-    (void)resource;
+    (void)device;
     (void)context;
     ++exit_disposal_count;
 }
 
+static void count_exit_texture_disposal(CNA_Handle resource, void* context)
+{
+    (void)resource;
+    (void)context;
+    ++exit_texture_disposal_count;
+}
+
 static void require_early_exit_cleanup(void)
 {
-    if (exit_disposal_count != 1U) {
+    /* HND-TQ-47 R2: the device's disposal releases the texture's native object without disposing
+     * it (XNA ReleaseAllDeviceResources), so the device's own Disposing is the cleanup witness and
+     * the texture raises nothing. */
+    if (exit_disposal_count != 1U || exit_texture_disposal_count != 0U) {
         fputs("exit cleanup did not run once before the older finalizer\n", stderr);
         _Exit(1);
     }
@@ -435,6 +446,7 @@ static int standalone_exit_regression(int recreate)
     CNA_Handle device = CNA_INVALID_HANDLE;
     CNA_Handle texture = CNA_INVALID_HANDLE;
     CNA_Handle registration = CNA_INVALID_HANDLE;
+    CNA_Handle device_registration = CNA_INVALID_HANDLE;
     begin_sequence(recreate ? "recreate-exit-regression" : "standalone-exit-regression", 0U);
     /* Represents a library finalizer installed before the latest GPU initialization. */
     REQUIRE(atexit(require_early_exit_cleanup) == 0);
@@ -449,8 +461,10 @@ static int standalone_exit_regression(int recreate)
         EXPECT_RESULT(cna_graphics_device_recreate_renderer_for_multi_sample_count_ext(device, 0), CNA_RESULT_SUCCESS);
     }
     EXPECT_RESULT(cna_texture2d_create(device, &texture_info, &texture), CNA_RESULT_SUCCESS);
-    EXPECT_RESULT(cna_graphics_resource_subscribe_disposing(texture, count_exit_disposal, NULL,
+    EXPECT_RESULT(cna_graphics_resource_subscribe_disposing(texture, count_exit_texture_disposal, NULL,
         &registration), CNA_RESULT_SUCCESS);
+    EXPECT_RESULT(cna_graphics_device_subscribe_event(device, CNA_GRAPHICS_DEVICE_EVENT_DISPOSING,
+        count_exit_disposal, NULL, &device_registration), CNA_RESULT_SUCCESS);
     puts("leaving standalone device/texture/subscription for ordered exit cleanup");
     return 1;
 }

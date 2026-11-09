@@ -219,6 +219,14 @@ namespace Microsoft::Xna::Framework::Graphics
         Texture::Dispose(disposing);
     }
 
+    void Texture3D::ReleaseNativeResourcesForDeviceTeardown()
+    {
+        // Refresh Texture3D::ReleaseNativeObject IL_0000-0048: the native volume goes, nothing
+        // managed. Texture3D::CopyData's CheckDisposed then refuses later transfers.
+        renderer_.reset();
+        Texture::ReleaseNativeResourcesForDeviceTeardown();
+    }
+
     int Texture3D::getWidthProperty() const { return width_; }
     int Texture3D::getHeightProperty() const { return height_; }
     int Texture3D::getDepthProperty() const { return depth_; }
@@ -234,7 +242,7 @@ namespace Microsoft::Xna::Framework::Graphics
         int front, int back, const void* data, int startIndex, int elementCount,
         int elementBytes) const
     {
-        if (getIsDisposedProperty())
+        if (IsNativeObjectReleasedInternal())
             throw System::ObjectDisposedException("Texture3D");
         if (data == nullptr)
             throw System::ArgumentNullException("data");
@@ -380,7 +388,7 @@ namespace Microsoft::Xna::Framework::Graphics
                                       const void* data, int dataLength)
     {
         const auto contextLease = LeaseRendererContext();
-        if (getIsDisposedProperty())
+        if (IsNativeObjectReleasedInternal())
             throw System::ObjectDisposedException("Texture3D");
         if (!data)
             throw System::ArgumentNullException("data", "Texture3D::SetDataPointerEXT: data must not be null");

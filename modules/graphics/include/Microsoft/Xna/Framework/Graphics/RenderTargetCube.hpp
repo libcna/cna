@@ -52,6 +52,12 @@ namespace Microsoft::Xna::Framework::Graphics
          */
         void Dispose(bool disposing) override;
 
+        /**
+         * @brief Releases the target's renderer surfaces when the owning device is disposed,
+         *        leaving it undisposed (Refresh RenderTargetCube::ReleaseNativeObject IL_0000-0012).
+         */
+        void ReleaseNativeResourcesForDeviceTeardown() override;
+
         /** @brief Returns the fully qualified .NET type name. */
         CNAEXT [[nodiscard]] const std::string& GetTypeName() const override;
 

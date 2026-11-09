@@ -367,7 +367,9 @@ TEST(GraphicsDeviceLifecycleTest, DisposalIsReentrantAndReleasesABoundRenderTarg
 
     EXPECT_NO_THROW(gd.Dispose());
     EXPECT_EQ(disposingEvents, 1);
-    EXPECT_TRUE(target.getIsDisposedProperty());
+    // HND-TQ-47 R2: ReleaseAllDeviceResources releases the target's native object only.
+    EXPECT_FALSE(target.HasRenderer());
+    EXPECT_FALSE(target.getIsDisposedProperty());
 }
 
 TEST(TextureCollectionValidationTest, ActiveRenderTargetCannotBindToPixelTextureSlot)

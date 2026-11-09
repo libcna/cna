@@ -23,7 +23,9 @@ namespace Microsoft::Xna::Framework::Graphics
     void EffectPass::Apply()
     {
         if (!owner_) return;
-        if (owner_->getIsDisposedProperty())
+        // Refresh EffectPass::Apply IL_0000-001c: CheckDisposed(effect, effect.pComPtr) refuses a
+        // disposed effect and one whose device's disposal released it.
+        if (owner_->IsNativeObjectReleasedInternal())
             throw System::ObjectDisposedException(owner_->getNameProperty());
 
         const EffectTechnique* current = owner_->getCurrentTechniqueProperty();
