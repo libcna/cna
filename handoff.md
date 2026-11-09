@@ -53,6 +53,21 @@ build (the retained binary links the old FNA3D statically, the old patch no long
 half needs a design decision in the fork (a persistent client-sized copy, or refusing destination
 rectangles), since a `LOAD` of a rotating swapchain image does not preserve the previous presentation.
 
+### Owner answers of 2026-11-09 (~07:20) to every question below
+
+The owner answered all of them; each is now an implementation task (own commit, focused gates, mutation witnesses):
+XACT finite-loop cardinality -- run the measurement campaign now (raw 0-4, flags 0/0x0c, type1/type3, NEW_ON_LOOP
+separately) and follow it; FNA3D-8 SDLGPU -- the fork's driver refuses destination rectangles explicitly; follow XNA
+for HND-TQ-19 (refuse LoadContent without a graphics service; also RankDevices and ExitingEventArgs CNAEXT), HND-TQ-04
+option 1 (DeviceChanged on mounted-volume availability of the selected root), HND-TQ-10 option 2 (Position2 adopts C at
+once), HND-TQ-35 (explicit Stream.Close, a throwing Close does not replace the read exception; service-only device
+lookup beside CNAEXT injection, injection first); HND-TQ-47 R2/TQ-49 D3 (native-release-only device teardown) and R1
+(lazy-clear back buffer); HND-TQ-16 (Refresh XNB acceptance/refusal types with allocation limits kept; .NET 4 binary
+decoding in sharp-runtime and the content route); HND-TQ-22 (content + C API), HND-TQ-25 (C-ABI material texture
+retention and stock-shader clone rendering), HND-TQ-39 (shared lifetime-safe MediaSource identity with a C ownership
+plan); OPENGLES3 compiled effects ON in cmake-build-debug and cmake-build-multi with the 44-case corpus. The owner adds
+the FNA AI policy to CNA himself. The entries below keep their original text until each task lands.
+
 ### Owner questions recorded during the night (not implemented, owner rule)
 
 Each needs the owner's choice; until then CNA keeps its current behaviour. Lane evidence paths are given per entry.
