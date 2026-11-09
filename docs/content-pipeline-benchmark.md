@@ -1,8 +1,5 @@
 # CNA Content Pipeline performance records
 
-> Status: developer performance evidence for `CP-028`, measured 2026-08-29. This is not a released
-> performance guarantee or a CI threshold.
-
 The scheduler harness is `tools/content/benchmark_content_pipeline.py`. It compares explicit
 `--workers 1` with a selected parallel count, hashing sorted relative file paths and contents
 (including `.cna-content-manifest.json`) after each sample. It compares the resulting digest sets
@@ -10,10 +7,11 @@ at the end of each scenario and fails on differences, including differences betw
 at one worker count. Empty directories, permissions and timestamps are not part of this check.
 This tests byte determinism for the selected fixtures, not every custom component or graph.
 
-All timing/size tables on this page are dated historical records. The harness/fixtures/tests remain
-available, but the original binary hashes, full settings and raw samples for every table are not
-retained here. A current run measures the current source/dependency/build configuration rather
-than reproducing old numbers automatically.
+**Status of every table on this page:** developer performance evidence measured on a shared
+developer host with a Debug build (CP-028 on 2026-08-29, XNAP-93 on 2026-09-03, XNAPP-301 on
+2026-09-07). None is a released performance guarantee or a CI threshold, and absolute times must
+not be compared across machines. The original binary hashes, full settings and raw samples are not
+retained here; a current run measures the current source/dependency/build configuration.
 
 Run it from the repository root after building the stock and example custom compilers:
 
@@ -59,20 +57,16 @@ custom parents; every custom writer also produces one bounded child output.
 | one changed image in mixed tree | 0.452893 s | 0.208050 s | 2.177x | 0.468337 s | 0.222804 s |
 | one changed shared dependency, 96 parents | 0.094938 s | 0.076481 s | 1.241x | 0.098621 s | 0.078200 s |
 
-The historical run reports all serial/parallel tree checks passed. Its synthetic custom nodes
+The run reports all serial/parallel tree checks passed. Its synthetic custom nodes
 perform little parsing/encoding; the smaller observed speedup is consistent with a larger share of
 process/graph/staging/hashing/filesystem cost, but these aggregate timers do not profile that share.
 The result supported opt-in parallelism for these mixed directories. The current CLI still
 defaults to one worker; independently authored components need their own reentrancy qualification.
 
-Because this is a shared developer host and a Debug build, absolute times must not be compared
-across machines or used as a release threshold. The harness and retained per-run JSON provide
-a method for comparing matched current configurations after scheduler changes.
+The harness and retained per-run JSON provide a method for comparing matched current
+configurations after scheduler changes.
 
 ## XNAP-93: XNB output and texture-policy costs
-
-> Status: developer performance evidence for `XNAP-93`, measured
-> 2026-09-03. Not a released guarantee and not a CI threshold.
 
 These are end-to-end `cna-content` wall-clock times — process start, source decode, processing,
 serialization and atomic publication all included — so they answer "what does adding this cost a
@@ -161,9 +155,8 @@ What the three sizes say:
   process/coordinator/manifest/fingerprint work; no phase profile here assigns all of it to source
   hashing.
 
-These absolute historical values are not CI thresholds or qualification of other hosts.
-The current size-band and loose timing-ratio tests described here check narrower regressions;
-they do not assert that today's build matches these absolute times.
+The size-band and loose timing-ratio tests described here check narrower regressions; they do not
+assert that a current build matches these absolute times.
 
 ### What this means for a real build
 
@@ -175,14 +168,12 @@ mix before predicting whether block compression, hashing, graph work or a large 
 
 ## XNAPP-301: the XNA routes at size
 
-> Measured 2026-09-07 on this machine, `cmake-build-debug` (a debug build), one asset per run
-> unless the row says otherwise, the fastest of three. The enabled
-> `modules/content-pipeline/tests/CNA/Content/Pipeline/XnaRouteScalingTests.cpp` has four
-> synthetic XNB route tests. These execute when selected, not merely when the project builds.
-> If the small best-of-three run takes at least 20 ms, the larger must take strictly less than
-> eight times as long for four times the input; below that floor the test only reports a ratio.
-> This loose two-point timing gate is not an asymptotic-complexity proof. Values below are the
-> old printed record, not current results.
+Measured in a Debug `cmake-build-debug`, one asset per run unless the row says otherwise, the
+fastest of three. `modules/content-pipeline/tests/CNA/Content/Pipeline/XnaRouteScalingTests.cpp`
+has four synthetic XNB route tests, which execute when selected, not merely when the project
+builds. If the small best-of-three run takes at least 20 ms, the larger must take strictly less
+than eight times as long for four times the input; below that floor the test only reports a ratio.
+This loose two-point timing gate is not an asymptotic-complexity proof.
 
 | Route | Small | Large | Small | Large | Ratio for 4x the input |
 |---|---|---|---:|---:|---:|
@@ -204,20 +195,10 @@ rises from about 1.6 ms at 400 assets to 2.5 ms at 1600 and 4.1 ms at 3200:
 | per asset | 2.10 ms | 1.79 ms | 1.77 ms | 2.03 ms | 2.68 ms | 4.13 ms |
 | exponent over the previous row | — | 0.77 | 0.99 | 1.19 | 1.40 | 1.63 |
 
-The historical all-skip rebuild also grew similarly (542 ms at 400, 3769 ms at 1600), so route
+The all-skip rebuild also grew similarly (542 ms at 400, 3769 ms at 1600), so route
 execution was not required for the observed overhead. Splitting assets into groups of fifty did
 not remove it in that experiment (1.69/2.60 ms per asset versus 1.59/2.48 flat). Three workers
 improved one 1600-asset sample (5068 → 2332 ms), showing that some work could overlap; this does
 not rule out serial coordination, directory effects at other scales or mixed costs. The exact
 root cause was not established by these samples. The current test gates only its 400/1600 pair,
 not every row in the six-size table or all future corpus sizes.
-
-## Current verification
-
-The 2026-11-01 audit checked the scheduler harness, CLI worker dispatch, generator and both scaling
-test files. Stock/custom compiler targets and `CnaContentPipelineTests` build. Privately with
-HEADLESS, all seven route/model scaling tests pass. A reduced harness run (two assets per kind,
-four shared parents, workers 1/2, two iterations) passes all four scenarios' output-file/manifest
-digest checks and emits valid sample JSON. This is a current correctness/scaling-gate and harness
-smoke, not the original 128-asset/seven-sample performance campaign, large-scale RSS profiling or
-semantic renderer/runtime qualification of generated assets.

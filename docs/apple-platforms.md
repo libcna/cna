@@ -1,7 +1,6 @@
 # Apple platforms: macOS and iOS
 
-This page separates build configuration, recorded Apple measurements and current qualification
-limits. `CMAKE_SYSTEM_NAME=Darwin` selects macOS; `iOS` with an `iphoneos` or
+This page separates build configuration from current qualification limits. `CMAKE_SYSTEM_NAME=Darwin` selects macOS; `iOS` with an `iphoneos` or
 `iphonesimulator` sysroot selects an iPhone/iPad device or simulator.
 
 | Target | Current boundary |
@@ -17,23 +16,14 @@ limits. `CMAKE_SYSTEM_NAME=Darwin` selects macOS; `iOS` with an `iphoneos` or
 [removed-renderers.md](removed-renderers.md). Default selection and iOS allow-list membership
 are configuration facts, not a claim of successful iOS SDLGPU rendering.
 
-## Recorded evidence
+## Evidence boundary
 
-The Apple M4 campaign ran native macOS suites and external samples with several renderer families
-before the 2026-10-13 retirement. Its Phase 4 full-tree measurements were recorded at
-`fdd33d2c6`; later tasks checked C API packaging and mobile behavior. The complete AM4 table,
-counts, machine/toolchain details and retired-renderer results remain in this page's Git history.
-They must not be read as tests of the current head or selectors that no longer exist.
-
-The earlier platform campaign also recorded device/simulator application builds at `be4ea08bc`
-and a final device bundle at `49bdf63b8`. The recorded iOS multi-frame pixel probe
-(AM4-120) used the retired METAL renderer. It does not qualify SOFTWARE or SDLGPU pixels today.
-The repository currently records SOFTWARE simulator smoke evidence, while full surviving-renderer
-Apple requalification and SDLGPU on iOS remain open in
-[KNOWN_ISSUES.md](../KNOWN_ISSUES.md#limitations).
-
-The workflow definitions below describe what CI attempts and whether a failure gates the workflow.
-They are not a live report of the latest remote workflow result.
+Native macOS suites, external samples and an iOS multi-frame pixel probe (AM4-120) were recorded
+with renderer families since retired (including METAL); those results do not qualify SOFTWARE or
+SDLGPU today. The surviving evidence is SOFTWARE simulator smoke runs; full surviving-renderer Apple
+requalification and SDLGPU on iOS remain open in [KNOWN_ISSUES.md](../KNOWN_ISSUES.md#limitations).
+The CI definitions below describe what CI attempts and whether a failure gates the workflow, not
+the latest remote result.
 
 ## macOS build
 
@@ -201,7 +191,6 @@ platform window descriptor supports it; Retina backing resolution is not thereby
 DisplayInfo's safe-area extension exists, while XNA TitleSafeArea still reports the full surface;
 neither has iOS notch/home-indicator evidence.
 
-Run `scripts/check-apple-platform-cmake.sh` on a non-Apple host for the mechanical layer.
-It passes in the 2026-11-01 documentation audit. That source/workflow review did not build with
-Xcode, run an Apple application or establish a new remote CI result. Renderer-specific current
-limits remain in [KNOWN_ISSUES.md](../KNOWN_ISSUES.md) and their renderer pages.
+Run `scripts/check-apple-platform-cmake.sh` on a non-Apple host for the mechanical layer; it
+does not build with Xcode or run an Apple application. Renderer-specific limits are in
+[KNOWN_ISSUES.md](../KNOWN_ISSUES.md) and their renderer pages.

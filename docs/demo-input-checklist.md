@@ -4,7 +4,7 @@
 
 `modules/input/examples/demo_input` (`cna_demo_input`) is the interactive input demo. The unit suite
 (`CnaTests`) exercises the input pipeline headlessly, but some behavior can only be confirmed with
-real hardware and a real window — that's what this checklist is for (INPUT-TEST-018 / the input plan's Phase 11 manual-verification tasks; results go in [Hardware verification record](#hardware-verification-record)). Work through it on
+real hardware and a real window — that's what this checklist is for (INPUT-TEST-018 and the P11-001..015 manual-verification checks; results go in [Hardware verification record](#hardware-verification-record)). Work through it on
 each platform you care about; pair it with the platform-specific caveats in
 [`docs/platform-input-notes.md`](platform-input-notes.md).
 
@@ -91,9 +91,9 @@ the cursor to the window centre; **Esc** exits.
 
 The demo was extended to **exercise** these EXT paths end-to-end (they are in the checklist above):
 relative mouse mode + cursor warp (F2/F3, INP-0219), recognized-gesture readout via `ReadGesture`
-(INP-0220), and gamepad light-bar cycling + gyro/accelerometer readout (INP-0221). The demo builds and
-smoke-launches crash-free (2026-07-06, EasyGL/Xvfb). **Their visual/behavioral correctness on real
-hardware is still human/hardware-gated** — see [Hardware verification record](#hardware-verification-record).
+(INP-0220), and gamepad light-bar cycling + gyro/accelerometer readout (INP-0221). **Their
+visual/behavioral correctness on real hardware is human/hardware-gated** — see
+[Hardware verification record](#hardware-verification-record).
 
 ## Still requires separate verification
 
@@ -103,16 +103,13 @@ hardware is still human/hardware-gated** — see [Hardware verification record](
 - **Gestures beyond Tap/FreeDrag/Flick** — the demo enables that subset; DoubleTap/Hold/H-V drag/Pinch are
   covered by `GestureDetectorTests` and `PlatformInputBridgeTouchGestureTest`, not the demo UI.
 - **Cursor-warp landing pixel on native Wayland** — X11/XWayland only (compositor policy); see platform notes.
-- **`CNA::Input::Joysticks`/`Sensors`/`Power` (P7-039, found 2026-07-17)** — `cna_demo_input` does not
-  currently surface the standalone raw-joystick API (distinct from `GamePad`'s mapped view of the same
-  hardware), device-level `Sensors` (distinct from gamepad-attached gyro/accel, already in the checklist
-  above), or `Power` (battery query for any input device). There is therefore no manual-checklist item to
-  physically exercise for these three, and no Phase 11 task names them (the input plan's P11-001..015
-  cover Keyboard/Mouse/GamePad/Touch/high-DPI only). Their current verification tier is unit tests against
-  canned platform services (`JoystickTests.cpp`, `SensorsTests.cpp`, `PowerTests.cpp` — real,
-  substantial coverage, just not hardware-gated). Extending the demo UI to surface them is a legitimate
-  follow-up but is out of this audit/documentation plan's scope (CLAUDE.md: no new features beyond audit/
-  repair/test/doc); recorded here so the gap is explicit rather than silently unverifiable.
+- **`CNA::Input::Joysticks`/`Sensors`/`Power` (P7-039)** — `cna_demo_input` does not surface the
+  standalone raw-joystick API (distinct from `GamePad`'s mapped view of the same hardware),
+  device-level `Sensors` (distinct from gamepad-attached gyro/accel, already in the checklist above),
+  or `Power` (battery query for any input device), and P11-001..015 cover only
+  Keyboard/Mouse/GamePad/Touch/high-DPI. Their verification tier is unit tests against canned
+  platform services (`JoystickTests.cpp`, `SensorsTests.cpp`, `PowerTests.cpp`), not hardware.
+  Surfacing them in the demo UI would be a new feature; the gap is recorded here so it is explicit.
 - **`CNA::Input::Haptics`/`HapticDevice`** — the same holds for standalone force feedback. No example
   opens a haptic device, so the effect families and gain/autocenter/pause/resume are verified only
   against a canned platform service (`SdlHapticBackendTests.cpp`); actuation on a real force-feedback
@@ -126,8 +123,7 @@ hardware** until a dated run below says so: gamepad rumble, trigger haptics, lig
 accelerometer, hotplug, analog input and button mapping on real controllers, `GetGUIDEXT` on a
 real controller, real IME composition, touch hardware, four simultaneous controllers, and the
 OS-cursor landing point of `Mouse::SetPosition` on native Wayland (`SDL_GetGlobalMouseState`
-returns (0,0) there; the conversion is unit-tested and the warp was pixel-exact under X11). Earlier
-automated-only logs (2026-07-04, 2026-07-06, 2026-10-31) are in Git history.
+returns (0,0) there; the conversion is unit-tested and the warp is pixel-exact under X11).
 
 ### Hardware verification matrix
 
@@ -148,7 +144,7 @@ add a dated entry under *Recorded runs* below. All cells are ⬜: no run on real
 | IME (JP/CN/KR) | — | — | ⬜ | — |
 | Czech keyboard | — | — | — | ⬜ |
 
-| Other check (the input plan's Phase 11) | Status | What a run must show |
+| Other check (P11) | Status | What a run must show |
 |-----------------------------------------|:---:|----------------------|
 | Non-QWERTY layout, e.g. AZERTY or Dvorak (P11-003) | ⬜ | Keyboard input behaves correctly on that physical layout |
 | Mouse with side buttons (P11-005) | ⬜ | `XButton1`/`XButton2` report presses from the real buttons |

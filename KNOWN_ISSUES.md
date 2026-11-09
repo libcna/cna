@@ -86,7 +86,9 @@ page under `docs/` (index: `docs/README.md`), deliberate divergences from FNA an
   sharp-runtime PeekChar on a non-seekable stream throws (.NET returns -1).
 - Out-of-range ShaderIndex on a stock clone: CNA refuses at Apply; genuine XNA unmeasured.
 - Tooling: worktrees with a symlinked `third_party/SDL` fail SDL staging (fix proposed on the local
-  branch `work/hnd-gfx`, 0f5474490, not integrated).
+  branch `work/hnd-gfx`, 0f5474490, not integrated). `scripts/check_no_posix_setenv.py` is not wired
+  into CMake or CI and reports 7 POSIX `setenv`/`unsetenv` call sites (c-api TestScratchBridge,
+  graphics-ext ASCII tests, storage tests).
 - OPENGLES3 compiled effects: LOD bias is unrepresentable (ES 3 has no sampler bias), so 2 of the 44
   corpus cases skip and the family is not qualified; `cmake-build-multi` keeps it OFF.
 
@@ -134,8 +136,7 @@ page under `docs/` (index: `docs/README.md`), deliberate divergences from FNA an
   stable inputs; they do not establish full CNB-load performance. Production CRC tests compare
   selected dispatch against the table, not every forced hardware/fallback architecture; see
   `docs/cnb-format.md` §8.1 and §15.3.
-- The historical August clean-build matrix cannot be reconstructed from current defaults alone.
-  Current benchmark/report tools record effective cache values and source/dependency identities;
+- The build benchmark/report tools record effective cache values and source/dependency identities;
   those hashes are not source/package archives or a capture of every transitive configuration
   input. Matching before/after snapshots cannot exclude transient source changes. RSS remains a
   sampled process-tree sum; the CI report's cache counts are cumulative and its executed-edge

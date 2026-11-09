@@ -1,26 +1,16 @@
-# glTF API-change review (`GLTF-025`)
+# glTF public API decisions (`GLTF-025`)
 
-> Historical review: references below to the optional `CNA::Graphics::PbrMaterial` bridge
-> describe a removed alpha-stage extension. Runtime glTF loading still configures the core
-> `PbrEffect` and `SkinnedPbrEffect` directly. Its OpenGL4, DirectX11 and Vulkan evidence predates
-> those renderers' retirement (2026-09-28 and 2026-10-13). Section numbers from §12 up refer to the
-> glTF campaign plan, deleted on 2026-10-29 and kept in Git history.
-> Reconciled 2026-10-31: each `Problem` paragraph records the pre-change state; implemented-state
-> paragraphs and dispositions below reflect the completed campaign. Current conformance and
-> renderer coverage live in `gltf-conformance.md` and `gltf-limitations.md`.
+**Every public or CNAEXT member the glTF importer needs is reviewed here, with its problem, shape,
+compatibility, migration (omitted when none is needed) and test recorded, before it is
+implemented.** A member that has not been through this file must not appear in a header. This file
+states the **member** — the exact name, type, default and semantics — because that is what a
+reviewer can actually disagree with and what a later reader has to live with. Runtime glTF loading
+configures the core `PbrEffect` and `SkinnedPbrEffect` directly; conformance and renderer coverage
+live in `gltf-conformance.md` and `gltf-limitations.md`.
 
-The campaign plan's §25 gate: **every proposed public or CNAEXT member is reviewed here, with its
-problem, shape, compatibility, migration and test recorded, before it is implemented.** A row that
-has not been through this file must not appear in a header.
-
-§25 states the *intent* of each proposed surface in one line. This file states the **member** — the
-exact name, type, default and semantics — because that is what a reviewer can actually disagree with
-and what a later reader has to live with.
-
-The standing default is unchanged and worth repeating: **no new public glTF API.** Almost every fix
-belongs inside `CNA::Internal::GltfImport`, `ContentManager`, or `modules/graphics` internals. A row
-reaches this file only after the alternative — keeping it internal — has been rejected for a stated
-reason.
+The standing default is **no new public glTF API.** Almost every fix belongs inside
+`CNA::Internal::GltfImport`, `ContentManager`, or `modules/graphics` internals. A member reaches
+this file only after the alternative — keeping it internal — has been rejected for a stated reason.
 
 ---
 
@@ -28,11 +18,9 @@ reason.
 
 ### 1.1 `ModelMeshPart` primitive type — `GLTF-073`
 
-**Problem.** All three loaders compute `PrimitiveCount = numIndices / 3` and every draw is a
-triangle list. A glTF `LINES`, `LINE_STRIP` or `POINTS` primitive decodes correctly (`GLTF-071`)
-and then has nowhere to be expressed, which is why `GLTF-072` had to leave those four topologies
-rejected: importing them would have moved the original defect from the import layer to the draw
-layer rather than fixing it.
+**Problem.** A glTF `LINES`, `LINE_STRIP` or `POINTS` primitive decodes correctly (`GLTF-071`),
+but without a topology on the part it could only be drawn as a triangle list, moving the defect
+from the import layer to the draw layer.
 
 **Why not internal.** `ModelMeshPart` *is* the boundary. The topology has to survive from the
 importer to `Model::Draw`, and both are on opposite sides of the public model API.
@@ -63,32 +51,27 @@ any existing path already is. No existing behaviour changes.
 **Test.** `GLTF-073`: a line-mode fixture imports with `LineList` on its part, a triangle fixture
 still reports `TriangleList`, and the value survives a `.cnj` round-trip.
 
----
-
 ### 1.2 Topology-aware primitive count — `GLTF-078`
 
-**Problem.** `numIndices / 3` is hardcoded in all three loaders. It is *right* for a triangle list
-and silently wrong for everything else, and it is stated three times, so the three can drift.
+**Problem.** `numIndices / 3` is *right* for a triangle list and silently wrong for everything
+else, and computing it separately in each loader lets the loaders drift.
 
 **Shape.** Not new API — one shared internal helper, plus the `PrimitiveCount` **semantics** on
-`ModelMeshPart` widening from "triangles" to "primitives of this part's topology" (§12.3's table:
-`LineList` → `n/2`, `LineStrip` → `n-1`, `PointListEXT` → `n`).
+`ModelMeshPart` widening from "triangles" to "primitives of this part's topology" (`LineList` →
+`n/2`, `LineStrip` → `n-1`, `PointListEXT` → `n`).
 
-**Compatibility.** The value is unchanged for every `TriangleList` part, which today is all of them.
+**Compatibility.** The value is unchanged for every `TriangleList` part.
 The *meaning* generalises rather than changing.
 
 **Migration.** None for a triangle-list caller. A caller that assumed `PrimitiveCount * 3 ==
 numIndices` would be wrong for a line part — documented on the property.
 
-**Test.** `GLTF-078`: §12.3's table asserted per topology at L5.
-
----
+**Test.** `GLTF-078`: the per-topology count asserted at L5.
 
 ### 1.3 `PbrEffect` alpha state — `GLTF-228`, `GLTF-229`
 
-**Problem at review time.** `alphaMode`, `alphaCutoff` and `doubleSided` are first-class glTF
-material properties that had no home anywhere in CNA: `MeshOut` had no field and `PbrEffect` had no
-parameter. They were the remaining half of defect **D7**.
+**Problem.** `alphaMode`, `alphaCutoff` and `doubleSided` are first-class glTF material
+properties (the second half of defect **D7**) that need a home from `MeshOut` to the effect.
 
 **Why not internal.** They are *runtime shading state*, not import state. A mask threshold has to
 reach the shader on every draw, so it must live on the effect.
@@ -107,18 +90,15 @@ CNAEXT [[nodiscard]] float getAlphaCutoffEXTProperty() const;        // default 
 CNAEXT void setAlphaCutoffEXTProperty(float value);
 ```
 
-Defaults are glTF's own (`OPAQUE`, `0.5`), so an effect nobody configures behaves exactly as it does
-today.
+Defaults are glTF's own (`OPAQUE`, `0.5`), so an effect nobody configures behaves exactly as it did
+before.
 
-**One reconciliation this review forces.** `CNAEXT.md` §5.5 already sketches an `AlphaMode` enum on
-`CNA::Graphics::PbrMaterial`, the engine-layer data bag. Two independently declared alpha-mode enums
-in one codebase is precisely the kind of duplication that later becomes a conversion function nobody
-can delete. **Decision: one enum, declared here in `Microsoft::Xna::Framework::Graphics`, and
-`PbrMaterial` uses that type when §5.5's N42 lands.** The effect is the right home because it is the
-one both the importer and the renderer already depend on; the data bag depends on the graphics
-module, not the reverse.
+**One enum.** `AlphaModeEXT` is declared once, in `Microsoft::Xna::Framework::Graphics`. Two
+independently declared alpha-mode enums become a conversion function nobody can delete; any
+engine-layer material type reuses this one. The effect is the right home because both the importer
+and the renderer already depend on it.
 
-**Where the carried/applied line now falls** (`GLTF-372`). Carrying these three and *applying* them
+**Where the carried/applied line falls** (`GLTF-372`). Carrying these three and *applying* them
 cross different API layers. The **`MASK` cutoff is effect-applied**: it is fragment-program work —
 every PBR shader already evaluates a `uAlphaTest` vector
 and discards on it — not device state, so `PbrEffect`/`SkinnedPbrEffect` fill
@@ -138,8 +118,6 @@ reference for every material would cut holes in every opaque surface.
 `alphaTest` changes a rendered result only for a material that declares `MASK`, which previously
 rendered as though it had declared `OPAQUE`.
 
-**Migration.** None.
-
 **Test.** `GLTF-228`/`GLTF-229`: `mat-factor-only-gold` carries `Blend`; a mask fixture carries
 `Mask` with its authored cutoff; both survive the `.cnj` round-trip; the defaults are asserted on a
 material that declares neither. `GLTF-372`: `mat-alpha-mask-cutoff` authors a cutoff of `0.75` — not
@@ -148,11 +126,7 @@ glTF's `0.5` default, and not the material's own `0.875` alpha — and
 manifest's own `gpuAlphaTest`, then evaluates the shader's discard expression at, just below and
 well above the cutoff so the sign convention is asserted as behaviour.
 
----
-
 ### 1.4 `PbrEffect` double-sidedness — `GLTF-231`
-
-**Problem at review time.** Same as above — `doubleSided` had no home.
 
 **Shape.**
 
@@ -176,21 +150,16 @@ while nothing honoured it.
 
 **Compatibility.** Additive; default `false` is XNA's own `CullCounterClockwise` behaviour.
 
-**Migration.** None.
-
-**Test.** `GLTF-231` (this phase): `mat-factor-only-gold` carries `doubleSided = true` through
+**Test.** `GLTF-231`: `mat-factor-only-gold` carries `doubleSided = true` through
 import and the `.cnj`. Applications honour it by selecting `RasterizerState::CullNone` around the
 draw; CNA does not apply it as a hidden `Model::Draw` side effect.
 
----
-
 ### 1.4a Dielectric Fresnel factors on the PBR effects — `GLTF-343`, `GLTF-344`
 
-**Problem at review time.** Core glTF fixes a dielectric's normal-incidence reflectance at 4%, corresponding to
+**Problem.** Core glTF fixes a dielectric's normal-incidence reflectance at 4%, corresponding to
 an IOR of 1.5. `KHR_materials_ior` replaces that constant with `((ior-1)/(ior+1))²`, while
-`KHR_materials_specular` scales and colours the dielectric Fresnel term. cgltf parses all three
-factor values, but CNA dropped them before `MeshOut`; an application could not inspect them and a
-renderer could not honour them later.
+`KHR_materials_specular` scales and colours the dielectric Fresnel term. An application must be
+able to inspect these factors and a renderer must be able to honour them.
 
 **Why not internal.** These are runtime shading inputs. Like metallic and roughness, they must live
 on the effect so a non-glTF caller can set them and so cloning, offline content and the draw
@@ -219,23 +188,19 @@ GLTF-344 additionally retains the unclamped product and scalar factor internally
 cannot reproduce the specified result when an authored colour factor exceeds one.
 
 **Compatibility.** Additive. The defaults derive F0 = `(0.04,0.04,0.04)` and F90 = 1, exactly the
-constants every CNA PBR shader uses today. Existing callers and old `.cnj` files therefore keep
+former fixed constants of every CNA PBR shader. Existing callers and old `.cnj` files therefore keep
 their current parameter block byte-for-byte. Setters follow the existing metallic/roughness effect
 properties and do not silently clamp caller input; imported glTF values have already passed glTF
 validation. The only clamp is the one the extension specification requires in the F0 equation.
 
-**Migration.** None.
-
-**Implemented boundary.** Factor consumption landed on the rigid and skinned programs of all 15
-PBR renderers that existed during the campaign and remains present on all six surviving renderer
-families. Each native ABI carries RGB F0 plus scalar F90; the dielectric endpoint is mixed
-with albedo for metals, and Schlick uses `F90 - F0` rather than assuming the grazing endpoint is
-always one. The core defaults are algebraically identical to the former constants. The repository-
-wide renderer audit pins every CPU upload and shader expression, while the shared six-check pixel
-test exercises the runnable backends. `KHR_materials_ior` is therefore implemented and claimed.
+**Implemented boundary.** Every PBR renderer family consumes the factors in its rigid and skinned
+programs. Each native ABI carries RGB F0 plus scalar F90; the dielectric endpoint is mixed with
+albedo for metals, and Schlick uses `F90 - F0` rather than assuming the grazing endpoint is always
+one. The core defaults are algebraically identical to the former constants. The repository-wide
+renderer audit pins every CPU upload and shader expression, while the shared six-check pixel test
+exercises the runnable backends. `KHR_materials_ior` is therefore implemented and claimed.
 `KHR_materials_specular` is implemented with a named limit and remains unclaimed as fully supported
-because required use is refused by name. The former texture-binding gap is closed: every surviving
-PBR renderer samples both optional maps.
+because required use is refused by name; every PBR renderer samples both optional maps.
 
 **Test.** Effect default/setter/clone tests cover both classes. `mat-factor-only-gold` authors IOR
 2, specular factor 0.3 and colour `(0.25,1,12)`, making the derived F0
@@ -244,20 +209,16 @@ multiply. L3, direct L6 and `.cnj` parity compare those values against the fixtu
 `EasyGL_Pbr_FresnelFactors` then uses a black, fully rough analytic scene where normal-incidence
 output is exactly `F0/(4π)`: both PBR programs produce `(11,11,11)` for core and `(2,9,43)` for the
 fixture factors. A grazing pair holds F0 at `.04` while changing only F90 from 1 to `.3`, producing
-`(33,33,33)` versus `(15,15,15)`. The same test now runs across backend harnesses; platform-only
-shader paths are compiler-verified. Section 1.4b transports both texture inputs; the current
-machine-checked inventory names DirectX9, EasyGL, FNA3D, SDLGPU, Software and WebGPU as sampling
-both. OpenGL4, DirectX11 and Vulkan evidence below is retained as historical pre-retirement
-evidence, not as the current renderer set.
-
----
+`(33,33,33)` versus `(15,15,15)`. The same test runs across backend harnesses; platform-only
+shader paths are compiler-verified. The machine-checked inventory names DirectX9, EasyGL, FNA3D,
+SDLGPU, Software and WebGPU as sampling both §1.4b texture inputs.
 
 ### 1.4b `KHR_materials_specular` texture inputs — `GLTF-344`
 
-**Problem at review time.** Section 1.4a carried the extension's factors, but the optional
-`specularTexture` (linear alpha) and `specularColorTexture` (sRGB RGB) were discarded. They may
-select different UV sets, transforms and samplers from each other and from every core PBR map.
-Folding either sample into a factor at import time would lose that per-fragment and per-map state.
+**Problem.** The optional `specularTexture` (linear alpha) and `specularColorTexture` (sRGB RGB)
+may select different UV sets, transforms and samplers from each other and from every core PBR map.
+Folding either sample into a §1.4a factor at import time would lose that per-fragment and per-map
+state.
 
 **Why not internal.** These are runtime shading inputs and non-glTF callers can construct both PBR
 effect classes directly. As with the five existing maps, the effect must own/clone the textures and
@@ -304,31 +265,21 @@ ordering and values. Old `.cnj` files omit the new optional fields and produce t
 **Migration.** None. A caller interested in all glTF PBR slots reads the established five-entry
 properties and the two named specular properties; no existing index changes meaning.
 
-**Test.** Default/setter/ownership/clone tests cover both effect classes and assert draw slots 5/6,
-selector bits 5/6, the separate four affine extension rows and colour-space state. Import and direct/offline parity use
-independent texture views, UV selectors, transforms and samplers. Renderer source-policy tests pin
-both samples and their Khronos channel/colour-space equations. EasyGL supplies the official
-Khronos `SpecularTest.glb` direct/offline pixel witness. OpenGL4 compiles natively; DirectX11
-cross-compiles after all rigid/skinned and single/dual-UV HLSL variants pass D3DCompile. DirectX9's
-rigid/skinned ps_3_0 programs use seven samplers and 278 of 512 instruction slots; their 5,588-byte
-bytecode, exact c24–c29 register layout and MinGW renderer build are regenerated and verified.
-SDL GPU likewise binds white identity maps plus the separately imported sampler states at bindings
-5/6. Its regenerated 12,656-byte fragment SPIR-V, rigid/skinned PBR tests and seven-check analytic
-Fresnel/factor test all pass on a software GPU under Xvfb.
-Vulkan carries seven independent image/sampler pairs through both descriptor layouts, a 124-float
-PBR block and rigid/skinned single/dual-UV SPIR-V. Its validation-clean lavapipe runs pass the
-22-check texture-slot program plus the golden and analytic Fresnel programs under Xvfb.
-
----
+**Test.** Default/setter/ownership/clone tests cover both effect classes and assert draw slots
+5/6, selector bits 5/6, the separate four affine extension rows and colour-space state. Import and
+direct/offline parity use independent texture views, UV selectors, transforms and samplers.
+Renderer source-policy tests pin both samples and their Khronos channel/colour-space equations.
+EasyGL supplies the official Khronos `SpecularTest.glb` direct/offline pixel witness. DirectX9's
+rigid/skinned ps_3_0 programs use seven samplers (c24–c29 register layout, within the 512
+instruction slots); SDL GPU binds white identity maps plus the separately imported sampler states
+at bindings 5/6, with rigid/skinned PBR tests and an analytic Fresnel/factor test.
 
 ### 1.5 A home for rigid (non-joint) animation clips — `GLTF-294`
 
-**Problem.** `GLTF-293` imports rigid node animation correctly, but the clip has nowhere to be
-stored or played. `SkinningData::AnimationClips` is the only clip container that exists and its
-track indices are **palette** slots; a rigid clip's are **scene-node** indices (§15.1.2). Putting
-one in the other would let a reader apply a scene index as a palette slot — a silent corruption in
-place of the silent drop `GLTF-293` removed, which is exactly why the converter currently reports
-the clip instead of writing it.
+**Problem.** `GLTF-293` imports rigid node animation, and the clip must be stored and playable.
+`SkinningData::AnimationClips` track indices are **palette** slots; a rigid clip's are
+**scene-node** indices. Putting one in the other would let a reader apply a scene index as a
+palette slot — a silent corruption.
 
 **Why not internal.** A clip has to be playable by the application. `Model::Tag` is where CNA
 already attaches per-model imported data (`SkinningData`, `MorphTargetDataEXT`), so this follows an
@@ -358,16 +309,14 @@ CNAEXT void ApplyClipToBonesEXT(Model& model, const AnimationClipEXT& clip,
 
 `TargetSpace` on the clip is what makes the two spaces impossible to confuse: a container can hold
 either kind and every consumer can tell which it has. It defaults to `JointPalette`, so every clip
-that exists today keeps its meaning.
+that already exists keeps its meaning.
 
 **Compatibility.** Additive. A model with no rigid clips has no `ModelAnimationsEXT` and an
 untouched `Tag`.
 
-**Migration.** None.
-
-**A boundary this review names rather than hides.** `Model::Tag` holds one object, and a skinned
-model already uses it for `SkinningData`. A glTF file with **both** a skin and rigid node animation
-therefore has nowhere to put the rigid clips today. That is a real limitation, not an oversight: the
+**A named boundary.** `Model::Tag` holds one object, and a skinned model already uses it for
+`SkinningData`. A glTF file with **both** a skin and rigid node animation therefore has nowhere to
+put the rigid clips. That is a real limitation, not an oversight: the
 alternatives are a breaking change to what `Tag` means, or a second attachment point, and neither is
 worth deciding for a case no fixture yet exercises. The importer **reports** it by name rather than
 dropping it silently, and the follow-up is `GLTF-295`.
@@ -375,25 +324,20 @@ dropping it silently, and the follow-up is `GLTF-295`.
 **Test.** `GLTF-294`: `anim-rigid-node` round-trips through the `.cnj` with its `targetSpace`, and
 posing the model at `t = 1` rotates the animated node's bone by the quarter turn the file authors.
 
----
-
 ### 1.6 Bind-pose posing for a freshly loaded skinned model — `GLTF-262`
 
 **Problem.** A skinned effect's bone palette defaults to `MaxBones` identity matrices. That is not
-a neutral value and it is not "no skinning": it means *every joint matrix is the identity*, so the
-mesh is posed in joint space and glTF's own `inverse(globalTransform(meshNode))` cancellation
-(§3.7.3, `GLTF-247`) never applies. A skinned model that had been loaded and not yet animated
-therefore rendered **wrong**, not merely still — and nothing in the API said so. The L6 capture
-(`GLTF-008`) is what turned that from a suspicion into a measurement.
+a neutral value and it is not "no skinning": it means *every joint matrix is the identity*, which is
+glTF's bind pose only when every joint's world transform cancels its inverse-bind matrix. A skinned
+model that has been loaded and not yet animated would therefore render **wrong**, not merely still,
+and nothing in the API would say so (measured by the L6 capture, `GLTF-008`).
 
 **Why not leave it to the application.** Real XNA's Skinned Model Sample does set the palette every
 frame, so "the application always does it" is a defensible reading. It is the wrong one here for a
 concrete reason: in that sample the *bind pose is the identity palette*, because the sample's
-content pipeline bakes the mesh into skeleton space. glTF does not — its mesh node's transform must
-be cancelled by the joint matrix — so CNA's identity default and glTF's bind pose are different
-poses. Requiring game code to fix that would make "load a model and draw it" wrong by default for
-every conforming glTF asset, which is exactly the class of silent-wrongness this campaign exists to
-remove.
+content pipeline bakes the mesh into skeleton space. glTF does not, so CNA's identity default and
+glTF's bind pose are different poses. Requiring game code to fix that would make "load a model and
+draw it" wrong by default for every conforming glTF asset.
 
 **Shape.**
 
@@ -423,23 +367,21 @@ corpus fixture, and that at least one of them differs from the identity default 
 cannot pass on a model that was never posed. It is deliberately a corpus-wide claim: the bind pose
 of `skin-armature-ancestor` **is** all-identity, and that is the point of `GLTF-260`.
 
----
-
 ### 1.7 Colour space — `GLTF-209` … `GLTF-212`
 
 **Problem.** glTF §3.9.2 assigns each material texture a colour space: `baseColorTexture` and
 `emissiveTexture` are **sRGB-encoded**, `normalTexture`, `occlusionTexture` and
 `metallicRoughnessTexture` are **linear**. Lighting is defined in linear space and the result is
-encoded for display. CNA did none of it: every image became `SurfaceFormat::Color` (RGBA8 UNORM),
-the PBR shader sampled all five maps raw, and the lit result was written unencoded. Two errors that
-partly cancel to the eye and are quantitatively wrong everywhere — an sRGB mid-grey albedo of `0.5`
-was being lit as if it were linear `0.5` rather than `0.2140`, **2.3× too bright**.
+encoded for display. Sampling the sRGB maps raw from `SurfaceFormat::Color` (RGBA8 UNORM) and
+writing the lit result unencoded are two errors that partly cancel to the eye and are
+quantitatively wrong everywhere — an sRGB mid-grey albedo of `0.5` lit as if it were linear `0.5`
+rather than `0.2140` is **2.3× too bright**.
 
-**The decision: option B, shader-side.** The three options §13.3 records:
+**The decision: option B, shader-side.** The three options considered:
 
 | | Approach | Why not chosen |
 |---|---|---|
-| A | Hardware sRGB texture formats plus an sRGB framebuffer | Correct and free at runtime, but needs a new `SurfaceFormat` across **41 renderers** — a change of that blast radius to fix a glTF defect is the wrong order of work |
+| A | Hardware sRGB texture formats plus an sRGB framebuffer | Correct and free at runtime, but needs a new `SurfaceFormat` on **every renderer** — a change of that blast radius to fix a glTF defect is the wrong order of work |
 | **B** | **Shader-side decode of the two sRGB maps, encode on output, gated per map** | **Chosen.** Renderer-local, no format change, adoptable one renderer at a time, and observable at L6 without a renderer at all |
 | C | Decode baked into the texture bytes at import | Precision-lossy at 8 bits, and it would make the imported texture disagree with the file it came from |
 
@@ -485,26 +427,25 @@ GLSL is that macro, and the C++ functions beside it are the same arithmetic. Two
 of a piecewise curve with a `0.0031308` knee and a `1/2.4` exponent would drift, and the drift would
 be a subtle brightness error rather than a crash.
 
-**Compatibility.** Additive on every renderer: the fields were new, so a renderer that did not read
-them behaved exactly as it did before — the established accepted-and-ignored pattern. Adoption was
-therefore per renderer rather than a flag day. All six surviving PBR renderer families now consume
-the flags; their current inventory is machine-checked by `GltfRendererPbrFallbackPolicy`.
+**Compatibility.** Additive on every renderer: a renderer that does not read the fields behaves
+exactly as before — the established accepted-and-ignored pattern — so adoption is per renderer
+rather than a flag day. Every PBR renderer family consumes the flags; the inventory is
+machine-checked by `GltfRendererPbrFallbackPolicy`.
 
-**A boundary this review names rather than hides.** The output encode is applied *by the PBR
+**A named boundary.** The output encode is applied *by the PBR
 shader*, so in a scene mixing `PbrEffect` with the stock XNA effects the two write differently
 encoded colour into the same render target. That is real, and it is the price of B over A. It is
 also not a regression — the stock effects behave exactly as they always have, and XNA content never
 had colour management to lose. The proper fix is a colour-managed render target, which is option A's
 other half and belongs with the `SurfaceFormat` work, not here.
 
-**Renderer verification.** `EasyGLRenderer.cpp` now compiles in a real OPENGLES3 configuration,
-and its rigid and skinned PBR programs both execute in registered framebuffer tests. The focused
+**Renderer verification.** EasyGL's rigid and skinned PBR programs both execute in registered
+OPENGLES3 framebuffer tests. The focused
 `GLTF-212` witness produces the independently calculated sRGB-encoded bytes and compares four
 golden regions on both programs. `EasyGL_Pbr_SrgbTransfer` supplies the witness those endpoint
 textures could not: byte 128 round-trips through decode+encode, while deliberately disabling each
-decode independently produces byte 188. The macro-splicing unit test remains valuable: the first
-version used a `const char*` variable, which **cannot** join adjacent shader-source literals and
-would not have compiled.
+decode independently produces byte 188. The macro-splicing unit test guards the macro form: a
+`const char*` variable **cannot** join adjacent shader-source literals and would not compile.
 
 **Test.** `SrgbTransferTests` holds the C++ transfer to the specification's own values — endpoints,
 mid-grey, both knees evaluated branch-against-branch, a 256-level round trip, and the no-clamp
@@ -512,17 +453,15 @@ property — and checks the GLSL declares both functions with the same constants
 asserts every PBR draw in the corpus declares both maps sRGB and the encode on, and that the three
 flags move independently. Focused EasyGL framebuffer tests prove the shader executes, both texture
 decodes move independently and the output encode is applied exactly once. The deterministic
-148-asset OPENGLES3 L7 corpus gate has landed; `GLTF ROBUST` still withholds its broader
+148-asset OPENGLES3 L7 corpus gate covers the corpus; `GLTF ROBUST` still withholds its broader
 four-renderer Gate C claim (`docs/gltf-conformance.md` §8.3 row 12).
-
----
 
 ### 1.8 Per-part sampler state — `GLTF-202`, `GLTF-203`, `GLTF-207`
 
-**Problem.** `cgltf_sampler`, `mag_filter` and `wrap_s` had **zero occurrences** in CNA. Every
-imported texture was drawn with whatever `SamplerState` the device happened to have, which defaults
-to `LinearWrap`. For an asset authored `CLAMP_TO_EDGE` with UVs outside `[0,1]` — which
-`KHR_texture_transform` routinely produces — that is a large, obvious error, not a subtle one.
+**Problem.** Without imported sampler state, every texture is drawn with whatever `SamplerState`
+the device has, which defaults to `LinearWrap`. For an asset authored `CLAMP_TO_EDGE` with UVs
+outside `[0,1]` — which `KHR_texture_transform` routinely produces — that is a large, obvious
+error, not a subtle one.
 
 **Shape.**
 
@@ -532,8 +471,8 @@ CNAEXT const std::array<SamplerState, 5>& getSamplerStatesEXTProperty() const;
 CNAEXT void setSamplerStateEXTProperty(int slot, const SamplerState& value);
 ```
 
-**A property, not a `Tag` payload — overruling `GLTF-207`'s own sketch.** The task proposed attaching
-a `SamplerStateArrayEXT` to `ModelMeshPart::Tag`, mirroring `MorphTargetDataEXT`. That cannot work:
+**A property, not a `Tag` payload.** A `SamplerStateArrayEXT` attached to `ModelMeshPart::Tag`,
+mirroring `MorphTargetDataEXT`, cannot work:
 `Tag` already *is* `MorphTargetDataEXT` for a morphing part, so a morphing part with clamped
 textures could not express both. This is the same one-object-per-`Tag` collision §1.5 records for
 rigid clips, and the right answer here is the one `GLTF-073` already established for
@@ -544,13 +483,10 @@ legitimately clamp its base colour and repeat its normal map. One shared value c
 The slots are named by a `TextureSlotEXT` enum rather than bare indices, because an array indexed
 by an untyped `int` is exactly what acquires an off-by-one when a slot is added.
 
-**A finding that corrected the plan.** §14.2 states that "XNA's `SamplerState` cannot express
-independent min/mag filters for the four mixed combinations" and asks `GLTF-204` to document the
-approximation. That is **wrong**: XNA's nine `TextureFilter` values —
-`MinLinearMagPointMipLinear` and its three siblings among them — cover all eight min×mag×mip
-combinations exactly. There is no approximation to document there.
+**No min/mag approximation.** XNA's nine `TextureFilter` values — `MinLinearMagPointMipLinear`
+and its three siblings among them — cover all eight min×mag×mip combinations exactly (`GLTF-204`).
 
-The one real approximation is elsewhere and is now recorded where it happens: glTF's `NEAREST` and
+The one real approximation is recorded where it happens: glTF's `NEAREST` and
 `LINEAR` minFilters mean *no mipmapping*, and XNA has no `TextureFilter` value for "base level only"
 — that is a property of the texture's level count, not of the sampler. `SamplerOut` carries a
 `minFilterHasNoMipStage` flag so the arbitrary choice (point, the least-blending mip mode) is
@@ -572,7 +508,7 @@ the consequence is reduced minification quality, not undefined or partially init
 **Compatibility.** Additive. Every entry is `LinearWrap` for a part built by any other content path,
 which is exactly what those parts got before.
 
-**Test.** `GltfSamplerMappingTests` covers §14.2 exhaustively — every min×mag combination against
+**Test.** `GltfSamplerMappingTests` covers the glTF sampler mapping exhaustively — every min×mag combination against
 the XNA value that means exactly it, every wrap value on both axes independently, both
 non-mipmapped minFilters, the missing-chain classification, and the undefined-sampler default. The
 whole table is testable directly
@@ -587,23 +523,17 @@ whose compatible default carries no origin flag. `EasyGL_Gltf_SamplerWrap` exerc
 that public boundary on the three generated `uv-out-of-range-*` fixtures. At one shared authored UV,
 CLAMP, REPEAT and MIRRORED_REPEAT produce the reference image's yellow, blue and green quadrants
 respectively on OPENGLES3. Thus the raw-enum table, real-file import, per-part
-transport and GPU addressing are all distinct assertions. The corpus-wide OPENGLES3 L7
-orchestration subsequently landed under `GLTF-009`.
-
----
+transport and GPU addressing are all distinct assertions.
 
 ### 1.9 A second UV channel — `GLTF-181` … `GLTF-183`
 
 **Problem.** Each of a glTF material's five texture references independently selects its own
-`TEXCOORD` set. CNA's PBR effects sample all five from **one** shared channel — the one the base
-colour names — so a material whose maps disagree renders some of them from the wrong set. It has
-been *detected* since CNB-97 (`MeshOut::pbrUv2Mismatch`) and, until now, reported only by the
-offline tool: the runtime path was silently wrong on exactly the same file.
+`TEXCOORD` set. Sampling all five from **one** shared channel renders some maps of a material whose
+maps disagree from the wrong set.
 
-**The original decision was to keep the single-channel limit and report it on both paths. It is
-reversed by the final CORE audit:** §27.1 row 7 explicitly requires `TEXCOORD_0/1` to decode
-exactly, so a reported wrong sample cannot make the milestone green. The earlier cost analysis was
-right; the conclusion no longer satisfies the release gate.
+**Decision: carry two UV channels.** The core milestone requires `TEXCOORD_0/1` to decode exactly
+([gltf-conformance.md](gltf-conformance.md) §8.1 row 7), so reporting a wrong sample, the cheaper
+alternative, cannot satisfy it.
 
 **Vertex shape.** A second `vec2` naturally takes the unskinned PBR layout from 48 to 56 bytes, but
 56 already identifies skinned+colour. The adopted layout is therefore:
@@ -639,12 +569,12 @@ textures to the public PBR effects must be able to say which of its two vertex a
 uses. The source-set-to-GPU-channel remapping remains internal; callers see only the two attributes
 their vertex declaration exposes.
 
-**What the original cost analysis correctly predicted:**
+**Cost:**
 
 * **Shader.** A second attribute, a second varying, and per-map channel selection — five maps × two
   sets — represented as one five-bit mask, in both PBR programs.
 * **Renderers.** An input layout and a shader variant on each, the same blast radius that decided
-  §1.7 against colour-space option A. This cost is now paid because CORE explicitly requires it.
+  §1.7 against colour-space option A.
 
 **Compatibility.** Additive public surface and additive vertex layouts. Defaults select attribute
 0 for all maps, exactly the old shaders' behaviour. Existing 48/68-byte assets, old `.cnj` files
@@ -662,11 +592,10 @@ textures cannot produce the expected image when either map samples the other cha
 
 ### 1.9a Per-map texture transforms — `GLTF-184`, `GLTF-336`
 
-**Problem.** `KHR_texture_transform` belongs to each texture view, but CNA baked only the base
-colour transform into shared vertex coordinates. A normal, metallic-roughness, emissive or
-occlusion map could select the right UV channel after `GLTF-183` and still sample at the wrong
-place whenever its transform differed. Baking five values into at most two streams is impossible:
-two maps may deliberately share one authored set and transform it differently.
+**Problem.** `KHR_texture_transform` belongs to each texture view. A map can select the right UV
+channel (`GLTF-183`) and still sample at the wrong place whenever its transform differs from
+another map's, and baking five transforms into at most two vertex streams is impossible: two maps
+may deliberately share one authored set and transform it differently.
 
 **Why not internal.** These are runtime sampling inputs, just like the five channel selectors.
 Keeping them on `MaterialOut` would strand them before the shader, and a non-glTF caller binding a
@@ -711,8 +640,8 @@ UV stream but require different transforms, so no single baked coordinate can sa
 
 ### 1.10 An authored tangent basis with nowhere to live — `GLTF-086`
 
-**Problem.** Only PBR strides 48/60 and 68/76 carry a tangent. A file
-that authored `TANGENT` on any other primitive had it dropped in silence.
+**Problem.** Only PBR strides 48/60 and 68/76 carry a tangent; an authored `TANGENT` on any other
+primitive has nowhere to go.
 
 **Decision: reported, because it cannot be carried.** Unlike the material properties `GLTF-219`
 ungated — which `MeshOut` could hold even when no effect consumed them — there is literally nowhere
@@ -726,10 +655,8 @@ so for a reason, and the reason is usually a normal map the material also declar
 
 ### 1.11 `Model` imported-camera list — `GLTF-317` … `GLTF-322`, `GLTF-324`
 
-**Problem.** `cgltf_camera` had zero occurrences in CNA: a file's cameras were dropped entirely, so
-an asset framed by its author arrived with no framing and every viewer had to invent one. This entry
-was **deferred** in §2.3 as "additive with no current consumer"; `GLTF-317` overtook that, and the
-shape below is what the gate approved rather than what deferral left unspecified.
+**Problem.** An asset framed by its author needs its cameras; without them every viewer has to
+invent framing.
 
 **Decision: approved, as `std::vector<ModelCameraEXT>` on `Model`.** The reviewed shape, and why
 each part of it is the way it is:
@@ -763,11 +690,11 @@ simply has an empty list — which is also what a glTF file with no camera produ
 
 ### 1.12 Whole-model bounding sphere — `GLTF-128`
 
-**Problem.** `ModelMesh` exposes XNA's per-mesh `BoundingSphere`, but `Model` exposes no union of
-them. A caller framing or culling the whole imported glTF scene therefore has to know the private
-vertex-sidecar format, re-read every position and duplicate the node-hierarchy composition the
-loader already performed. The viewer does exactly that today. It is both a layer violation and a
-second transform implementation waiting to drift from `Model::Draw`.
+**Problem.** `ModelMesh` exposes XNA's per-mesh `BoundingSphere`, but XNA's `Model` exposes no
+union of them. Without one, a caller framing or culling the whole imported glTF scene has to know
+the private vertex-sidecar format, re-read every position and duplicate the node-hierarchy
+composition the loader already performed — a layer violation and a second transform implementation
+that can drift from `Model::Draw`.
 
 **Why not internal.** Framing and whole-model culling are application decisions. An internal value
 would leave the viewer on the same sidecar-dependent path, while putting glTF-specific bounds in
@@ -802,9 +729,9 @@ recovering the source vertices; reading vertex-buffer shadows inside `Model` wou
 existing mesh-bounds abstraction and would fail for write-only or GPU-generated data. No new type
 is justified.
 
-**Required importer repair.** Both glTF loaders currently leave every mesh sphere at its default
-zero value. They must build one local-space sphere from the positions of **all** primitives grouped
-into that `ModelMesh`; doing it per primitive would reintroduce the shape bug `GLTF-139` removed.
+**Importer rule.** Both glTF loaders build one local-space sphere from the positions of **all**
+primitives grouped into a `ModelMesh`; doing it per primitive would reintroduce the shape bug
+`GLTF-139` removed.
 This is internal wiring, not another public member. The offline `.cnj` reader derives the same
 sphere from its vertex sidecars, so old and new `.cnj` files need no format or version change.
 
@@ -876,8 +803,8 @@ copy semantics; a real tool subprocess then compares every direct and offline se
 
 **Problem.** glTF permits several independent skins in one file. The offline converter already
 emits one `Model` per skin, but runtime `Load<Model>("asset.glb")` has to return one object and the
-XNA Skinned Model Sample convention gives that object only one `Tag` slot. Keeping the first
-`SkinningData` in the slot silently dropped every later skin; putting one rig's data there and
+XNA Skinned Model Sample convention gives that object only one `Tag` slot. Keeping only the first
+`SkinningData` in the slot would silently drop every later skin; putting one rig's data there and
 importing all meshes would be worse, because their local `JOINTS_0` indices would address the wrong
 palette.
 
@@ -911,7 +838,7 @@ two skins using the same material cannot share one mutable `uBones` carrier and 
 other. These are behavior fixes, not merely transported metadata.
 
 **Compatibility and test.** Additive CNAEXT surface; single-skin `Model::Tag`, offline `.cnj`
-outputs and non-glTF models are unchanged. `ImportsAllSkinsAsSeparateModels` now exercises both
+outputs and non-glTF models are unchanged. `ImportsAllSkinsAsSeparateModels` exercises both
 paths: it still loads the two offline models, then loads the source directly as one two-mesh model,
 asserts two named mappings and distinct effects, assigns deliberately different bind translations,
 and proves applying skin A leaves skin B's palette unchanged and vice versa on HEADLESS.
@@ -925,20 +852,18 @@ and proves applying skin A leaves skin B's palette unchanged and vice versa on H
 **Shape approved** as plain additive CNAEXT float properties on an existing CNAEXT effect, defaults
 `1.0` — the glTF defaults, so an unconfigured effect is unchanged.
 
-**Landed after the original deferral.** Both values now exist on `PbrEffect` and
-`SkinnedPbrEffect`, flow through `GpuDrawParams`, and are consumed by EasyGL's rigid and skinned PBR
-programs. The generated `mat-normal-occlusion-scale` asset proves the authored 0.35/0.8 values and
+**Landed.** Both values exist on `PbrEffect` and `SkinnedPbrEffect`, flow through
+`GpuDrawParams`, and are consumed by EasyGL's rigid and skinned PBR programs. The generated `mat-normal-occlusion-scale` asset proves the authored 0.35/0.8 values and
 the undeclared 1.0 defaults reach L6. This is more than a setter test: registered
 `EasyGL_Pbr_MaterialMaps` binds channel-asymmetric one-pixel textures and reads back the real
 framebuffer from both programs. Occlusion produces bytes 137/207/255 for strengths 1/.5/0, while a
 normal sample `(255,128,191)` produces 104/138/151 for scales 1/.35/0. Those results discriminate
 the red occlusion channel, the specification's strength formula, `rgb*2-1` decoding, and XY-only
-normal scaling. The corpus-wide OPENGLES3 L7 rung subsequently landed under `GLTF-009`; the API and
-EasyGL behavior are no longer deferred.
+normal scaling.
 
 ### 2.2 Per-part sampler state — `GLTF-207`
 
-**Original deferral superseded and landed.** The final surface is the five-entry
+**Landed.** The final surface is the five-entry
 `ModelMeshPart::getSamplerStatesEXTProperty()` plus the per-slot setter described in §1.8, with the
 two `KHR_materials_specular` samplers exposed separately to preserve the established five-slot ABI.
 Direct/offline transport and the public caller-applied device-state boundary have focused tests;
@@ -946,8 +871,7 @@ Direct/offline transport and the public caller-applied device-state boundary hav
 
 ### 2.3 Import diagnostics — `GLTF-034`
 
-**Approved and landed after the original deferral.** The owner explicitly approved adding the
-surface once `cna-gltf-viewer` became its first consumer (`GLTF-431`). It gathers the existing
+**Approved and landed** once `cna-gltf-viewer` became its first consumer (`GLTF-431`). It gathers the existing
 internal reports rather than introducing a competing diagnostics channel; the logger and converter
 warnings remain useful human-readable output, while the model now carries the same outcomes in a
 machine-readable form.
@@ -968,7 +892,7 @@ Absolute source paths are stripped from serialized validation messages so genera
 relocatable and reproducible.
 
 **Compatibility.** Additive CNAEXT source surface. Adding the value member changes `Model`'s CNA
-binary layout, as other campaign-added Model properties do; CNA does not promise a stable C++ ABI
+binary layout, as other added Model properties do; CNA does not promise a stable C++ ABI
 across library versions. The optional `.cnj` member needs no envelope version bump because old
 readers ignore unknown object members and the current reader treats absence as the default.
 
@@ -981,25 +905,21 @@ diagnostic.
 converter and compares reports loaded directly and through `.cnj` for unsupported animation paths,
 excess lights and ignored extensions.
 
-The imported-**camera** list was deferred here alongside it and has since been approved and landed;
-see §1.11.
-
 ### 2.4 `SkinnedEffect::MaxBones` above 72 — `GLTF-261`
 
 **Not approved, and not a candidate for approval here.** Raising it changes a real XNA 4.0 constant
-and every renderer's uniform array — the one **breaking** row in §25. It stays `investigate only`.
+and every renderer's uniform array — the one **breaking** candidate. It stays `investigate only`.
 
 ---
 
 ## 3. What this gate rejected
 
-Nothing in §25's table was rejected outright; the gate's effect was on **shape** rather than
+No proposed member was rejected outright; the gate's effect was on **shape** rather than
 admission:
 
 * the topology property reuses the existing `PrimitiveType` instead of introducing a glTF-flavoured
   one, so a part's topology is expressed in the same vocabulary a draw call already takes;
-* the alpha-mode enum is declared **once**, in the graphics module, instead of separately on
-  `PbrEffect` and `PbrMaterial`;
+* the alpha-mode enum is declared **once**, in the graphics module, instead of once per consumer;
 * `doubleSided` is admitted as carried state only, with applying it explicitly out of scope and
   assigned to the task that owns the render state — which is the difference between a flag that
   works and a flag that merely exists.
@@ -1011,5 +931,3 @@ admission:
 1. A member that cannot be tested beyond its own setter is not ready — find the fixture first.
 2. Prefer an existing type to a new one, and a shared type to two parallel ones.
 3. Carrying state and acting on it are separate approvals. Say which one is being granted.
-4. Every member approved here must reach `CNAEXT.md` in the Phase 23 documentation tasks
-   (`GLTF-448`, `GLTF-456`).

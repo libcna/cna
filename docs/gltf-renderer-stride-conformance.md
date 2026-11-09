@@ -1,11 +1,9 @@
 # glTF renderer stride conformance
 
-Current source/test contract checked on 2026-11-01. Historical GLTF-158…389 campaign results
-remain in Git history; the table below separates declaration, draw and pixel evidence.
-
-This page records the canonical importer layouts and the focused renderer-conformance boundary. The source of truth is
-`CNA/Internal/Graphics/VertexDeclarationFidelity.hpp`; the importer now constructs a real
-`VertexDeclaration` from that table before the first upload. A byte stride is no longer the only
+This page records the canonical importer layouts and the focused renderer-conformance boundary,
+separating declaration, draw and pixel evidence. The source of truth is
+`CNA/Internal/Graphics/VertexDeclarationFidelity.hpp`; the importer constructs a real
+`VertexDeclaration` from that table before the first upload, so a byte stride is not the only
 description passed by the glTF path.
 
 ## Canonical layouts emitted by glTF
@@ -30,9 +28,9 @@ is IEEE-754 `float`. The importer selects a row through `VertexLayoutTableEXT` (
 Strides 16 (`Position` + `Color`) and 20 (`Position` + `TextureCoordinate`) are also in the shared
 built-in table, but the current glTF packing policy emits neither. The renderer matrix and the
 first two tests below cover the six strides that the witness test loads (32, 48, 52, 56, 60 and
-68); strides 24, 28, 76 and 80 have no witness there. Since CNA-FIX-D07, `tex-dual-texture-stride`
-(an unlit material with a fallback occlusion map) stays BasicEffect's stride 32, so no corpus
-fixture selects the dual-UV stride 28.
+68); strides 24, 28, 76 and 80 have no witness there. `tex-dual-texture-stride` (an unlit material
+with a fallback occlusion map) uses BasicEffect's stride 32 (CNA-FIX-D07), so no corpus fixture
+selects the dual-UV stride 28.
 
 ## Declaration and draw boundary
 
@@ -53,19 +51,18 @@ accepts a COLOR_0 refusal. Other generic layout errors do not satisfy those allo
 A passing test therefore needs its capability/refusal context before it can be called rendering
 support.
 
-## Current execution evidence
+## What each renderer's run means
 
-On 2026-11-01 the existing multi tree builds the Content/Graphics test targets and passes the
-42-case source-policy/buffer filter. The three RendererStrideConformance cases have these results:
+The three `RendererStrideConformance` cases mean different things per selected identity:
 
-| Selected identity | Result | Meaning |
-|---|---|---|
-| OPENGLES3, OPENGL33 | 3/3 each | Current private Linux native GL draw routes |
-| WEBGPU, SDLGPU, FNA3D | 3/3 each | Current private Linux device draw routes; not all drivers/OSes |
-| SOFTWARE | 3/3 | CPU implementation/submit route |
-| HEADLESS | 3/3 | Upload, declaration and validation draws; no native input binding or pixels |
-| STUB | 0 passed, 3 capability skips | No 3D; upload/declaration tests are separate |
-| DIRECTX9, WEBGL2 | Not run here | Not compiled into this multi tree / requires browser build |
+| Selected identity | Meaning of a pass |
+|---|---|
+| OPENGLES3, OPENGL33 | Native GL draw route on the tested Linux driver |
+| WEBGPU, SDLGPU, FNA3D | Device draw route on the tested Linux driver; not all drivers/OSes |
+| SOFTWARE | CPU implementation/submit route |
+| HEADLESS | Upload, declaration and validation draws; no native input binding or pixels |
+| STUB | All three skip on the missing 3D capability; upload/declaration tests are separate |
+| DIRECTX9, WEBGL2 | Need a MinGW/Wine build or a browser build respectively |
 
 The focused cases are not corpus-wide image oracles. The cross-renderer
 NoRendererPaintsAVertexAttributeInsteadOfTheEffectsDiffuseColour case also passes, checking a
@@ -74,16 +71,15 @@ does not judge HEADLESS pixels.
 
 ## CI and independent layers
 
-.github/workflows/gltf-renderer-stride-ci.yml currently selects STUB, HEADLESS, OPENGLES3,
-SDLGPU, WEBGPU and SOFTWARE. This is six identities, not every public identity or all native
-drivers. Its source describes the configured gate; a workflow file is not a newly successful
-remote run. Run local window/device tests through the private runner:
+`.github/workflows/gltf-renderer-stride-ci.yml` selects STUB, HEADLESS, OPENGLES3, SDLGPU, WEBGPU
+and SOFTWARE: six identities, not every public identity or all native drivers. Run local
+window/device tests through the private runner:
 
 ```sh
 tools/platform/run_gpu_tests_private.sh --exec cmake-build-multi/CnaContentTests \
   '--gtest_filter=GltfStrideAndBuffer.*:RendererStrideConformance.*'
 ```
 
-scripts/gltf-renderer-parity.sh compares selected L1–L5 oracle results; the retained 2026-08-14
-42/507-case numbers are historical evidence. L7 pixels and per-policy goldens are separate:
+`scripts/gltf-renderer-parity.sh` compares selected L1–L5 oracle results. L7 pixels and
+per-policy goldens are separate:
 see [conformance harness](gltf-conformance.md) and [PBR contract](gltf-renderer-pbr-fallbacks.md).

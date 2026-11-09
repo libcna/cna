@@ -21,26 +21,14 @@ a dependency graph or a passing sample is not a universal promise for every call
 ## Why programs used to contain everything
 
 Measured on Mobile Eggbert, a 2D game using textures, sounds, `Guide.IsTrialMode` and
-`Guide.ShowMarketplace` (Linux x86-64 Debug, OPENGLES3, 2026-10-12): 208 MB, 44.6 MB stripped, of
-which 30 MB was the embedded avatar catalog. Every one of these was a single reference inside a
-translation unit the game legitimately needed:
-
-| The game used | which referenced | and so linked |
-|---|---|---|
-| `Guide::getIsTrialModeProperty` | `Guide.cpp` held every Guide call; one called `backend()` | the service client, its test fake, libcurl, local profiles, the avatar codec, the 30 MB catalog |
-| `cgltf_parse` (avatar GLB reader) | `CGLTF_IMPLEMENTATION` lived in `GltfImportCore.cpp` | the 700 KB glTF importer and the Draco decoder |
-| the Guide frame | rail navigation named every panel; the identity rail drew `AvatarRenderer` portraits | the whole system Guide and the avatar editor |
-| any `ContentManager` | `RegisterBuiltinLoaders()` named every reader and builder | Model, SkinnedModel, glTF, Draco, Song, Video, FFmpeg |
-| `Game` | its constructor called `RegisterAllBuiltInXnbReaders()` | every `.xnb` reader |
-| any `.xnb` read | `ContentReader.cpp` instantiated `ReadExternalReference<Effect>` | the Effect content family |
-| `FrameworkDispatcher::Update` (every frame) | direct calls into `DynamicSoundEffectInstance`, `Microphone`, `MediaPlayer` | streaming audio, SDL audio capture, the media module |
-| the playback device factory | the capture factory in the same file | the SDL recording device |
-| `PlatformFactory::Create()` | forwarded to `Create(name)`, which names every implementation | the Headless and Terminal platforms |
-| `SpriteBatch::Begin` | `dynamic_cast` to each of the five stock effects | all five effect classes (their typeinfo) |
-| `Texture2D`/`SoundEffect` `.xnb` readers | `XnbCanonicalData.cpp` held every decoder | the model and effect conversions |
-
-None of these was a missing flag. Each was a structural reference, and each is now cut where the
-dependency is not real.
+`Guide.ShowMarketplace` (Linux x86-64 Debug, OPENGLES3, 2026-10-12), a static program once linked
+208 MB (44.6 MB stripped), of which 30 MB was the embedded avatar catalog. No flag was missing:
+single structural references inside translation units the game legitimately needed pulled whole
+families in. One `Guide` call reached the service client, libcurl and the avatar catalog; the
+avatar GLB reader carried the glTF importer and Draco; `ContentManager` and `Game` registration
+named every reader; `FrameworkDispatcher::Update` called streaming audio, capture and media
+directly; `SpriteBatch::Begin`'s `dynamic_cast` named all five stock effects. Each such reference is
+cut where the dependency is not real; the boundaries below record where.
 
 ## The boundaries
 
@@ -194,29 +182,23 @@ link the shared `CNA` umbrella when the goal is to inspect this static-only clos
 
 ## Linker independence
 
-The LINK-032/040 campaign aimed to make GNU ld, lld and mold retain the same tested family closure.
-Its recorded Linux/GCC-14 configuration exposed a symbol needed by a shared library and defined
-both by an unextracted archive member and another shared library: CNA objects emitted weak
-`std::string` definitions that libstdc++ also exported. The numerical examples below are that
-2026-10-12 campaign's observations, not current cross-linker size guarantees. mold resolves such a symbol to whichever file comes first on
-the command line, and the compiler driver names the C++ runtime last. In a multi-renderer build,
-`libshaderc.so` needs `std::string::_M_erase`; mold extracted `GamerServicesBackend.cpp.o`, the
-first member of the first CNA archive that defines it, and the 2D game linked the service client,
-the system Guide and the 30 MB avatar catalog (47.1 MB stripped, against 11.7 MB with GNU ld or
-lld).
+GNU ld, lld and mold must retain the same tested family closure. On ELF with a shared C++ runtime,
+a symbol that a shared library needs can be defined both by an unextracted CNA archive member (CNA
+objects emit weak `std::string` definitions that libstdc++ also exports) and by the runtime. mold
+resolves such a symbol to whichever file comes first on the command line, and the compiler driver
+names the C++ runtime last, so mold could extract an unrelated CNA member — for example, to satisfy
+`libshaderc.so`'s need for `std::string::_M_erase` in a multi-renderer build — and drag the service
+client, the system Guide and the avatar catalog into a 2D game that GNU ld or lld keep small (LINK-032/040).
 
 So a program that links CNA's targets with a shared C++ runtime on ELF names the runtime before
 CNA's archives: `CNA::BuildConfig` adds `-Wl,--push-state,--as-needed -lstdc++ -Wl,--pop-state`
 (`-lc++` for libc++) to its link. A standard-library symbol that no object already in the link
 defines is then the shared runtime's, and no archive member is extracted for it alone. A member
-extracted for a CNA symbol may still supply one, which links nothing more: in the multi-renderer
-2D probe mold resolves libshaderc's `_M_erase` to `GuideStyle.cpp.o`, which the game links anyway
-(`GuideContent.cpp.o` uses its styles). With the option mold extracts the members lld does in that
-probe (11,740,248 bytes stripped with mold, 11,704,960 with lld, 11,709,040 with GNU ld), and the
-then-current footprint gates passed with each linker. GNU ld and lld linked the same members
-with or without it in that experiment. A
-program that names CNA's archives on a hand-written link line instead of linking its targets does
-not get it.
+extracted for a CNA symbol may still supply one, which links nothing more: mold may resolve
+libshaderc's `_M_erase` to `GuideStyle.cpp.o`, which the game links anyway (`GuideContent.cpp.o`
+uses its styles). With the option the three linkers extract the same members in the footprint
+probes. A program that names CNA's archives on a hand-written link line instead of linking its
+targets does not get it.
 
 The option is only for a shared runtime, as lld and mold would let a shared runtime named first
 replace a static one. On applicable ELF GNU/Clang links (excluding Android), with an implicitly detected stdc++ or c++
@@ -234,10 +216,9 @@ ordering; `STATIC`/`SHARED` here do not themselves select the C++ runtime to lin
    `-static-libstdc++`, `-nostdlib`, `-nostdlib++` or `-nodefaultlibs` is copied with generator
    expressions kept, and CMake evaluates the copy for the program in each configuration: a program
    with `$<$<CONFIG:Release>:-static-libstdc++>` has no option in Release and keeps it in Debug
-   (in the multi-renderer tree its Debug 2D probe stays at 11,740,248 bytes; reading the flag as
-   text took the option away there too, and mold linked the system Guide and the avatar catalog,
-   47,063,128). `-static-libgcc` alone keeps the option, in a generator expression too:
-   libstdc++ stays shared.
+   (reading the flag as text instead would take the option away in Debug too, and mold would then
+   link the system Guide and the avatar catalog). `-static-libgcc` alone keeps the option, in a
+   generator expression too: libstdc++ stays shared.
 3. Where `AUTO` reads only part of the answer, it errs towards static, which only costs the
    option. A target linked in some configurations only is read in all of them. CMake shows an
    imported target only in the directory that defines it and below, so one that a subdirectory
@@ -258,14 +239,12 @@ needs.
 
 With a static runtime CNA adds nothing, and where the runtime archive goes is the program's
 choice. The driver names it last, so lld and mold resolve a standard-library symbol to the first
-archive member on the command line that defines it, which is CNA's: with `-static-libstdc++` the multi-renderer 2D probe linked
-glTF and Draco with lld, and the system Guide and the avatar catalog as well with mold (49.7 MB
-stripped). Which members ride along depends on the tree -- whichever member of whichever archive
-comes first with the symbol a shared library needs -- so the single-renderer Release probe linked
-the Guide and the catalog with lld as well (39.5 MB). Naming the static runtime first,
+archive member on the command line that defines it, which is CNA's, and can link large unrelated
+families (glTF and Draco, or the system Guide and the avatar catalog). Which members ride along
+depends on the tree — whichever member of whichever archive comes first with the symbol a shared
+library needs. Naming the static runtime first,
 `target_link_options(MyGame PRIVATE "SHELL:-Wl,--push-state,-Bstatic -lstdc++ -Wl,--pop-state")`,
-gives each linker the small closure again (13.2 MB with mold or lld, 13.6 MB with GNU ld, every
-footprint gate passing).
+gives each linker the small closure again, with every footprint gate passing.
 
 ## Built-in avatar catalog: embedded, not a separate pack
 
@@ -278,63 +257,13 @@ drawn from the baseline catalog v3 (22.3 MB deflated at revision 5; the 30 MB me
 offline avatars for programs that do use them. External packs already exist for catalog *updates*
 (`installedCatalogRoot()`, `CNA_GAMER_SERVICES_CATALOGS_DIR`), verified by size and SHA-256.
 
-## Historical measurements
-
-The following 2026-10-12 LINK-040 record (introduced in `e842e7473`) is Mobile Eggbert on Linux
-x86-64, OPENGLES3, GCC 14 and mold. "Before" is CNA `3ee6ae3c8`; "after" means that campaign's
-remediated tree, not today's HEAD. The record states that the game source was unchanged.
-The original binaries/maps and complete build command lines are not retained here, so the tables
-are historical observations rather than reproducible current size limits.
-
-| Debug executable | Before | After |
-|---|---:|---:|
-| Unstripped | 208,287,328 | 62,383,864 |
-| Debug sections removed (`objcopy --strip-debug`) | 65,007,640 | 13,867,976 |
-| Fully stripped | 44,607,184 | 6,191,520 |
-| `.text` | 9,363,703 | 4,066,408 |
-| `.rodata` | 30,863,125 | 325,973 |
-| ... of which the avatar catalog | 29,999,928 | 0 |
-| `.data` / `.data.rel.ro` / `.bss` | 13,824 / 127,376 / 56,816 | 9,840 / 53,128 / 23,600 |
-| `.eh_frame` | 2,786,336 | 1,111,392 |
-
-Debug information is most of a Debug executable (143 MB before, 48.5 MB after) and shrinks with the
-code it describes; the stripped size is what ships.
-
-| Release executable, static CNA (after) | `CNA_OPTIMIZE_FOR_SIZE=OFF` | `ON` |
-|---|---:|---:|
-| Unstripped | 6,469,312 | 4,259,112 |
-| Fully stripped | 4,695,176 | 3,040,712 |
-| `.text` | 3,558,042 | 2,249,978 |
-| `.rodata` | 93,635 | 74,595 |
-| `.data` | 8,144 | 3,504 |
-
-The historical record reports neither build contained a symbol of the avatar catalog, `AvatarRenderer`, the glTF importer,
-cgltf, Draco, `MediaPlayer`, `Microphone`, `Microsoft::Xna::Framework::Net`, ENet, libcurl,
-`TextureCube`, `Texture3D`, `RenderTargetCube`, the camera, the tray, `CnbWriter` or the Headless
-and Terminal platforms; its shared-library dependencies are SDL3, SDL3_mixer, zstd
-and the C/C++ runtime. The recorded campaign also checked the footprint with
-`CNA_ENABLE_NET=OFF` and a wasm 2D demo linking `CNA`. Those are historical configurations;
-the current native gate run below does not requalify a browser or every dependency set.
-
 ## What a 2D game still contains, and why
 
-In the recorded 2D consumer the large members were the renderer, image decoding, the device,
-`Game`, Sharp Runtime strings and dialog/marketplace Guide UI. These smaller historical couplings
-explain why archive-family separation alone is not an exact per-method size promise:
+In a 2D consumer the large members are the renderer, image decoding, the device, `Game`, Sharp
+Runtime strings and dialog/marketplace Guide UI. These smaller couplings explain why archive-family
+separation alone is not an exact per-method size promise:
 
 | Linked | Size | Through |
 |---|---|---|
 | sharp-runtime's `Decimal` | ~30 KB | `System::IO::BinaryReader::ReadDecimal` is virtual, as in .NET, and every content read goes through a `BinaryReader`-derived `ContentReader`, so its vtable names it; dropping it would mean making `ReadDecimal` non-virtual |
 | MojoShader and compiled-effect support | ~420 KB in the old EasyGL measurement | EasyGL's opt-in compiled path prepares SpriteEffect for custom batches. Current support is renderer-specific: EasyGL/SDLGPU/WEBGPU/SOFTWARE/DIRECTX9 options default OFF, FNA3D has it inherently, HEADLESS/STUB do not. One renderer's option does not enable every other renderer. Profiles and actual closure are build-dependent; see [compiled effects](fx-compiled-effects.md). |
-
-## Current verification
-
-The 2026-11-01 audit checked archive composition, deferred shared-runtime ordering, size/IPO/runtime
-options, content registry and platform-service boundaries, and both audit scripts. In the existing
-Linux Debug multi-renderer tree (GNU C++, actual final links using Mold; size optimization and IPO
-OFF), all six static footprint
-consumers build and all six symbol gates pass. The isolated CMake tests `CnaCxxRuntimeLinkage`,
-`CnaSharedRuntimeLinkage` and `CnaBuildSupportExport` pass too (9/9 total). The consumers are not run
-and no device is opened. These checks establish their selected symbol/link-policy contracts;
-they do not reproduce Mobile Eggbert's size tables, the static-runtime placement experiments,
-browser/Windows builds or every linker's full-CNA extraction set.

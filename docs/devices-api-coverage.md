@@ -1,13 +1,11 @@
 # Microsoft::Devices / Microsoft::Devices::Sensors API coverage
 
-This is the current native device surface and its compatibility boundary, checked against
-`modules/devices/include/Microsoft/Devices/` and the corresponding sources/tests on 2026-11-01.
-It replaces the original DEVICES-0002–0008 / DEV-API / READINGS campaign log, retained in Git history.
-The deleted devices plan is not an active task list.
+This is the current native device surface of `modules/devices/include/Microsoft/Devices/` and
+its compatibility boundary (tasks DEVICES-0002–0008, DEV-API, READINGS).
 
-The normal FNA reference does not supply this Windows Phone sensor implementation. Historical
-WP7 classifications below come from the archived Microsoft references recorded by that campaign;
-they are not a fresh exhaustive WP7 metadata comparison or measured hardware parity.
+The normal FNA reference does not supply this Windows Phone sensor implementation. The WP7
+classifications below come from archived Microsoft references; they are not an exhaustive WP7
+metadata comparison or measured hardware parity.
 For generated runtime-member presence see
 [xna-4-runtime-member-coverage.md](xna-4-runtime-member-coverage.md); presence and host tests do
 not establish physical sensor correctness.
@@ -25,10 +23,9 @@ implementations in `modules/devices/src`, tests in `modules/devices/tests`. The 
 - Internal: Detail helpers are implementation contracts, even when their headers are available.
   They are not additional game-facing WP7 API.
 
-The historical visibility/operator findings are closed: AccelerometerReadingEventArgs has no
-public setters; SensorReadingEventArgs<T> has public setters; reading-specific equality,
-formatting and hashing are CNA extensions; TimeBetweenUpdatesChanged is protected and CNAEXT.
-There are no open wrong-visibility findings from that historical audit.
+Visibility and operators: AccelerometerReadingEventArgs has no public setters;
+SensorReadingEventArgs<T> has public setters; reading-specific equality, formatting and hashing
+are CNA extensions; TimeBetweenUpdatesChanged is protected and CNAEXT.
 
 ## Device environment and vibration
 
@@ -116,12 +113,12 @@ formatting/hashing/equality must not be described as a custom WP7 ValueType impl
 | CalibrationEventArgs | Empty event marker plus CNA type-name helper. |
 | SensorFailedException | Default/message/message+errorId constructors, ErrorId getter (default zero). |
 | AccelerometerFailedException | SensorFailedException subclass with the same three constructor forms. |
-| SensorState | NotSupported, Ready, Initializing, NoData, NoPermissions, Disabled. The historical audit's direct WP7 enum-source gap is not resolved by merely inspecting CNA. |
+| SensorState | NotSupported, Ready, Initializing, NoData, NoPermissions, Disabled. The values have not been compared directly with a WP7 enum source. |
 
-Historical reference IDs retained for the value shapes: AccelerometerReading ff403534,
-GyroscopeReading hh220755, CompassReading hh203072, MotionReading hh220685, AttitudeReading hh220667;
-legacy event-argument getters ff707568/ff707712/ff708055/ff707430. These identify earlier evidence,
-not a claim that every archive page was fetched successfully in this audit.
+Archived reference IDs for the value shapes: AccelerometerReading ff403534, GyroscopeReading
+hh220755, CompassReading hh203072, MotionReading hh220685, AttitudeReading hh220667; legacy
+event-argument getters ff707568/ff707712/ff708055/ff707430. They identify the pages used, not a
+claim that every page is still retrievable.
 
 ## Units, coordinate and fusion policy
 
@@ -129,7 +126,7 @@ not a claim that every archive page was fetched successfully in this audit.
 |---|---|
 | Accelerometer.Acceleration | Platform m/s² divided by 9.80665 into g; optional Android landscape remap, or keyboard-emulated values. |
 | Gyroscope.RotationRate | rad/s; optional Android landscape remap. |
-| Compass.MagnetometerReading | Android raw magnetic-field vector in microtesla; no display remap. |
+| Compass.MagnetometerReading | Android raw magnetic-field vector in microtesla; no display remap. WP7's `MagnetometerReading` shares the device-fixed frame of `Accelerometer.Acceleration`, which is the same in portrait and landscape (Petzold, "Touch and Go - Getting Oriented with the Windows Phone Compass", MSDN Magazine, June 2012; COMPASS-001). |
 | Compass.MagneticHeading | Normalized rotation quaternion, with flat/upright heading mode selection. The old claim that no tilt handling exists is obsolete. |
 | Compass.HeadingAccuracy / Calibrate | Android status maps to 5/15/20/180 degree estimates; unreliable/no-contact can raise calibration. These estimates are CNA policy. |
 | Compass.TrueHeading | Equals MagneticHeading; no geographic declination integration. |
@@ -166,8 +163,4 @@ pure Android math. Android-only worker/service paths require separate target exe
 Use [devices-build.md](devices-build.md) for build commands and
 [devices-hardware-checklist.md](devices-hardware-checklist.md) with its
 [report template](devices_sensor_hardware_qa_template.md) to record physical results.
-No new hardware qualification or exhaustive API-completeness claim follows from this cleanup.
-
-Audit verification (2026-11-01): CnaDevicesTests builds in the existing UBSan tree and runs on a
-private display: 484 pass, four supported-hardware cases skip, no failures. These results cover
-host execution; they do not rerun Android sensor workers on a device.
+Host tests do not establish hardware qualification or exhaustive API completeness.

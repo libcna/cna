@@ -3,8 +3,8 @@
 `CNA::Devices::Camera` is an implemented CNA extension in `modules/devices-ext`, enabled by
 `CNA_DEVICES=ON`. It captures through `IPlatformCameraProvider` / `IPlatformCamera`;
 its public header is SDL-free. SDL3 implementation details live in
-`modules/platform/src/Sdl3/Sdl3Camera*`. The legacy filename records the original design task;
-the completed DEVICES-CNA-010 / PLAT-106 work is in Git history.
+`modules/platform/src/Sdl3/Sdl3Camera*`. The filename is kept for existing links (tasks
+DEVICES-CNA-010 / PLAT-106).
 
 ## Public API and ownership
 
@@ -91,7 +91,3 @@ That C seam is not a second public native Camera constructor.
 Real hardware permission, frame timing, unplug/revocation and recovery require separate platform
 qualification. The ordinary canned tests establish the abstraction/wrapper contract, not those
 hardware results.
-
-Audit verification (2026-11-01): `CnaDevicesExtTests` builds in the existing
-`cmake-build-devices-ubsan` configuration with `CNA_DEVICES=ON`; all 13 `CameraTests.*` pass
-through the private GPU runner. This is scripted-provider evidence, with no physical capture.

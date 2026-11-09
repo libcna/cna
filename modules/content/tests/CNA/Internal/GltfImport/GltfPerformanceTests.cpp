@@ -12,7 +12,7 @@
 // The three that are not timings are the important ones. Two are *structural* facts a stopwatch
 // cannot see -- whether a second load shares anything with the first, and whether a Model's copy
 // shares its owned resources -- and one is a leak, which is measured by running this file in the
-// sanitizer build (`docs/gltf-conformance.md`), not by anything asserted here.
+// leak-enabled sanitizer job (`.github/workflows/gltf-sanitizers-ci.yml`), not by an assertion.
 //
 // `docs/gltf-performance.md` carries the numbers and the decision each row reached.
 

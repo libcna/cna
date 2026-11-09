@@ -458,8 +458,8 @@ namespace Microsoft::Devices::Sensors::Detail
      *
      * `Unreliable`/`NoContact` (device needs the classic figure-8 gesture)
      * raise it; `Low`/`Medium`/`High` do not. `Low` is deliberately excluded
-     * (matching `docs/devices-native-backend-design.md`'s own "and
-     * optionally `_LOW`" phrasing as a choice, not a requirement) — a
+     * (a choice, not a requirement; `docs/devices-native-backend-design.md`,
+     * "Android Compass") — a
      * momentarily "Low" reading during normal use is common and would make
      * `Calibrate` fire too eagerly if included.
      *

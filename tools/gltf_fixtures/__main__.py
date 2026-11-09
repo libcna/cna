@@ -75,7 +75,7 @@ def main(argv: list[str] | None = None) -> int:
                        help="print the corpus manifest to stdout without writing anything")
     group.add_argument("--fixture-table", action="store_true",
                        help="print the corpus inventory as a markdown table (GLTF-416); "
-                            "docs/gltf-conformance.md §6 is this output")
+                            "docs/gltf-conformance.md §7 is this output")
     group.add_argument("--reference-pins", action="store_true",
                        help="validate and print the development-only Khronos reference pins")
     group.add_argument("--validator-pin", action="store_true",

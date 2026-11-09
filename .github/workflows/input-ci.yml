@@ -117,8 +117,8 @@ jobs:
       - name: Build input test gate
         run: cmake --build build --target cna_input_test_gate --parallel 8
 
-      # A virtual X server (Xvfb) provides real windows/cursors headlessly (the SDL "dummy" driver has
-      # null cursors, which fails the MouseCursor tests). For the ASan+UBSan entry, halt_on_error=1 turns
+      # A virtual X server (Xvfb) provides real windows headlessly (the MouseCursor tests use a canned
+      # IPlatformMouse and need none). For the ASan+UBSan entry, halt_on_error=1 turns
       # any UB / memory error into a job failure.
       # The `input` label runs the complete module-owned focused binary plus an explicit
       # cross-module lifecycle/platform lane. Both run shuffled x5 for order-independence.

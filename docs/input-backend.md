@@ -3,22 +3,9 @@
 > **Related input docs (INP-0003):** [backend](input-backend.md) · [FNA fidelity + deviations](input-fna-fidelity.md) · [member-parity matrix](input-member-parity-matrix.md) · [frozen API + tier glossary](input-public-api-frozen.md) · [test coverage](input-test-coverage.md) · [build & test](input-build-and-test.md) · [platform notes](platform-input-notes.md) · [manual hardware checks](demo-input-checklist.md#hardware-verification-record) · [demo checklist](demo-input-checklist.md)
 
 Describes how CNA wires SDL3 input events to the `Microsoft::Xna::Framework::Input` (and
-`Input::Touch`) public API. Reference implementation: the `feature/input` branch, merged on 2026-07-18
-(Phases I1–I6, legacy tasks 700–777). The FNA reference can live anywhere; the report generator
-accepts `--fna <checkout>` or `CNA_FNA_TREE=<checkout>`.
-
-> **Task-number scheme (INPUT-AUDIT-004, updated 2026-07-16).** This doc-set accumulated three
-> generations of task numbering as the input plan was revised: bare 3-digit numbers (e.g. "task 734",
-> "tasks 700–777"), the `Phase I*`/`INPUT-*` scheme (e.g. "Phase I12", "Phase I13/I14"), and — since the
-> **2026-07-07 plan reset** — `P0-001`–`P13-006`, the scheme of the final plan (closed 2026-07-18: 490
-> tasks done, the 15 hardware checks P11-001..015 blocked on hardware; the plan was deleted on
-> 2026-10-29 and is in Git history). **None of the earlier two schemes map onto it** and their task
-> IDs do **not** correspond to any `P#-###` task; a "Phase I12" or "task 734" citation elsewhere in this
-> doc-set is historical provenance for *when a specific behavior was fixed*, not evidence that any
-> `P#-###` task is complete. These legacy numbers are also **not** related to the identically-numbered
-> items in the Graphics track (`GRAPHICS_TASKS.md`, e.g. tasks 710–717 or 868–872 there mean
-> SDL_Renderer / DepthStencil work, not input). When a doc needs to point at Graphics work it names
-> `GRAPHICS_TASKS.md` explicitly; a bare number here always means input.
+`Input::Touch`) public API. The FNA reference can live anywhere; the report generator accepts
+`--fna <checkout>` or `CNA_FNA_TREE=<checkout>`. Task numbers in the input pages (bare numbers such
+as "task 734", `Phase I*`/`INPUT-*`, `P#-###`) are decoded in [task-id-index.md](task-id-index.md).
 
 ---
 
@@ -44,26 +31,27 @@ IPlatform::PollEvents(batch)  (Game::PollEvents(), once per frame from Game::Tic
 The current event/state boundary is split deliberately by device shape:
 
 - **`CNA::Internal::Input::PlatformInputBridge`**
-  (`include/CNA/Internal/Input/PlatformInputBridge.hpp`) — the single production event funnel.
+  (`modules/input/include/CNA/Internal/Input/PlatformInputBridge.hpp`, implemented in
+  `modules/input/src/Internal/SdlInputBridge.cpp`) — the single production event funnel.
   It consumes CNA's SDL-free `PlatformEvent` vocabulary; native translation is performed once by
   the selected `IPlatform` implementation before the event reaches `Game`.
 - **`CNA::Internal::Input::SdlInputBridge`** retains keyboard/mouse/touch compatibility helpers. Its
   raw `ProcessEvent` overload is only an adapter for
   legacy SDL-shaped tests and delegates to the platform bridge in an SDL3 build; production
-  `Game` no longer calls it. PLAT-82/83 removed its mapped-gamepad and raw-joystick queries and
-  native handle ownership.
-- **`CNA::Internal::Input::InputManager`** (`include/CNA/Internal/Input/InputManager.hpp`,
-  `src/Input/Internal/InputManager.cpp`) — retains only the keyboard and mouse accumulators used
-  by control-character/click synthesis and legacy raw-adapter tests. PLAT-86 removed its final
-  public-device state store: touch locations now belong to `TouchPanel`; public `Keyboard` and
-  `Mouse` already read their platform services.
+  `Game` does not call it, and it owns no mapped-gamepad or raw-joystick queries or native handles
+  (PLAT-82/83).
+- **`CNA::Internal::Input::InputManager`** (`modules/input/include/CNA/Internal/Input/InputManager.hpp`,
+  `modules/input/src/Internal/InputManager.cpp`) — retains only the keyboard and mouse accumulators
+  used by control-character/click synthesis and legacy raw-adapter tests. It holds no public-device
+  state (PLAT-86): touch locations belong to `TouchPanel`; public `Keyboard` and `Mouse` read their
+  platform services.
 - **`Microsoft::Xna::Framework::Input::Touch::TouchPanel`** owns the event-driven touch map and
   gesture queue. `INTERNAL_setTouchState` records logical position, pressure and previous-frame
   history; `Update()` promotes held touches and retires releases exactly once per frame.
 - **`CNA::Platform::IPlatformGamepad`** owns the four stable player slots, immutable frame
   snapshots, cached capabilities/identity and all mapped-controller actuators. Public
   `GamePad::GetState(playerIndex, deadZoneMode)` projects one raw platform snapshot through the
-  requested dead-zone mode; `InputManager` no longer contains any mapped-gamepad state.
+  requested dead-zone mode; `InputManager` contains no mapped-gamepad state.
 - **`CNA::Platform::IPlatformJoystick`** owns the genuinely unmapped view: arbitrary axes,
   buttons, POV hats and trackballs addressed by the same `DeviceId` carried by hotplug events.
   `Game` publishes it once after each event drain; public `Joysticks` only projects that snapshot.
@@ -74,8 +62,8 @@ The current event/state boundary is split deliberately by device shape:
 
 Gesture handling adds another internal class:
 
-- **`CNA::Internal::Input::GestureDetector`** (`include/CNA/Internal/Input/GestureDetector.hpp`,
-  `src/Input/Internal/GestureDetector.cpp`) — a ported gesture-recognition state machine
+- **`CNA::Internal::Input::GestureDetector`** (`modules/input/include/CNA/Internal/Input/GestureDetector.hpp`,
+  `modules/input/src/Internal/GestureDetector.cpp`) — a ported gesture-recognition state machine
   (Tap, DoubleTap, Hold, HorizontalDrag, VerticalDrag, FreeDrag, Flick, DragComplete, Pinch,
   PinchComplete). Driven by `TouchPanel::INTERNAL_onTouchEvent` (per-event) and
   `TouchPanel::Update()` (per-frame, for timing-based gestures like Hold and the DoubleTap
@@ -110,9 +98,9 @@ An SDL event the mapper does not recognise is intentionally omitted from the pla
 | `SDL_EVENT_JOYSTICK_ADDED` / `_REMOVED` | `Sdl3Joystick` opens/closes the raw device before the platform batch reaches the input bridge; a small SDL-free announced-id set suppresses duplicate add and unknown remove notifications | `CNA::Input::Joysticks::ConnectedEXT`/`DisconnectedEXT.Invoke(deviceId)` plus one immutable raw snapshot per frame; distinct from `GamePad`'s mapped view of the same physical device |
 | `SDL_EVENT_SENSOR_UPDATE` | Mapped losslessly to process-scoped `SensorEvent`; the input bridge has no accumulator for it because public `Sensors` remains an on-demand query | General platform consumers can correlate its stable device id with `IPlatformSensors::GetSensors()` and observe all six values plus the sensor sample timestamp |
 
-**Intentionally unhandled event type (P8-012, confirmed 2026-07-17):**
-- `SDL_EVENT_GAMEPAD_REMAPPED` — FNA itself has no handler for this event either (confirmed: zero
-  matches in `SDL3_FNAPlatform.cs`). XNA's `Buttons`/`GamePadState` model is read fresh on every
+**Intentionally unhandled event type (P8-012):**
+- `SDL_EVENT_GAMEPAD_REMAPPED` — FNA itself has no handler for this event either (no match in
+  `SDL3_FNAPlatform.cs`). XNA's `Buttons`/`GamePadState` model is read fresh on every
   frame update rather than kept in an event accumulator, so a live SDL mapping change is picked up
   by the next `IPlatformGamepad::Update()` without a special-case handler.
 
@@ -179,8 +167,8 @@ Where the difference is actually visible:
 
 ## 4. Per-device fidelity notes
 
-Per-task detail is in Git history (the input plan, Phases I1–I6); the per-member FNA comparison
-is `docs/input-fna-fidelity.md`. Summary of what's real vs. what deviates:
+The per-member FNA comparison is `docs/input-fna-fidelity.md`. Summary of what's real vs. what
+deviates:
 
 ### Keyboard
 
@@ -196,7 +184,7 @@ is `docs/input-fna-fidelity.md`. Summary of what's real vs. what deviates:
 - `KeyboardState::GetPressedKeys()` returns keys sorted ascending by numeric `Keys` value (task
   760); `GetHashCode()` reconstructs FNA's 8×32-bit word layout and XORs them (task 761);
   `ToString()` matches FNA's `ValueType` default, `"Microsoft.Xna.Framework.Input.KeyboardState"`
-  (task 766, not the placeholder it used to be).
+  (task 766).
 - Storage remains an `std::unordered_set<Keys>` rather than FNA's native bitfield representation
   — an accepted internal-representation deviation; the ordering/hash *contract* matches FNA, the
   storage layout doesn't need to.
@@ -216,17 +204,17 @@ is `docs/input-fna-fidelity.md`. Summary of what's real vs. what deviates:
   Terminal truthfully refuses warp/relative mode while still publishing cell-quantised state.
 - `SetPosition` converts the caller's logical coordinates to window space before the warp
   (INPUT-MOUSE-002 (decision a-0001)), so the OS cursor lands at the correct client coordinate on
-  a scaled window. `GetState` applies the inverse. PLAT-66 made the `WindowId` renderer registry
-  the single authoritative path for both operations: the input layer never looks up a native
+  a scaled window. `GetState` applies the inverse. The `WindowId` renderer registry is the single
+  authoritative path for both operations (PLAT-66): the input layer never looks up a native
   window or special-cases one renderer. Renderer implementations own their presentation geometry
   and implement the same platform-client↔logical contract in their own terms. A deterministic
   200×100-client / 100×100-logical test pins the 50-pixel letterbox offset and round trip under all
   platform selections.
 - Normalized touch events carry the logical client width/height captured by the platform event
   edge. The shared input bridge first scales into client coordinates and then uses the same
-  `WindowId` renderer transform as mouse input. This removes its former per-event native window
-  lookup without changing the gesture path's FNA-compatible `DisplayWidth`/`DisplayHeight` basis.
-- `MouseCursor` (custom + 11 stock system cursors) is a MonoGame-derived `CNAEXT` extension — FNA
+  `WindowId` renderer transform as mouse input, with no per-event native window lookup; the
+  gesture path keeps its FNA-compatible `DisplayWidth`/`DisplayHeight` basis.
+- `MouseCursor` (custom + 12 stock system cursors) is a MonoGame-derived `CNAEXT` extension — FNA
   has no `MouseCursor` type at all. Kept as a deliberate, documented status decision (task 754),
   since `Mouse::SetCursor(MouseCursor&)` depends on it and it's the standard way
   MonoGame/FNA-family games set cursors.
@@ -250,34 +238,32 @@ is `docs/input-fna-fidelity.md`. Summary of what's real vs. what deviates:
 - `SDL_EVENT_FINGER_*` feed `TouchPanel::INTERNAL_onTouchEvent`, which drives
   `GestureDetector`'s state machine directly — this is what makes Tap, DoubleTap, Hold,
   Horizontal/Vertical/Free drag, Flick, Pinch, and PinchComplete recognition work end-to-end
-  (Phase I2, the INPUT-TOUCH-* / INPUT-GESTURE-* cluster; previously the pipeline was entirely dead —
-  no caller ever reached `GestureDetector`).
+  (the INPUT-TOUCH-* / INPUT-GESTURE-* cluster).
 - `TouchDeviceExists` only becomes true after the *first* touch event, matching FNA's own
   comment ("Windows only notices a touch screen once it's touched").
 - `TouchPanel::GetState()` reports `TouchLocation`s with their previous location preserved for
   Moved/Released touches, so `TryGetPreviousLocation()` works on the real event-driven path —
   `TouchPanel` stores each touch's previous state/position and advances it once per frame
-  (INPUT-TOUCH-007; the Phase I12 event-driven previous-location fix). A new Pressed touch has no
-  previous, matching FNA.
+  (INPUT-TOUCH-007). A new Pressed touch has no previous, matching FNA.
 - Known deviation (behaviourally equivalent, not a gap): `GetState()` reads `TouchPanel`'s
   event-driven map rather than FNA's per-frame `SetFinger`/`SDL_GetTouchFingers` poll of
   `touches_` — see §3. The event map is internally unbounded, but
-  `GetState()` caps the public snapshot at `MAX_TOUCHES` (8) to match FNA (DEC-10, 2026-07-05).
+  `GetState()` caps the public snapshot at `MAX_TOUCHES` (8) to match FNA (DEC-10).
 - `TouchPanel::GetCapabilities()` reports `MaximumTouchCount = 0` when disconnected and **4** when
-  connected, matching FNA's `touchDeviceExists ? 4 : 0` (DEC-09, 2026-07-05 — XNA always reports 4;
+  connected, matching FNA's `touchDeviceExists ? 4 : 0` (DEC-09 — XNA always reports 4;
   the value is a fixed XNA-compat constant, not the `MAX_TOUCHES` tracking cap).
 
 ### TextInputEXT
 
 - Wired to `SDL_StartTextInput`/`StopTextInput`, `SDL_SetTextInputArea`,
-  `SDL_EVENT_TEXT_INPUT`/`_EDITING` (Phase I1, tasks 700–708), including control-character
+  `SDL_EVENT_TEXT_INPUT`/`_EDITING` (tasks 700–708), including control-character
   synthesis for keys SDL doesn't deliver as `TEXT_INPUT` (Home/End/Back/Tab/Enter/Delete,
   Ctrl+V) and Ctrl+V paste-echo suppression.
 - The `TextInput`/`INTERNAL_OnTextInput` callback is `charcs` (`char16_t`) — one UTF-16 code unit
   per call, with astral code points delivered as a high/low surrogate pair, matching FNA's
   `Action<char>` exactly (task 806). The bridge decodes SDL's UTF-8 to UTF-16 via
   `decode_utf8_to_utf16`. `TextEditing` remains a UTF-8 `std::string` (FNA's `Action<string,int,int>`
-  maps to `std::string`) — a separate, still-intact deviation.
+  maps to `std::string`) — a separate, accepted deviation.
 
 ---
 
@@ -299,7 +285,8 @@ ctest --test-dir cmake-build-input-easygl -L input --output-on-failure
 `ctest -L input` is authoritative. The module lane needs no filter, so a new input-owned suite joins
 automatically. The small cross-module allowlist lives in `cmake/UnitTests.cmake`; its suite-level
 patterns prevent unrelated test methods containing words such as "touch" or "keyboard" from entering
-the gate. The exact current counts live in `docs/input-build-and-test.md`.
+the gate. `ctest -L input --output-on-failure` reports the current per-lane counts; no fixed count
+is maintained in the documentation.
 
 Order-dependence in process-wide input state (`InputManager`, `TouchPanel`, `GestureDetector`, and the
 `MouseCursor` stock cursors) is shaken out by `--gtest_shuffle --gtest_repeat=5` in both lanes.
@@ -315,10 +302,9 @@ other renderer used by input CI. The full suite is just
 **Input is a single-threaded (game-loop-thread) API.** All input state described above —
 `InputManager`'s compatibility state, `GestureDetector`'s state machine,
 `TouchPanel`'s touch arrays, event map and gesture queue, and the static `Mouse::ClickedEXT` /
-`TextInputEXT` callbacks — is plain process-wide static state with **no locking** (verified:
-there is no `mutex`/`atomic`/`thread` anywhere under `src/Input/Internal/` or
-`src/Input/Xna/`). That is deliberate and safe because every access happens on
-one thread:
+`TextInputEXT` callbacks — is plain process-wide static state with **no locking** (there is no
+`mutex`/`atomic`/`thread` under `modules/input/src/Internal/` or `modules/input/src/Xna/`). That is
+deliberate and safe because every access happens on one thread:
 
 - **Writes** flow from `Game::PollEvents()` through `PlatformInputBridge` into event accumulators,
   followed by one keyboard and mouse service update into their whole-device snapshots.

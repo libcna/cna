@@ -8,18 +8,17 @@ of its producer; installing does not enable unavailable modules.
 
 The Sharp Runtime checkout must provide modular installation and the exported Headers target.
 CNA checks that support in addition to its configured Sharp Runtime version requirement;
-matching a product version alone is insufficient. Current product versions and dependency
-requirements come from the root CMake configuration, not a historical SDK campaign pin.
+matching a product version alone is insufficient. Product versions and dependency requirements
+come from the root CMake configuration.
 
 ## Build and install
 
-Use the existing build directory for the desired configuration. On this shared
-development machine use the shared ccache and at most eight workers (one is shown):
+Use the existing build directory for the desired configuration, with your usual ccache
+configuration (CNA's own launcher setup is in [build-performance.md](build-performance.md)):
 
 ```sh
 cmake -S . -B cmake-build-debug -DCNA_INSTALL_CXX=ON
-CCACHE_DIR=/rv/cnaccache CCACHE_BASEDIR=/rv \
-  cmake --build cmake-build-debug --target cna_cpp_sdk --parallel 1
+cmake --build cmake-build-debug --target cna_cpp_sdk --parallel 8
 cmake --install cmake-build-debug --prefix /path/to/sdk --component SharpRuntime
 cmake --install cmake-build-debug --prefix /path/to/sdk --component CNACpp
 # Only if CNA_BUILD_C_API was enabled:
@@ -99,28 +98,26 @@ configuration error.
 ### Emscripten boundary
 
 The source-build aliases `CNA::EmscriptenExceptionAbi`, `CNA::EmscriptenAsyncify` and their
-`CNA::EmscriptenAbi` composition are distinct. Since CNA-FIX-L19 (2026-11-02) the installed SDK
-exports all three imported targets with their link options (`-fexceptions`,
-`-sDISABLE_EXCEPTION_CATCHING=0`; `-sASYNCIFY=1` with its stack size), as the generated
-`CNACppTargets.cmake` of a WebAssembly tree shows, so the source-build blocking `Game::Run()` link
-recipe names the same targets through the package. On 2026-11-03 (MTH-PLAT-004) an application
-built only from the moved Release WEBGPU SDK of `cmake-build-wasm-webgpu`, linking `CNA::CNA` and
-`CNA::EmscriptenAbi`, ran blocking `Game::Run()` in headless Chrome 155 through the private runner:
-three frames read back from the backbuffer, `Run()` returned after `Exit()`, the game was destroyed
-(see the regression gate below). That run fixed the SDK's Storage `--pre-js`, which had named this
-source tree; the SDK now ships `share/cna/emscripten/WebStoragePre.js`. Consumers must name the
-SDK as a `CMAKE_FIND_ROOT_PATH`; see [emscripten-mainloop-game-lifetime.md](emscripten-mainloop-game-lifetime.md)
-for the loop contract.
+`CNA::EmscriptenAbi` composition are distinct. The installed SDK exports all three imported
+targets with their link options (`-fexceptions`, `-sDISABLE_EXCEPTION_CATCHING=0`; `-sASYNCIFY=1`
+with its stack size; CNA-FIX-L19), as the generated `CNACppTargets.cmake` of a WebAssembly tree
+shows, so the source-build blocking `Game::Run()` link recipe names the same targets through the
+package. An application built only from a moved Release WEBGPU SDK, linking `CNA::CNA` and
+`CNA::EmscriptenAbi`, runs blocking `Game::Run()` in headless Chrome through the private runner
+(MTH-PLAT-004; see the regression gate below). The SDK ships its own Storage `--pre-js`,
+`share/cna/emscripten/WebStoragePre.js`, rather than naming the producing source tree. Consumers
+must name the SDK as a `CMAKE_FIND_ROOT_PATH`; see
+[emscripten-mainloop-game-lifetime.md](emscripten-mainloop-game-lifetime.md) for the loop contract.
 
 The generated C API Wasm library uses its separate host-driven, non-Asyncify artifact contract in
 [c-api/WASM_ARTIFACT.md](c-api/WASM_ARTIFACT.md); it is not the native CMake package. The same
 installed SDK also offers `CNA::CApiStatic` (and the opt-in `CNA::CApiStaticAsyncify`) to pure-C
 programs. Its link contract is recorded from a C program linking the C API in the producing build,
 so it carries the options of these C++ SDK targets plus `-sDEFAULT_TO_CXX=1` for the C++ runtime;
-see [c-api/CONSUMING.md](c-api/CONSUMING.md#emscripten). Before MTH-PLAT-004 D2 (2026-11-03) it
-carried no link option and wasm-ld left the exception and C++ runtime symbols undefined. The same
-fix gave `CNA::Storage` `-sFORCE_FILESYSTEM=1`: its pre-js calls FS and `addRunDependency`, which a
-program not otherwise using the filesystem did not include.
+see [c-api/CONSUMING.md](c-api/CONSUMING.md#emscripten); without those options wasm-ld leaves the
+exception and C++ runtime symbols undefined (MTH-PLAT-004 D2). `CNA::Storage` carries
+`-sFORCE_FILESYSTEM=1` because its pre-js calls FS and `addRunDependency`, which a program not
+otherwise using the filesystem would not include.
 
 ### Version contract
 
@@ -213,29 +210,13 @@ with display variables cleared and SDL dummy video/audio drivers. The audit reco
 this mode; it provides no GPU/window qualification. The default Linux gate retains
 the private display runner.
 
-The 2026-11-01 documentation audit reran `CnaInstalledCppPackage` successfully in
-`cmake-build-multi`: the current shared Linux SDK builds, installs, relocates and passes its
-runtime/configuration/consumer checks. That producer has `CNA_C_API_BUILD_STATIC=OFF`; this run
-does not cover the combined static C archive install prerequisite above.
-
-The 2026-11-03 MTH-PLAT-004 run used the Debug Linux SDLGPU shared SDK with the
-standalone static C archive enabled. After fixing SDL3_mixer's standalone loader
-path, the host-only gate passed 12 consumer tests, both shared C/C++ state-check
-orders, package lookup cases, and installed metadata/link/loader audits. Both
-static mixed diagnostic link orders failed with localized COMDAT/typeinfo conflicts;
-the owner decided to keep that composition unsupported and refuse it during CMake configuration.
-The private compositor could not bind a
-socket in the execution sandbox, so this run makes no GPU/window claim.
-
-The 2026-11-03 MTH-PLAT-004 follow-up ran three more Release producers through the driver in its
-default private-display mode. All-static (`CNA_SHARED_LIBRARY=OFF`, C API off, SOFTWARE): the
-moved prefix holds archives plus the vendored SDL3 DSOs only, consumers need no CNA shared object,
-12 consumer tests passed. Video OFF (shared, C API and static archive on, SOFTWARE): no FFmpeg
-`NEEDED` entry or package requirement, 18 consumer tests including both mixed C/C++ orders passed,
-10 static-mixed refusals. Emscripten (`cmake-build-wasm-webgpu`): see the Emscripten boundary above;
-its consumer CTest cases ran under Node only.
-MinGW's export/configure graph (DirectX9 and SDL_shadercross/SPIRV-Cross
-included) is checked, but a relocated Windows SDK runtime has not yet been tested.
-These open validations are listed in `KNOWN_ISSUES.md` (Limitations). The SDK was
-built for cna-engine UP-001; its 2026-10-22 checkpoints are in Git history
-(`git show 9c2b3e2d4:CNA_ENGINE_REPAIR_HANDOFF.md`).
+**Producer configurations exercised by `CnaInstalledCppPackage` (MTH-PLAT-004):** the shared
+Linux SDK (SDLGPU, with and without the standalone static C archive); all-static
+(`CNA_SHARED_LIBRARY=OFF`, C API off), whose moved prefix holds archives plus the vendored SDL3 DSOs
+and whose consumers need no CNA shared object; video OFF, with no FFmpeg `NEEDED` entry or package
+requirement; and Emscripten, whose consumer CTest cases run under Node. Combining
+`CNA::CApiStatic` with C++ SDK targets fails at link time with COMDAT/typeinfo conflicts in either
+order; that composition is unsupported by owner decision and refused during CMake configuration. MinGW's export/configure graph (DirectX9 and
+SDL_shadercross/SPIRV-Cross included) is checked, but a relocated Windows SDK runtime is untested.
+These open validations are listed in `KNOWN_ISSUES.md` (Limitations). The SDK was built for
+cna-engine UP-001.

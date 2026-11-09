@@ -5,8 +5,9 @@
 
 CNA's `Input` namespace uses FNA as its readable reference, with shipped XNA 4.0 behavior
 taking precedence where they differ. This document records FNA agreement, measured XNA decisions,
-intentional CNA deviations and known gaps. The historical Phase I13/I14 audit (tasks 954–956)
-is qualified by the later corrections below, including the TQ-027 value-contract review.
+intentional CNA deviations and known gaps. Coverage is not claimed as "100% FNA fidelity": gamepad
+translation and public contract mapping are headless-tested, while real-hardware *actuation* stays
+in the hardware verification record of `demo-input-checklist.md`.
 
 CNA is partially derived from / behaviorally based on FNA (see the repository's attribution/licensing
 notes); those notices are intact and must not be removed.
@@ -15,7 +16,7 @@ notes); those notices are intact and must not be removed.
 
 FNA is **poll-based per public call**: it re-reads device state when `GetState()` runs. CNA publishes
 input **once per frame**: keyboard, mouse, mapped gamepads and raw joysticks are whole-device platform
-snapshots, while input areas not yet migrated in Phase 5 are accumulated from `PlatformEvent`. Public `Get*State()` reads the
+snapshots, while touch is accumulated from `PlatformEvent` by `TouchPanel`. Public `Get*State()` reads the
 stored frame state, so two reads in one `Update()` cannot observe different native instants. The two
 models are behaviorally equivalent for normal game-loop use; the differences below are where they
 are not identical.
@@ -88,37 +89,31 @@ byte-for-byte by INPUT-KBD-009/010):
 | Wheel `×120` scaling | **Matches FNA** (cast-to-int **before** ×120 — whole notches only; task 927). |
 
 **Intentional deviations:**
-- **Wheel:** fixed in Phase I13/I14 to truncate the SDL float to a whole notch before scaling, so
-  `ScrollWheelValue` stays a clean multiple of 120 exactly like XNA. (Previously multiply-then-cast
-  leaked sub-notch precision-wheel motion.)
-- **DEC-18 (superseded by N-005, corrected 2026-07-17/P1-018):** SDL's horizontal wheel (`wheel.x`) was
-  originally dropped entirely — XNA/FNA `MouseState` exposes only the vertical `ScrollWheelValue`, so
-  there was no property to route horizontal scroll to. N-005 added a CNAEXT/EXT field instead: `wheel.x`
-  is now scaled to the same 120-unit notch and surfaced via
-  `MouseState::getHorizontalScrollWheelValueEXTProperty()`
+- **Wheel:** the SDL float is truncated to a whole notch before scaling, so `ScrollWheelValue`
+  stays a clean multiple of 120 exactly like XNA; multiply-then-cast would leak sub-notch
+  precision-wheel motion.
+- **DEC-18 (superseded by N-005, P1-018):** XNA/FNA `MouseState` exposes only the vertical
+  `ScrollWheelValue`. SDL's horizontal wheel (`wheel.x`) is scaled to the same 120-unit notch and
+  surfaced through the CNAEXT `MouseState::getHorizontalScrollWheelValueEXTProperty()`
   (`InputManager::AddHorizontalScrollWheelDelta`, wired in `PlatformInputBridge::ProcessEvent`). It is
   deliberately excluded from `Equals`/`GetHashCode`/`ToString`/`==`/`!=` so those stay byte-identical to
   FNA. Tested in `SdlInputBridgeMouseTests.cpp` (horizontal-wheel delta/accumulation tests) and
   `MouseInputTests.cpp` (`NineArgConstructorAlsoSetsHorizontalScrollWheelEXT`,
-  `HorizontalScrollWheelEXTIsExcludedFromEqualityAndHash`). This entry previously cited a test,
-  `HorizontalWheelIsIgnored`, that no longer exists in the repo — the doc had gone stale relative to the
-  N-005 change; corrected here.
+  `HorizontalScrollWheelEXTIsExcludedFromEqualityAndHash`).
 - **`MouseState::GetHashCode()` (TQ-027):** XNA IL_0000..0078 XORs x, y,
   vertical wheel and all five button states. The horizontal wheel extension stays excluded.
-  This replaces CNA's previous weighted-position hash and follows XNA over FNA's inherited hash.
+  This follows XNA over FNA's inherited hash.
 
 ### MouseCursor
 
-No FNA source exists for `MouseCursor` — confirmed by full-tree search of
-`/rv/data/library/github.com/FNA-XNA/FNA`. It is a MonoGame-derived CNAEXT extension
-(`include/Microsoft/Xna/Framework/Input/MouseCursor.hpp`), audited against MonoGame's
-`MouseCursor.cs`/`MouseCursor.SDL.cs` for task P1-017. Full stock-cursor parity confirmed (all 12:
-Arrow, IBeam, Wait, Crosshair, WaitArrow, SizeNWSE, SizeNESW, SizeWE, SizeNS, SizeAll, No, Hand). CNA
-intentionally improves on MonoGame's actual SDL-backend behavior by making `Dispose()` a no-op for the
-stock-cursor singletons (`isSystemSingleton_` guard) — real MonoGame's `PlatformDispose()` frees the
-shared handle unconditionally, corrupting the singleton for all other holders. No accidental
-divergences found; move ctor/assignment (a pure C++ addition, no C# analogue) reviewed line-by-line,
-self-move-assignment guard now covered by a regression test.
+No FNA source exists for `MouseCursor`. It is a MonoGame-derived CNAEXT extension
+(`modules/input/include/Microsoft/Xna/Framework/Input/MouseCursor.hpp`), compared with MonoGame's
+`MouseCursor.cs`/`MouseCursor.SDL.cs` (task P1-017), with all 12 stock cursors: Arrow, IBeam, Wait,
+Crosshair, WaitArrow, SizeNWSE, SizeNESW, SizeWE, SizeNS, SizeAll, No, Hand. CNA intentionally
+improves on MonoGame's SDL-backend behavior by making `Dispose()` a no-op for the stock-cursor
+singletons (`isSystemSingleton_` guard) — MonoGame's `PlatformDispose()` frees the shared handle
+unconditionally, corrupting the singleton for all other holders. The move constructor/assignment (a
+C++ addition with no C# analogue) has a self-move-assignment regression test.
 - **Disposed-cursor behavior deviates from the project's general `IDisposable` convention (P3-033,
   accepted):** `MouseCursor::Dispose()` never throws, and — unlike the CLAUDE.md-documented default
   ("throw `std::runtime_error` if used after disposal") — `Mouse::SetCursor` on a disposed cursor is
@@ -129,20 +124,19 @@ self-move-assignment guard now covered by a regression test.
   use-after-dispose hides a real resource-safety bug worth surfacing loudly). `Dispose()` itself
   remains idempotent (double-dispose is a safe no-op — P3-034, tested by
   `DisposeIsIdempotentAndMakesOwnedCursorUnusable`), which does follow the general convention.
-- **Native cursor handles are platform-owned (PLAT-81, changed 2026-08-13):** the former public
-  `SDL_Cursor*` constructor and `GetSDLCursor()` extension were removed. `MouseCursor` now owns only
-  a system-shape value or copied RGBA pixels, and `Mouse::SetCursor` sends that description through
-  `IPlatformMouse`. This intentionally supersedes P3-037: keeping the raw accessor would preserve an
-  SDL type in the public input API and make non-SDL platforms impossible to implement honestly.
+- **Native cursor handles are platform-owned (PLAT-81):** `MouseCursor` owns only a system-shape
+  value or copied RGBA pixels, and `Mouse::SetCursor` sends that description through
+  `IPlatformMouse`; there is no public `SDL_Cursor*` constructor or `GetSDLCursor()`. This supersedes
+  P3-037: a raw accessor would put an SDL type in the public input API and make non-SDL platforms
+  impossible to implement honestly.
 - **Logical↔window scaling (PLAT-66):** CNA converts through the active graphics renderer at
   `GetState`/`SetPosition` time. Both directions use the renderer registered for the platform's
   stable `WindowId`; input never resolves or interprets a native window. The contract's window
   side is the platform window's logical client-coordinate space, and each renderer owns its
   presentation scale/crop/letterbox offsets. FNA performs the equivalent scaling at `GetState`
   read time (see INPUT-MOUSE-002 (decision a-0001)).
-- **`ClickedEXT` is multicast (DEC-06, fixed 2026-07-05):** now a `System::MulticastAction<int>` matching
-  FNA's `public static Action<int>` — `+=` adds subscribers, `=` replaces, `= nullptr` clears. (Was a
-  single `std::function`; the second-subscriber-lost gap is closed.)
+- **`ClickedEXT` is multicast (DEC-06):** a `System::MulticastAction<int>` matching FNA's
+  `public static Action<int>` — `+=` adds subscribers, `=` replaces, `= nullptr` clears.
 - **Relative-mode service state (DEC-14, migrated by PLAT-80):** the public getter and setter use
   `IPlatformMouse`; SDL3 keeps the mode next to native window capture and Terminal refuses it
   through the capability contract. `Update()` collects native displacement after the event pump,
@@ -162,25 +156,23 @@ self-move-assignment guard now covered by a regression test.
 | `SetVibration`/`SetTriggerVibration`/`SetLightBar`/`GetGyro`/`GetAccelerometer`/`GetGUID` | **Faithful ports.** |
 | `ToString()` | Matches FNA (type name). |
 
-**Fidelity fix (L-015, source-logic audit 2026-07-06):** `normalize_stick_axis` divided the **negative**
-half of the SDL stick range by **32768** while the positive half used 32767. FNA divides the **whole** range
-by 32767 (`SDL3_FNAPlatform.cs:1814-1822`: `axis / 32767`, `axis / -32767` for Y). The endpoints agreed
-(both give ±1 after clamping) but every non-endpoint negative sample diverged (e.g. `-16384` → `-0.5` in CNA
-vs FNA's `-0.50001`). `NormalizeGamepadAxis` now applies `clamp(value / 32767, -1, 1)` for the
-full range — byte-identical to FNA and shared by event and snapshot translation. Pinned by
-`Sdl3EventMapperTests.GamepadAxesMapToCnaVocabularyAndBridgeNumerics`.
+**Axis normalisation (L-015):** `NormalizeGamepadAxis` applies `clamp(value / 32767, -1, 1)` over
+the whole Sint16 range, byte-identical to FNA (`SDL3_FNAPlatform.cs:1814-1822`: `axis / 32767`,
+`axis / -32767` for Y) and shared by event and snapshot translation. Dividing the negative half by
+32768 would keep the endpoints but make every other negative sample diverge (`-16384` → `-0.5`
+versus FNA's `-0.50001`). Pinned by `Sdl3EventMapperTests.GamepadAxesMapToCnaVocabularyAndBridgeNumerics`.
 
-**Real bugs fixed in Phase I13/I14:**
-- **`SDL_INIT_GAMEPAD` was never initialized** → no gamepad events were ever delivered. The migration
-  now acquires `PlatformSubsystem::Gamepad` through `IPlatform` with SDL3's background-events hint
-  configured by the platform implementation, so hot-plugged **and** already-connected pads are visible.
+**Subsystem and capability rules:**
+- The gamepad subsystem must be initialized or no gamepad events are delivered. CNA acquires
+  `PlatformSubsystem::Gamepad` through `IPlatform`, with SDL3's background-events hint configured by
+  the platform implementation, so hot-plugged **and** already-connected pads are visible.
   - **Startup invariant:** `Game::DoInitialize()` acquires the subsystem after graphics-device
-    creation and **before the first event pump/snapshot update**; both run modes funnel through it.
-    Explicit disposal and destructor disposal release the same owned reference.
-- **`GetCapabilities` cancelled active rumble**: it probed rumble support with
-  `SDL_RumbleGamepad(0,0,0)` (which *stops* vibration). Now it reads non-mutating capability
-  properties (`SDL_PROP_GAMEPAD_CAP_*`), so reading capabilities no longer cancels a game's
-  `SetVibration` (task 922).
+    creation and **before the first event pump/snapshot update**; both run modes funnel through it,
+    and `Sdl3Gamepad::Update()` enumerates pre-connected devices in frame one. Explicit disposal and
+    destructor disposal release the same owned reference.
+- `GetCapabilities` reads non-mutating capability properties (`SDL_PROP_GAMEPAD_CAP_*`); probing
+  rumble support with `SDL_RumbleGamepad(0,0,0)` would *stop* a game's active `SetVibration`
+  (task 922).
 
 **Intentional / documented deviations:**
 - `FNA_GAMEPAD_NUM_GAMEPADS` is clamped to **4** because `PlayerIndex` is the frozen XNA enum
@@ -219,34 +211,27 @@ full range — byte-identical to FNA and shared by event and snapshot translatio
   visibility; CNA exposes them as `CNAEXT`-tagged public statics on `GamePad` so `GamePadThumbSticks.cpp`/
   `GamePadTriggers.cpp` (separate translation units) can consume them — the correct translation of FNA's
   `internal`, not an accidental widening of the public surface.
-- `GamePadButtons::buttons_` was public in the header (declared before `private:`) despite FNA's field
-  being `internal`; fixed to `private` with the existing `friend struct GamePadState;` preserved for
-  the same-assembly-style access `GamePadState`'s constructor needs (P1-004).
-- **Struct-level audit (P1-005):** every property of `GamePadCapabilities` (25 XNA bool properties +
-  `GamePadType` + 10 `…EXT` bool properties) was compared field-by-field against FNA
-  (`GamePadCapabilities.cs`): names, order, defaults (all `false` / `GamePadType.Unknown`), and
-  getter/setter shape. Zero divergences found. FNA's `internal set` maps to a public `CNAEXT`-tagged
-  setter (documented in the struct's own Doxygen comment) since C++ has no `internal` accessibility;
-  all 10 EXT properties are correctly `CNAEXT` on both getter and setter. No `VendorId`/`ProductId`
-  properties exist on this struct in current FNA — only the 10 boolean `…EXT` flags. Test coverage
-  (`GamePadTests.cpp`, `GamePadMappingTests.cpp`, `PublicApiInputSignatureFreezeTests.cpp`,
-  `PublicApiInputCompileTests.cpp`) already exercises every getter/setter individually (default state,
-  per-flag isolation, round-trip, partial-capability combinations) plus full signature-freeze pinning;
-  no gaps found, no new tests added.
+- `GamePadButtons::buttons_` is `private` (FNA's field is `internal`), with `friend struct
+  GamePadState;` for the same-assembly-style access `GamePadState`'s constructor needs (P1-004).
+- **`GamePadCapabilities` (P1-005):** its 25 XNA bool properties, `GamePadType` and 10 `…EXT` bool
+  properties match FNA's `GamePadCapabilities.cs` in names, order, defaults (all `false` /
+  `GamePadType.Unknown`) and getter/setter shape; there are no `VendorId`/`ProductId` properties.
+  FNA's `internal set` maps to a public `CNAEXT`-tagged setter, since C++ has no `internal`
+  accessibility. `GamePadTests.cpp`, `GamePadMappingTests.cpp` and the public-API signature-freeze
+  and compile tests exercise every getter/setter individually.
 - **Trigger equality (TQ-027):** XNA `GamePadTriggers.op_Equality` IL_0000..0022
   compares each stored float exactly. CNA follows XNA rather than FNA's `WithinEpsilon`;
   typed/object `Equals`, `==`, `!=` and the C value routes share that rule. The public
   constructor still clamps to `[0,1]`. Trigger dead-zone processing remains a normalized-float
   path; the existing independent arithmetic tests do not qualify every native byte conversion.
 
-**Platform-contract unit coverage (Phase I15 + PLAT-82 — no real hardware):** pure SDL-edge tests
+**Platform-contract unit coverage (PLAT-82 — no real hardware):** pure SDL-edge tests
 exercise all **21** `SDL_GamepadButton` mappings, all six axes including Y inversion/endpoints and
 trigger normalisation, controller kind/model, connection/power/glyph translation and clamped motor
 conversion. A complete canned `IPlatformGamepad` then drives the real public `GamePad` surface and
 pins four-slot isolation, immutable snapshots, packet numbers, all buttons/axes/dead zones,
 capabilities, ordinary/trigger rumble, LED, gyro/accelerometer, player index, touchpad, power,
-identity and GUID formatting (xinput / vendor+product little-endian / Valve overrides). The former
-`ISdlGamepadBackend` and duplicate `InputManager` mapped-gamepad store were deleted.
+identity and GUID formatting (xinput / vendor+product little-endian / Valve overrides).
 
 **Remaining gaps (real hardware / manual only — NOT a code gap):** the fake proves CNA's
 *translation and bookkeeping* are correct; it cannot prove the *physical device acts* — an actual
@@ -260,14 +245,14 @@ from the fake-backend unit tests above.
 
 | Aspect | Status |
 |---|---|
-| `GetState` previous-location (Pressed/Moved/Released) | Matches FNA (Phase I12). |
+| `GetState` previous-location (Pressed/Moved/Released) | Matches FNA. |
 | `TouchLocation` `Equals`/`GetHashCode`/`==`/`!=` | **Matches FNA.** |
-| `SDL_EVENT_FINGER_CANCELED` | **Fixed (task 892):** now released like `FINGER_UP` (was unhandled → stuck touch). |
-| `GetCapabilities()` side effects | **Fixed (task 894/PLAT-86):** now peeks at panel-owned event state without advancing a touch frame. |
-| `GetState()` read-frequency dependence | **Fixed (INP-AUD-001, 2026-07-16):** `TouchPanel::GetState()` is a pure read; see below. |
-| `GetCapabilities()` SDL enumeration | **Fixed (INP-AUD-003, 2026-07-16):** now queries `system_device_backend().GetTouchDevices()` every call, matching FNA; see below. |
-| `TouchCollection::CopyTo` | **Fixed (task 902):** out-of-range index now throws `std::out_of_range` (was UB). |
-| `TouchCollection::FindById` not-found out-param | **Fixed (P1-022):** now writes the `Invalid` sentinel location (`TouchLocation(-1, Invalid, Vector2.Zero)`) on the not-found path — previously left the caller's out-param untouched. Matches FNA `TouchCollection.cs:125-130`. |
+| `SDL_EVENT_FINGER_CANCELED` | Released like `FINGER_UP`, so no touch sticks (task 892). |
+| `GetCapabilities()` side effects | None: peeks at panel-owned event state without advancing a touch frame (task 894/PLAT-86). |
+| `GetState()` read-frequency dependence | None: `TouchPanel::GetState()` is a pure read (INP-AUD-001); see below. |
+| `GetCapabilities()` device enumeration | Queries `IPlatformInputDevices::HasDevice(Touch)` every call, matching FNA (INP-AUD-003); see below. |
+| `TouchCollection::CopyTo` | Out-of-range index throws `std::out_of_range` (task 902). |
+| `TouchCollection::FindById` not-found out-param | Writes the `Invalid` sentinel location (`TouchLocation(-1, Invalid, Vector2.Zero)`) on the not-found path, matching FNA `TouchCollection.cs:125-130` (P1-022). |
 | Empty/default semantics, out-of-range indexer, `IsReadOnly=true` | Empty vector replaces null sentinel; `out_of_range` for a bad index. **Follows XNA (TQ-036):** every mutator and the indexer setter throw `NotSupportedException`, and `IsConnected` is captured in each snapshot. |
 
 **Intentional / documented deviations:**
@@ -289,8 +274,7 @@ from the fake-backend unit tests above.
   117-118`) instead. Pinned by `GestureSampleTest.DefaultConstructorProducesZeroedNoneSample`.
 - **Touch IDs** are a compact sequential counter (1,2,3,…) rather than FNA's cast SDL finger id. IDs
   are opaque to games. Overflow only after ~2³¹ distinct fingers in one session (theoretical).
-- **`MAX_TOUCHES` / `MaximumTouchCount` (DEC-09 + DEC-10, fixed 2026-07-05):** now matches FNA on both
-  counts. `GetCapabilities` reports `MaximumTouchCount = 4` (FNA: "MaximumTouchCount is completely bogus;
+- **`MAX_TOUCHES` / `MaximumTouchCount` (DEC-09 + DEC-10):** matches FNA on both counts. `GetCapabilities` reports `MaximumTouchCount = 4` (FNA: "MaximumTouchCount is completely bogus;
   for any touch device, XNA always reports 4", `SDL3_FNAPlatform.cs`), `0` when disconnected — this is a
   fixed XNA-compat value, NOT the tracking cap. `TouchPanel::GetState()` caps the public snapshot at
   `MAX_TOUCHES (8)`, matching FNA's fixed `TouchLocation[MAX_TOUCHES]` array (the panel-owned
@@ -305,19 +289,13 @@ from the fake-backend unit tests above.
   display size is published (gestures resume). Pinned by
   `PlatformInputBridgeTouchGestureTest.TouchBeforeDisplaySizeIsKnownTracksTouchButSuppressesGestures` and
   `TouchEdgeCaseTest.ScalingProducesNoGestureWhenDisplaySizeIsZero`.
-- **`GetCapabilities` SDL enumeration (INP-AUD-003, fixed 2026-07-16):** `TouchPanel::GetCapabilities()`
-  now queries `IPlatformInputDevices::HasDevice(Touch)` on every call, matching
-  FNA's `GetTouchCapabilities()` (`SDL_GetTouchDevices()` on every query, `SDL3_FNAPlatform.cs:2265-2280`).
-  **Previously** it reported `IsConnected = false` for any touchscreen that had not yet been touched —
-  it only ever consulted the sticky `touchDeviceExists_` flag (set on the first `FINGER_DOWN`,
-  bridge) or the live panel-state peek, never SDL's own device
-  list. That was documented at the time as "intentional and FNA-faithful" by analogy with FNA's note
-  that *Windows* only notices a touch screen once it is touched (`SDL3_FNAPlatform.cs:972`) — but FNA's
-  own `GetTouchCapabilities()` still calls `SDL_GetTouchDevices()` unconditionally on every platform, so
-  a real enumerable-but-untouched device on any non-Windows platform was reported disconnected, which
-  was not actually FNA-faithful. The fix makes SDL enumeration the primary source; `touchDeviceExists_`
-  and the panel-state peek remain as fallbacks specifically for the Windows-style late-enumeration
-  case. Still fully non-mutating. Pinned by
+- **`GetCapabilities` device enumeration (INP-AUD-003):** `TouchPanel::GetCapabilities()` queries
+  `IPlatformInputDevices::HasDevice(Touch)` on every call, matching FNA's `GetTouchCapabilities()`
+  (`SDL_GetTouchDevices()` on every query, on every platform, `SDL3_FNAPlatform.cs:2265-2280`), so an
+  enumerable but untouched device reports connected. The sticky `touchDeviceExists_` flag (set on the
+  first `FINGER_DOWN`) and the live panel-state peek remain as fallbacks for the Windows-style
+  late-enumeration case (FNA: *Windows* only notices a touch screen once it is touched,
+  `SDL3_FNAPlatform.cs:972`). Fully non-mutating. Pinned by
   `GetCapabilitiesIsDisconnectedBeforeAnyTouch`, `GetCapabilitiesIsConnectedOnceTouchDeviceExists`,
   `GetCapabilitiesIsConnectedViaPanelStateWhenFlagUnset`, and the
   `TouchCapabilitiesEnumerationTest` fixture (fake-backend enumeration, empty-enumeration-with-sticky-
@@ -331,29 +309,24 @@ from the fake-backend unit tests above.
   position). Pinned by `TouchInputTest.GetStateHandlesMultipleTouchIdsAndKeepsDeterministicOrder` and
   `GetStateOrdersMultipleTouchesByAscendingIdRegardlessOfInsertionOrder`.
 - `TouchPanel::Update()` copies current→previous **before** the gesture update; FNA does gesture update
-  first (`TouchPanel.cs:219`). **Confirmed inert (DEC-13, 2026-07-05):** `GestureDetector::OnUpdate()`
+  first (`TouchPanel.cs:219`). **Inert (DEC-13):** `GestureDetector::OnUpdate()`
   operates only on the gesture detector's own state and never reads or writes `touches_`/`previousTouches_`,
   so the two statements touch disjoint state and the ordering is unobservable. Pinned by
   `TouchEdgeCaseTest.UpdatePropagatesTouchesToPreviousForSlotPathContinuity`.
-- `TryGetPreviousLocation` writes the out-param on **every** path (DEC-12, fixed 2026-07-05; failure
-  value corrected to XNA by TQ-019, 2026-11-04). With no valid previous state it writes ID **-1**,
+- `TryGetPreviousLocation` writes the out-param on **every** path (DEC-12; failure value follows XNA
+  per TQ-019). With no valid previous state it writes ID **-1**,
   `Invalid` and a zero position and returns `false`, whatever the current ID or stored coordinates; with
   one it writes the current ID with the saved state and position, clears older history and returns
   `true`, even when the out-param aliases the source (XNA `TouchLocation.TryGetPreviousLocation`
   IL_0000-0099). FNA keeps the current ID on failure; the row in
   [`xna-fna-behavior-decisions.md`](xna-fna-behavior-decisions.md) records the divergence.
-- **`GetState()` frame-accurate read (INP-AUD-001, fixed 2026-07-16; moved in PLAT-86):** FNA's
-  `TouchPanel.GetState()` is a pure collection read; its frame advance (`SetFinger`-equivalent
-  polling) happens once per frame in FNA's own `Update()`, not inside the getter
-  (`TouchPanel.cs:94-105, 224-228`). CNA's old event-driven input store previously
-  advanced `Pressed`→`Moved` promotion, `Released` retirement, and previous-location tracking
-  **inline on every call**, so the reported state depended on how many times application code
-  called `GetState()` per frame rather than on the frame boundary (two reads in one frame could
-  observe `Pressed` then `Moved`; zero reads in a frame silently skipped a promotion/retirement).
-  Fixed by splitting the operation: `TouchPanel::GetState()` is a pure snapshot read and
-  `TouchPanel::Update()` performs the previous-state promotion/release retirement exactly once per
-  frame — itself driven once per
-  `Game::Update()` tick via `FrameworkDispatcher::Update()`. Pinned by
+- **`GetState()` frame-accurate read (INP-AUD-001, PLAT-86):** FNA's `TouchPanel.GetState()` is a
+  pure collection read; its frame advance (`SetFinger`-equivalent polling) happens once per frame in
+  FNA's own `Update()`, not inside the getter (`TouchPanel.cs:94-105, 224-228`). CNA matches:
+  `TouchPanel::GetState()` is a pure snapshot read, and `TouchPanel::Update()` performs the
+  `Pressed`→`Moved` promotion, `Released` retirement and previous-location tracking exactly once per
+  frame, driven once per `Game::Update()` tick via `FrameworkDispatcher::Update()`. Advancing inside
+  the getter would make the reported state depend on how often a game reads it per frame. Pinned by
   `GetStateIsPureAndRepeatedReadsWithinAFrameAreIdentical`,
   `UpdateWorksEvenWithoutAnIntermediateRead`, and
   `ReleasedTouchIsVisibleForExactlyOnePostAdvanceReadRegardlessOfPriorReads`
@@ -370,11 +343,10 @@ next `Pinch` reports it as `Position2`; FNA keeps the departed finger's position
 moves. XNA's shipped touch assembly contains no recognizer that settles this
 (`GestureDetectorTest.AReplacementSecondFingerStartsFromItsOwnLatestLocation`).
 Covered by `GestureDetectorTests` and the end-to-end `PlatformInputBridgeTouchGestureTest` suite (including the
-new `FINGER_CANCELED` release path). Broader parameterized regression coverage across every gesture
+`FINGER_CANCELED` release path). Broader parameterized regression coverage across every gesture
 type + interruption is partial (task 906).
 
-**Threshold constants verified byte-identical to FNA (P6-026/027/028, 2026-07-17):** independently
-re-derived from `GestureDetector.cs` rather than trusting prior claims —
+**Threshold constants byte-identical to FNA (P6-026/027/028):** derived from `GestureDetector.cs` —
 `MOVE_THRESHOLD`=35px (`GestureDetector.cpp:34`), `MIN_FLICK_VELOCITY`=100.0f (`:35`), the double-tap
 timing window=300ms (`:182`, `TimeSpan.FromMilliseconds(300)` in FNA), the hold threshold=1 second
 (`:230`/`:419`, `TimeSpan.FromSeconds(1)` in FNA), and the flick-velocity exponential-smoothing formula
@@ -383,7 +355,7 @@ timing window=300ms (`:182`, `TimeSpan.FromMilliseconds(300)` in FNA), the hold 
 thresholds scale with `TouchPanel.DisplayWidth`/`DisplayHeight` in either engine — they are fixed pixel/
 time constants (P6-033: confirmed NOT display-size-dependent, matching FNA).
 
-**Intentional / documented deviation — gesture auto-timestamp units (P6-012, found 2026-07-17):**
+**Intentional / documented deviation — gesture auto-timestamp units (P6-012):**
 FNA's `GestureDetector.GetGestureTimestamp()` (`GestureDetector.cs:546-552`) is
 `TimeSpan.FromTicks(Environment.TickCount)` — `Environment.TickCount` is a **millisecond** counter, but
 `TimeSpan.FromTicks` expects **100ns ticks**, so FNA's own formula has a ~10000x unit mismatch versus
@@ -396,14 +368,14 @@ contract depends on its exact scale), only relative ordering/deltas between gest
 practice, and both formulas remain monotonically increasing with real elapsed time. Replicating FNA's
 literal unit-mismatch here would trade a real correctness property for a match against what reads as an
 upstream implementation slip, with no compatibility benefit since no observable game behavior depends on
-the absolute value. Not previously documented; added here as part of the P6 audit.
+the absolute value.
 
-**`GestureSample` equality/`ToString` (P6-039, confirmed 2026-07-17):** neither FNA's
+**`GestureSample` equality/`ToString` (P6-039):** neither FNA's
 `GestureSample.cs` nor CNA's `GestureSample.hpp` defines `Equals`/`GetHashCode`/`ToString`/`operator==`
 — it is a bare value-carrier struct in both engines (no `ValueType`-default override needed, unlike
 `MouseState`/`GamePadState`/`KeyboardState`). Nothing to test; confirmed absent by design in both.
 
-**Gesture queue has no overflow/eviction policy (P6-035, confirmed 2026-07-17):** FNA's
+**Gesture queue has no overflow/eviction policy (P6-035):** FNA's
 `gestures` is a plain `Queue<GestureSample>` (`TouchPanel.cs:80`) and CNA's `gestures_` is a plain
 `std::queue<GestureSample>` (`TouchPanel.hpp:217`) — both grow unbounded if a game never calls
 `ReadGesture()`. This is accepted upstream XNA/FNA behavior (a "the game is expected to drain its
@@ -431,20 +403,19 @@ else in this section is FNA-required behavior, not CNA scope creep.
 |---|---|
 | `StartTextInput`/`StopTextInput`/`SetInputRectangle`/active-window | **Faithful ports** (+ null-window guards). |
 | UTF-8 → UTF-16 decode (BMP + astral surrogate pairs) | **Matches FNA** (`Encoding.UTF8.GetChars` equivalent). Exhaustively tested. |
-| `TextInput` code-unit type | `charcs`/UTF-16 code unit, matching FNA's `Action<char>` (Phase I9 task 806). |
+| `TextInput` code-unit type | `charcs`/UTF-16 code unit, matching FNA's `Action<char>` (task 806). |
 | Control-char synthesis (Home/End/Back/Tab/Enter/Delete/Ctrl+V) | **Matches FNA exactly**: `(char)2/3/8/9/13/127/22` via the same `TextInputBindings`/`TextInputCharacters` table as `FNAPlatform.cs:261-278` (P2-039..045). |
 
 **Intentional / documented deviations:**
-- **Multicast callbacks (DEC-06, fixed 2026-07-05):** `TextInput`/`TextEditing` are now
-  `System::MulticastAction<...>` matching FNA's `event Action<...>` — `+=` adds subscribers, `=` replaces,
-  `= nullptr` clears. (Were single `std::function`s; the second-subscriber-lost gap is closed.)
+- **Multicast callbacks (DEC-06):** `TextInput`/`TextEditing` are `System::MulticastAction<...>`
+  matching FNA's `event Action<...>` — `+=` adds subscribers, `=` replaces, `= nullptr` clears.
 - **`TextEditing` string is UTF-8** (`std::string`) vs FNA's decoded UTF-16 string; `start`/`length`
   index bytes vs UTF-16 units. Documented.
-- **Malformed UTF-8 emits U+FFFD (DEC-08, fixed 2026-07-05):** `decode_utf8_to_utf16` now substitutes
-  U+FFFD for an invalid lead byte, an ill-formed sequence (one per maximal subpart, resyncing to the next
-  valid text), an overlong encoding, a UTF-16 surrogate code point, or an out-of-range code point —
-  matching FNA's `Encoding.UTF8` replacement fallback. (Was silently skipped; unreachable via SDL, which
-  guarantees well-formed UTF-8, but now FNA-faithful.)
+- **Malformed UTF-8 emits U+FFFD (DEC-08):** `decode_utf8_to_utf16` substitutes U+FFFD for an
+  invalid lead byte, an ill-formed sequence (one per maximal subpart, resyncing to the next valid
+  text), an overlong encoding, a UTF-16 surrogate code point, or an out-of-range code point —
+  matching FNA's `Encoding.UTF8` replacement fallback (unreachable via SDL, which guarantees
+  well-formed UTF-8).
 - Empty composition emits `("", 0, 0)` vs FNA's `(null, 0, 0)` (`std::string` cannot be null).
 
 ---
@@ -455,7 +426,7 @@ else in this section is FNA-required behavior, not CNA scope creep.
   events are ignored (task 949). Unmapped keys/buttons/axes are dropped without side effects.
 - Window handles are derived defensively (`SDL_GetWindowFromID` → `SDL_GetMouseFocus()` fallback);
   `nullptr` windows are handled everywhere (task 950).
-- **Focus loss (task 951 / DEC-15) — DECISION: match FNA, no clear (accepted 2026-07-05).** On
+- **Focus loss (task 951 / DEC-15) — DECISION: match FNA, no clear.** On
   `SDL_EVENT_WINDOW_FOCUS_LOST` neither FNA nor CNA clears accumulated input state. FNA is **also
   event-driven and accumulating** — its `Keyboard.keys` list is mutated by KEY_DOWN/KEY_UP
   (`SDL3_FNAPlatform.cs:905-940`), and on focus loss it *only* sets `game.IsActive = false`
@@ -466,26 +437,24 @@ else in this section is FNA-required behavior, not CNA scope creep.
   and **rejected** (it would silently diverge from the reference); the XNA-standard mitigation is for the
   game to gate input on `Game.IsActive`. Pinned by
   `PlatformInputBridgeKeyboardTest.WindowFocusLostDoesNotClearHeldKeysMatchingFna`.
-- **`Game.IsActive` on desktop focus change (INP-AUD-002, fixed 2026-07-16):** the "gate on
-  `Game.IsActive`" mitigation described just above only works if `IsActive` is actually correct.
-  Until this fix, `Game::PollEvents()` handled the mobile-style
-  `SDL_EVENT_WILL_ENTER_BACKGROUND`/`SDL_EVENT_DID_ENTER_FOREGROUND` pair but had no case for the
-  desktop `SDL_EVENT_WINDOW_FOCUS_LOST`/`SDL_EVENT_WINDOW_FOCUS_GAINED` pair, so an ordinary desktop
-  Alt-Tab left `Game::IsActive` `true` forever and never raised `Activated`/`Deactivated`. Both
-  events now route through `setIsActiveProperty`, matching FNA
-  (`SDL3_FNAPlatform.cs:1006-1037`). **Known scope gap (intentional, not part of this fix):** FNA's
-  handler for these two events also toggles the X11 "fullscreen desktop" window flag and
-  enables/disables the SDL screensaver; CNA does not replicate either. Neither affects input
-  semantics (the subject of this audit); revisit only if X11 fullscreen-on-Alt-Tab behavior or
-  screensaver suppression is reported as a real-world gap. Pinned directly by
+- **`Game.IsActive` on desktop focus change (INP-AUD-002):** the "gate on `Game.IsActive`"
+  mitigation above needs a correct `IsActive`. `Game::PollEvents()` routes the desktop
+  `SDL_EVENT_WINDOW_FOCUS_LOST`/`SDL_EVENT_WINDOW_FOCUS_GAINED` pair, as well as the mobile-style
+  `SDL_EVENT_WILL_ENTER_BACKGROUND`/`SDL_EVENT_DID_ENTER_FOREGROUND` pair, through
+  `setIsActiveProperty`, raising `Activated`/`Deactivated` on an ordinary Alt-Tab, matching FNA
+  (`SDL3_FNAPlatform.cs:1006-1037`). **Known scope gap (intentional):** FNA's handler for these two
+  events also toggles the X11 "fullscreen desktop" window flag and enables/disables the SDL
+  screensaver; CNA does not replicate either, since neither affects input semantics. Revisit only if
+  X11 fullscreen-on-Alt-Tab behavior or screensaver suppression is reported as a real-world gap.
+  Pinned directly by
   `GameEventSemanticsTest.DesktopFocusTransitionsRaiseActivityEventsExactlyOnce`, including
   `Activated`/`Deactivated`, duplicate-event idempotence and two transitions in one batch, and by the
   cross-platform event-semantics golden transcript. The two neighbouring window behaviours
-  are replicated since 2026-10-14: `GameWindow::EndScreenDeviceChange` re-centres a windowed game on
+  are replicated: `GameWindow::EndScreenDeviceChange` re-centres a windowed game on
   its display (`IPlatformWindow::CenterOnDisplay`), and a fullscreen toggle performed by the window
   system reaches the game as `WindowEventKind::FullscreenEntered`/`FullscreenLeft` and resynchronises
   `GraphicsDeviceManager::IsFullScreen`.
-- **Coordinate consistency (INPUT-TOUCH-024, was task 952 — verified):** both touch paths target the same
+- **Coordinate consistency (INPUT-TOUCH-024, task 952):** both touch paths target the same
   **logical (virtual back-buffer) coordinate space.** `GraphicsDevice` sets `TouchPanel::DisplayWidth/Height`
   to `virtualWidth/Height`. The **gesture** path scales the normalized SDL coord linearly by
   `DisplayWidth/Height` (`round(x·W, y·H)` in `TouchPanel::INTERNAL_onTouchEvent`) — identical to FNA, which
@@ -501,24 +470,6 @@ else in this section is FNA-required behavior, not CNA scope creep.
 
 ---
 
-## Definition of Done for Input (task 958)
-
-Input is "done" when **all** of these hold — not before:
-
-1. Full configure succeeds in a **complete** checkout (submodules + sibling repos present).
-2. All input unit tests pass.
-3. Platform-contract gamepad tests pass (**satisfied — PLAT-82**: SDL-edge translation plus canned
-   public-surface tests). Real-hardware *actuation* remains manual-only (see above).
-4. Docs updated (this file + `input-build-and-test.md`).
-5. Intentional FNA deviations listed (this file).
-6. No stale `Status: PARTIAL` comments unless still true.
-
-Coverage is **not** claimed as "100% FNA fidelity". Gamepad translation and public contract mapping
-are headless-tested; real-hardware *actuation* remains manual-only. The open hardware checks are in
-the hardware verification record of `demo-input-checklist.md`.
-
----
-
 ## Extension APIs (FNAEXT / CNAEXT) — INP-0214
 
 Beyond the strict XNA 4.0 surface, CNA exposes the FNA/MonoGame extensions and CNA conveniences below.
@@ -529,7 +480,8 @@ See the tier glossary in `input-public-api-frozen.md`.
   composition) multicast events, `SetInputRectangle`, `IsTextInputActive`, `IsScreenKeyboardShown`,
   `WindowHandle`. Backed by SDL text-input; UTF-8→UTF-16 decode + control-char/Ctrl+V synthesis.
 - **`MouseCursor`** (CNAEXT, whole class) — MonoGame-style custom cursors: stock cursors, `FromTexture2D`,
-  ownership/disposal. Cursor creation needs `SDL_INIT_VIDEO` (graceful null otherwise).
+  ownership/disposal. A cursor is a platform-neutral description applied through `IPlatformMouse`;
+  without a mouse service `Mouse::SetCursor` is a safe no-op.
 - **Relative mouse mode** (`Mouse::…IsRelativeMouseModeEXT`) — FPS-style pointer lock + relative-delta
   accumulation; not a stock XNA concept.
 - **Scancode mode** (`Keyboard::GetKeyFromScancodeEXT` + `FNA_KEYBOARD_USE_SCANCODES`) — layout-independent

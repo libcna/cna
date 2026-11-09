@@ -8,7 +8,7 @@ It contains **56 named records**, including failed/unavailable operations; they 
 successful parity tests. The JSON records CLR version and pipeline assembly identity, but does
 not by itself pin every helper/codec/fixture byte or reproduce the host environment.
 
-Task history is XNAPP-201/202/220/136/043/332. Current native routes are in
+The work is XNAPP-201/202/220/136/043/332. Current native routes are in
 [content-pipeline.md](content-pipeline.md), XNB output scope in
 [xnb-interoperability.md](xnb-interoperability.md), and unresolved issues in
 [KNOWN_ISSUES.md](../KNOWN_ISSUES.md). Missing Windows Media facilities under Wine do not define valid-file
@@ -85,7 +85,7 @@ exception or infer a universal extension-sniffing rule from these cases.
 Every WMA source in the corpus — wmav2 and wmav1, mono and stereo, 22050 and 44100 — is refused
 with `Failed to open file {name}. Ensure the file is a valid audio file and is not DRM protected.`,
 and a missing one with the same unformatted Could not locate audio file "{0}".
-The historical investigation attributes the valid-file failures to the prefix's missing Windows
+The valid-file failures are attributed to the prefix's missing Windows
 Media Format facilities (§6); it does not establish a valid-WMA refusal contract on native Windows.
 CNA reads supported WMA files through FFmpeg instead of reproducing those host failures.
 
@@ -158,9 +158,8 @@ through `XnaMediaHelper_1.dll`, and how far that gets depends on what the prefix
 | WMV, 64x48 | **not measurable** | `SEHException: External component has thrown an exception` — a native fault inside the helper |
 | Media Foundation generally | **absent** | Wine 10.0 aborts on `mfplat.dll.MFCreateVideoMediaType`, which is unimplemented |
 
-The historical wmp9 installation attempt broke helper loading and was reverted; the recorded
-audio-oracle agreement was used to check that restoration. This is host history, not a current
-native-Windows qualification or an instruction to modify the owner's prefix.
+An attempt to install wmp9 into the prefix broke helper loading and was reverted, so do not modify a
+working oracle prefix that way; none of this is a native-Windows qualification.
 
 The committed fixtures are synthetic FFmpeg output with
 [provenance](../tests/assets/xna40/media/PROVENANCE.json). Read/compare those bytes for ordinary
@@ -225,12 +224,10 @@ remain in the interoperability guide; ordinary C++ processor tests do not qualif
 
 ## 8. Verification
 
-On 2026-11-01, existing CnaContentPipelineTests, CnaContentTests and cna_content_tool targets build
-in cmake-build-multi. Privately on OPENGLES3/dummy audio, **31** focused media/audio/processor cases
-pass without skips, including actual WMA encode/decode checks; **three** CLI cases pass for
-processor-selected audio reading, asset-relative song paths and convention-route defaults.
-The twelve MP3 metadata rows were reconciled with the 56-record JSON and current assertions.
-The separate synthetic runner probe tests failure propagation, not Microsoft media execution.
-
-No new Wine codec installation, Microsoft oracle, sample-wide differential, native-Windows,
-sanitizer or runtime-playback qualification was run for this documentation audit.
+The focused media/audio/processor cases in `CnaContentPipelineTests` and `CnaContentTests` (run
+privately, for example on OPENGLES3 with dummy audio) include actual WMA encode/decode checks; the
+`cna_content_tool` CLI cases cover processor-selected audio reading, asset-relative song paths and
+convention-route defaults. The twelve MP3 metadata rows of §2 correspond to records in the
+56-record JSON and to current assertions. The synthetic runner probe tests failure propagation, not
+Microsoft media execution. None of these is a native-Windows, sanitizer or runtime-playback
+qualification.

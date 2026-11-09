@@ -25,20 +25,17 @@ No additional public Design types exist in the inspected XNA 4.0 assembly. Its
 three property-descriptor helper classes are non-public implementation details;
 CNA likewise keeps descriptor implementations internal.
 
-## Reference audit
+## XNA reference
 
-The original audit's public inventory, inheritance, constructor signatures, conversion flags,
-property order, and converter IL were recovered from a local Microsoft XNA 4.0
+The public inventory, inheritance, constructor signatures, conversion flags, property order and
+converter IL were recovered from a local Microsoft XNA 4.0
 `Microsoft.Xna.Framework.dll`. FNA was used as a secondary source for type names
 and value construction, but its Design source still contains incomplete
 descriptor and `InstanceDescriptor` paths, so it was not treated as the behavior
 oracle for this namespace.
 
-The 2026-11-01 cleanup independently rechecks local assembly type metadata: thirteen public
-Design converters and three non-public descriptor helpers agree with the current header
-inventory. It also checks current sources/tests; it does not repeat every original IL comparison.
-
-The audit established several easy-to-miss XNA rules:
+The assembly's thirteen public Design converters and three non-public descriptor helpers match the
+header inventory. The reference established several easy-to-miss XNA rules:
 
 - the hierarchy is `TypeConverter` → `ExpandableObjectConverter` →
   `MathTypeConverter` → the concrete converter;
@@ -112,7 +109,6 @@ this does not turn them into public game properties.
 
 ## Verification
 
-On 2026-11-01, CnaDesignTests builds in the existing multi-renderer tree and all 25 tests pass
-through the private runner: converter discovery, culture/invalid input, descriptor editing,
-constructor reconstruction and the protected surface. No Visual Studio PropertyGrid or arbitrary
-reflection integration was run, and no public API or implementation was changed.
+`CnaDesignTests` (run through the private runner) covers converter discovery, culture/invalid
+input, descriptor editing, constructor reconstruction and the protected surface. No Visual Studio
+PropertyGrid or arbitrary reflection integration is tested.

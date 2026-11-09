@@ -2,7 +2,7 @@
 
 ## Status
 
-The Headless renderer is a **CI/testing-only graphics renderer**, verified 2026-10-31. Select it
+The Headless renderer is a **CI/testing-only graphics renderer**. Select it
 with:
 
 ```bash
@@ -108,7 +108,7 @@ Key APIs on `HeadlessRenderer` (all `CNAEXT`, not part of the XNA surface):
 - `TraceLog()` — the structured call log accumulated in `Trace` mode (empty otherwise).
 - `SetMode(HeadlessMode)` / `GetMode()` — the runtime strictness dial.
 
-## Known limitations (2026-10-31)
+## Known limitations
 
 - "Disposed state object" validation (`BlendState`/`DepthStencilState`/etc.) is not implemented —
   `IGraphicsRenderer`'s `ApplyBlendState()`/etc. take raw `int`/`bool`/`float` parameters, not object
@@ -185,14 +185,11 @@ which is just a position counter). `FormatTraceLogDiff()` renders either a one-l
 summary or the first diverging entry from each log side-by-side, plus an entry-count note if the
 logs are different lengths.
 
-The task record (`HEADLESS-1`..`HEADLESS-64`, 2026-07-13) is in Git history; comments cite its rows
-as "HEADLESS-nn".
+Source comments cite the renderer's task rows as "HEADLESS-nn" (`HEADLESS-1`..`HEADLESS-64`).
 
 ## Real-world validation
 
-Beyond this project's own synthetic tests, `../mobile-eggbert` (`WindowsPhoneSpeedyBlupi`, a real,
-complete third-party game — the same one used to validate the WebGPU renderer) builds clean against
-`-DCNA_GRAPHICS_RENDERER=HEADLESS` and runs 20+ seconds with zero crashes or exceptions, with
-`DISPLAY`/`WAYLAND_DISPLAY` both explicitly unset — confirming the renderer holds up against real
-game code exercising asset loading, `SpriteBatch`, audio, and input polling, not just a purpose-
-built smoke test.
+Beyond the synthetic tests, the third-party game `../mobile-eggbert` (`WindowsPhoneSpeedyBlupi`)
+builds against `-DCNA_GRAPHICS_RENDERER=HEADLESS` and runs for 20+ seconds without crashes or
+exceptions with `DISPLAY`/`WAYLAND_DISPLAY` unset, exercising asset loading, `SpriteBatch`, audio and
+input polling in real game code.

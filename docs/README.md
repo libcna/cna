@@ -166,14 +166,14 @@ their stated metadata/source checks, rather than proving complete behavioral par
   boundaries.
 - [gltf-conventions.md](gltf-conventions.md) — Coordinate, unit, material and asset conventions;
   conversions CNA deliberately does not perform.
-- [gltf-renderer-stride-conformance.md](gltf-renderer-stride-conformance.md) — Seven vertex layouts
-  and bounded STUB/HEADLESS/OpenGL ES 3 evidence.
+- [gltf-renderer-stride-conformance.md](gltf-renderer-stride-conformance.md) — Canonical importer vertex layouts and what each renderer's
+  stride run proves.
 - [gltf-renderer-pbr-fallbacks.md](gltf-renderer-pbr-fallbacks.md) — PBR binding ABIs, semantic
   neutral textures and renderer-specific evidence.
 - [gltf-performance.md](gltf-performance.md) — Import performance/lifetime records and their
   measurement scope.
-- [gltf-api-change-review.md](gltf-api-change-review.md) — Historical API-change decisions,
-  including retired extension/renderer evidence.
+- [gltf-api-change-review.md](gltf-api-change-review.md) — glTF public API decisions: each public/CNAEXT member with its
+  reason, shape, compatibility and test.
 
 ## Content formats and build-time pipeline
 
@@ -254,11 +254,11 @@ their stated metadata/source checks, rather than proving complete behavioral par
 
 - [devices-api-coverage.md](devices-api-coverage.md) — Current native device/sensor surface and the
   Windows Phone reference boundary.
-- [devices-build.md](devices-build.md) — Feature configuration, builds and private-display tests.
+- [devices-build.md](devices-build.md) — Builds, sanitizers, Android APK/emulator commands and CI.
 - [devices-android.md](devices-android.md) — Android device/sensor integration and qualification
   limits.
 - [devices-native-backend-design.md](devices-native-backend-design.md) — Implemented Android sensor
-  path, platform interfaces and remaining iOS scope.
+  path, platform interfaces, remaining iOS scope and the iOS vibration design.
 - [devices-event-contract.md](devices-event-contract.md) — Callback delivery, subscription and
   lifecycle contract.
 - [devices-thread-safety.md](devices-thread-safety.md) — Thread ownership, synchronization and

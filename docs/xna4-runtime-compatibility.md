@@ -59,15 +59,7 @@ tools/platform/run_gpu_tests_private.sh cmake-build-multi \
     -R '^GameExceptionCompatibility\.' --output-on-failure
 ```
 
-The original SAMPLE-104 campaign (2026-09-28) recorded 193 runtime cases: 191 passed and two
-platform skips, plus seven matching static sample frames. Its local evidence path was
-`/rv/tmp/samples/SAMPLE-104-PerformanceUtility_4_0/evidence/implementation-20260928/`; that external
-artifact is historical evidence, not a portable prerequisite or a current full-suite result.
-Dictionary layout changes belonged to the separate Sharp Runtime entry-order repair and are not
-an ABI promise made by this exception profile. No native-Windows, browser transport or cross-
-renderer qualification follows from the two diagnostic tests.
-
-Rechecked on 2026-11-01 against Game, Sharp Runtime's exception formatter/AppContext helper and
-Substring implementation. The existing `CnaRuntimeTests` target builds; both named regressions
-passed privately with OPENGLES3/dummy audio. The historical 193-case/sample-image campaign was
-not rerun for this documentation edit.
+SAMPLE-104 (the PerformanceUtility 4.0 sample) exercised this profile. Dictionary layout changes belonged to
+the separate Sharp Runtime entry-order repair and are not an ABI promise made by this exception
+profile. No native-Windows, browser transport or cross-renderer qualification follows from the two
+diagnostic tests.

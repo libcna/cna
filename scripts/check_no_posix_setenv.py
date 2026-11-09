@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: MS-PL
-"""docs/cnatests-mingw-setenv-proposal.md, kept from regressing.
+"""Keep POSIX setenv/unsetenv out of CNA sources so Windows (MinGW-w64) cross-builds keep compiling.
 
 `setenv`/`unsetenv` are POSIX. MinGW-w64 does not have them, so a single call site anywhere in a
 translation unit that reaches a Windows cross-build stops `CnaTests.exe` compiling -- which is how
-the D3D11/D3D12/D3D9 renderers went years without a test binary. The proposal replaced all 62 call
-sites in 2026-07 with `System::Environment::SetEnvironmentVariable(name, value)` (empty value means
-unset), and by 2026-08 eleven new ones had appeared in six files.
+the Direct3D renderers once went years without a test binary. Every call site uses
+`System::Environment::SetEnvironmentVariable(name, value)` instead (empty value means unset), and
+new POSIX calls kept reappearing until this check existed.
 
 A rule nothing enforces is a rule that decays, so this enforces it. It is a text check, deliberately:
 the point is to fail on a Linux build long before anyone tries a Windows one.
@@ -49,7 +49,7 @@ def main() -> int:
         for problem in problems:
             print(f"  {problem}")
         print("\nUse System::Environment::SetEnvironmentVariable(name, value) instead; an empty "
-              "value means unset. See docs/cnatests-mingw-setenv-proposal.md.")
+              "value means unset.")
         return 1
 
     print(f"{scanned} sources, no POSIX setenv/unsetenv outside third-party trees.")

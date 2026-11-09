@@ -26,7 +26,8 @@ manual/hardware verification is tracked separately (see the "Input stable" gate,
       `ASAN_OPTIONS=detect_leaks=0:halt_on_error=1` (0 ASan/UBSan errors).
 - [ ] **Deviations intact** — every accepted deviation (DEC-* / KBD-011 / INPUT-TOUCH-024) still has its
       pinning test green; any new deviation is recorded in `docs/input-fna-fidelity.md` with a rationale.
-- [ ] **Docs counts current** — `docs/input-build-and-test.md` §Test counts matches a fresh run.
+- [ ] **Counts recorded** — the per-lane counts and any skips `ctest -L input` reports are stated in the
+      change description (the documentation keeps no fixed count; see `docs/input-build-and-test.md`).
 
 ## Behavioral change gate
 

@@ -7,31 +7,18 @@ applications, and the sibling Sharp Runtime can make a full integration configur
 larger than a focused edit needs to be. This document defines the supported fast paths without
 changing the coverage expected from CI and release configurations.
 
-## Retained historical results at a glance
+## Options at a glance
 
-The COMP-001–010 measurements below mostly date to 2026-08-28/29; the shared-runtime record is
-2026-09-21. They describe the then-current tree/toolchains and are retained from the completed
-campaign (including `78afd08ab`), not rerun timings or current graph/test counts. Source partitions,
-dependencies, defaults and tests have changed since. Historical STUB/sandbox failures are disclosed
-outcomes, not passing qualification.
-
-These records separate clean compilation, incremental work, configuration, linking and cache
-behavior. Compile-command counts are structural scope evidence, not elapsed-time improvements.
-Current verification is listed at the end; reproduce a comparable measurement only with an
-explicitly matched configuration.
-
-| Area | Retained measured result | Default or disable path |
+| Area | Default and switch | Reason for the default |
 | --- | --- | --- |
-| Focused test loop | A math test-source rebuild fell 71% (0.84 to 0.24 s); its final link fell 73% (0.75 to 0.20 s). The 88.5% graph reduction is supporting structure, not a timing claim. | Build `CnaTests` for the complete suite. |
-| Configure audits | Unchanged configure fell about 82% (4.39–4.72 to 0.83–0.84 s). | `-DCNA_CONFIGURE_AUDIT_CACHE=OFF` forces every audit. |
-| Content-test PCH | Clean content-test compilation fell 23.5% (71.90 to 55.03 s). | Default `CNA_ENABLE_PCH=OFF`; use `unit-pch` only for the pilot. |
-| Header hygiene | The controlled `ContentReader.hpp` consumer frontend fell 24.5%; seven-header parse count fell 30.6%. | Retained source cleanup; no compiler-mode dependency. |
-| Fast debug | Controlled content compilation fell 9.7% and the build tree fell 47.2% with line tables. | `CNA_DEBUG_INFO=FULL` is default; `dev-fast-debug` opts in. |
-| Clean-CI unity | Four-job core/math clean closure fell 25.6%; a one-source rebuild regressed 5.7%. | Default `CNA_ENABLE_UNITY_BUILD=OFF`; `unit-unity` is leaf-only. |
-| Final linking | Large Debug `CnaTests` link fell 90.9% with LLD and 89.9% with Mold versus GNU ld. | `CNA_LINKER=AUTO` by default; `DEFAULT` keeps the toolchain linker, while `LLD`/`MOLD` request one explicitly. |
-| Shared runtime | A Debug `VULKAN;OPENGL33` tree (2026-09-21, renderer since retired) fell from 87 GB to 5.4 GB; a test executable from ~104 MB to 0.5–0.9 MB; a renderer `.cpp` edit relinked 29 targets (~1.7 GB) instead of ~800 (~83 GB), and a rebuilt `libcna.so` relinks none. | `CNA_SHARED_LIBRARY=ON` is the default on native ELF GNU/Clang with CMake ≥ 3.30; `-DCNA_SHARED_LIBRARY=OFF` restores the static link. |
-| ccache | A public-header rebuild recovered 23/23 compile edges as direct hits in 0.36 s, with no preprocessed hits or eviction. | `CNA_USE_CCACHE=OFF`; CNA never changes global sloppiness/direct-mode policy. |
-| Complete clean build | At 12 jobs GCC took 10:44 and Clang 10:05 for all 1,929 compile edges (2026-08-29, before the shared machine's 8-job limit); this is the post-optimization machine baseline, not an improvement inferred from command counts. | Use a focused profile for normal edits; keep complete GCC/Clang integration in CI. |
+| Focused test loop | Build a module-focused `Cna*Tests` target; `CnaTests` for the complete suite. | A one-file math test edit rebuilt and relinked in about a third of the time through `CnaMathTests`. |
+| Configure audits | `CNA_CONFIGURE_AUDIT_CACHE=ON`; `OFF` forces every audit. | An unchanged reconfigure is about 80% faster. |
+| Content-test PCH | `CNA_ENABLE_PCH=OFF`; `unit-pch` is the pilot. | 23.5% faster clean content-test compilation, limited to that object group. |
+| Fast debug | `CNA_DEBUG_INFO=FULL`; `dev-fast-debug` opts into line tables. | Line tables lose local-variable and type data. |
+| Clean-CI unity | `CNA_ENABLE_UNITY_BUILD=OFF`; `unit-unity` is leaf-only. | Faster clean four-job builds, slower one-source rebuilds. |
+| Final linking | `CNA_LINKER=AUTO`; `DEFAULT` keeps the toolchain linker, `LLD`/`MOLD` request one explicitly. | LLD and Mold link a large Debug test executable about ten times faster than GNU ld. |
+| Shared runtime | `CNA_SHARED_LIBRARY=ON` on native ELF GNU/Clang with CMake ≥ 3.30; `OFF` restores the static link. | A test executable is 0.5–0.9 MB instead of ~104 MB, and a rebuilt `libcna.so` relinks no umbrella consumer. |
+| ccache | `CNA_USE_CCACHE=ON` when `ccache` is available; `OFF` disables it. | CNA never changes global sloppiness or direct-mode policy. |
 
 Split DWARF and broad default unity/PCH remain deferred: the measured tradeoffs did not justify
 making them normal developer policy. IPO/LTO remains an opt-in release experiment rather than a
@@ -98,29 +85,11 @@ configuration check, C API smoke, reference oracle or renderer example; build th
 targets before selecting those CTest entries. Run any window/GPU-capable selection through the
 private runner shown above, including STUB configurations whose fixtures can still create windows.
 
-On the 2026-08-28 reference STUB/GCC configuration, Ninja reported the following compile-command
-graph sizes. These are structural measurements, not elapsed-time promises:
-
-| Test target | Compile commands | Reduction from complete `CnaTests` |
-| --- | ---: | ---: |
-| `CnaTests` | 1,126 | baseline |
-| `CnaContentTests` | 632 | 43.9% |
-| `CnaGraphicsTests` | 376 | 66.6% |
-| `CnaMathTests` | 130 | 88.5% |
-| `CnaCoreTests` | 105 | 90.7% |
-
-The normalized `--gtest_list_tests` inventory of the complete executable remained byte-identical
-across the split (8,102 output lines). A focused `CnaMathTests` build ran all 840 math tests in 2 ms;
-the STUB configuration's content suite retains three existing GPU-capability failures for 3D/cube
-textures and is not evidence for those renderer-dependent cases.
-
-In that historical pre-limit run, with a warm ccache and 12-way Ninja parallelism, touching
-`MathHelperTests.cpp` and rebuilding took 0.24 s through `CnaMathTests` versus 0.84 s through
-`CnaTests` (71% less wall time). A forced final link took 0.20 s versus 0.75 s (73% less). The full
-target retains the same 1,126 compile commands as before the split, and its graph contains no
-duplicate commands. Focused targets are `EXCLUDE_FROM_ALL`, so they add no work to a full build,
-with one exception: `CnaInputModuleTests` is registered as the `CnaInputTests` CTest and is
-therefore part of `all` (INP-AUD); it reuses the objects `CnaTests` compiles, adding one link.
+Focused targets are `EXCLUDE_FROM_ALL`, so they add no work to a full build, with one exception:
+`CnaInputModuleTests` is registered as the `CnaInputTests` CTest and is therefore part of `all`
+(INP-AUD); it reuses the objects `CnaTests` compiles, adding one link. The split does not change
+the compile commands or the `--gtest_list_tests` inventory of `CnaTests`, and its graph contains no
+duplicate commands.
 
 Do not use `dev` as merge evidence for a renderer-, C API-, network-, media-, or Draco-specific
 change. Existing renderer/platform/integration presets remain the required evidence for the code
@@ -142,19 +111,9 @@ All three audits share one fingerprint pass over the module tree. Set
 `cna_platform_ratchet`, `cna_platform_nonproduction_sdl_audit`, and
 `cna_platform_hot_path_lint` targets for an explicit check.
 
-The 2026-08-28 reference `dev` measurement found 4.42 s of self time in configure-time
-`execute_process()` calls: 1.45 s for the platform ratchet, 1.45 s for the non-production audit,
-and 1.30 s for the hot-path lint. After content-aware caching and replacing the physical-module
-validator's nested module scan with two equivalent combined regular expressions, repeated
-unchanged configure time fell from 4.39–4.72 s to 0.83–0.84 s (about 82% less). A cached `unit`
-configuration took 1.26 s. A changed audit input still runs the complete checks; forcing the cache
-off took 3.99 s on the same machine.
-
-In the original cache qualification, adding a temporary module `.cpp` produced Ninja's
-`GLOB mismatch`, regenerated CMake, refreshed the audits, compiled the new object, and removing it
-regenerated again. A temporary forbidden `SDL_CreateWindow` reference invalidated the cache and
-made configuration fail at the strict ratchet gate, proving that caching does not weaken the
-correctness check.
+Adding or removing a module source produces Ninja's `GLOB mismatch`, regenerates CMake and
+refreshes the audits. A forbidden reference (for example a new `SDL_CreateWindow` call) invalidates
+the cache and still fails the strict ratchet gate, so caching does not weaken the check.
 
 ## Content-test PCH pilot
 
@@ -174,19 +133,9 @@ relaxing `pch_defines` and `time_macros` checks, so CNA does not change global s
 features are requested, only the content-test object target bypasses ccache; its dependency graph
 continues to use the configured launcher.
 
-The 2026-08-28 GCC 14.2.0 measurement rebuilt only the 140 content-test translation units after
-prebuilding an identical dependency graph. Both configurations used Debug/STUB, Ninja, Mold,
-`--parallel 12`, and ccache disabled. Each mode was run twice:
-
-| Mode | Run 1 | Run 2 | Mean | Peak RSS |
-| --- | ---: | ---: | ---: | ---: |
-| PCH off | 69.83 s | 73.96 s | 71.90 s | 533 MiB |
-| PCH on | 54.18 s | 55.88 s | 55.03 s | 548 MiB |
-
-The PCH reduced clean content-test compilation by 23.5%, exceeding the 15% pilot threshold, while
-peak memory rose by about 2.8%. Clang 19.1.7 also compiled and linked the same PCH target. The
-focused executable preserved its test inventory; its STUB run retained only the renderer/shader
-capability failures also observed without PCH.
+The pilot measurement (GCC, Debug/STUB, ccache off) cut clean content-test compilation by 23.5%,
+above the pilot's 15% threshold, with about 3% more peak memory. Clang also compiles and links the
+PCH target. The gain is confined to one object group, so the option stays opt-in.
 
 ## Clang header and translation-unit traces
 
@@ -213,26 +162,12 @@ clang-scan-deps-19 -compilation-database=build-probe/clang-time-trace/compile_co
   -format=make -j 8 -o build-probe/clang-time-trace/dependencies.make
 ```
 
-The 2026-08-28 Clang 19.1.7 baseline identified these leading production content TUs:
-`ContentManager.cpp` (13.31 s), `GltfImportCore.cpp` (9.70 s), `CnbModelCodec.cpp` (6.73 s),
-`CnbModelFromCnj.cpp` (5.66 s), and `CnjToCnb.cpp` (5.45 s). The leading project headers were
-`ContentReader.hpp` (23.71 s across 20 parses), `SkinnedModelEXT.hpp` (9.77 s across six), and
-`ContentManager.hpp` (9.40 s across 13). These are inclusive trace times and can overlap; they are
-ranking evidence, not values to add together.
-
-The retained include-hygiene change removes seven complete math headers from `ContentReader.hpp`
-and forward-declares their return types. `ContentReader.cpp` and the one test that constructs
-`Color`/`Vector4` now include their actual dependencies explicitly. Across the 46 production
-content TUs, parses of those seven headers fell from 173 to 120 (30.6%); their inclusive trace time
-fell from 3.67 s to 2.27 s (38.1%). A three-run, single-job consumer probe's mean Clang frontend
-time fell from 1,308 ms to 988 ms (24.5%). `clang-scan-deps` reports 24 TUs in the complete focused
-build closure depending on `ContentReader.hpp`, so the reduction also narrows public-header rebuild
-fan-out rather than optimizing only its own implementation TU.
-
-Single clean traced target samples varied from 83.80 s before to 95.53 s after while peak RSS stayed
-essentially flat at 490 MiB, so they are not used as a whole-target speed claim. The accepted metric
-is the controlled header probe plus the deterministic parse-count reduction. GCC 14.2.0 and Clang
-19.1.7 both build `CnaContentTests`, and all 21 directly affected `ContentReader` tests pass on both.
+Trace times are inclusive and can overlap: use them to rank translation units and headers, not to
+add them together. The ranking identified `ContentReader.hpp` as the costliest widely parsed project
+header. It therefore forward-declares the math types it returns instead of including seven complete
+math headers, and `ContentReader.cpp` and the tests that construct those types include their real
+dependencies explicitly. Keep it that way: re-adding those includes widens the rebuild fan-out of
+every translation unit that includes `ContentReader.hpp`.
 
 ## Fast debug information
 
@@ -254,39 +189,19 @@ not the full local-variable and type inspection data. Use the regular `dev` pres
 session needs that information. Non-full modes are restricted to native GNU/Clang Debug builds and
 cannot be combined with sanitizers; vendored targets remain outside this project policy.
 
-The 2026-08-28 GCC 14.2.0 Debug/STUB/Mold measurement used ccache off and `--parallel 12` after
-prebuilding an identical dependency graph:
-
-| Mode | 46-source `cna_content` rebuild | Peak RSS | Content objects | Build tree | Final tool |
-| --- | ---: | ---: | ---: | ---: | ---: |
-| `FULL` | 38.76 s | 865 MiB | 68.9 MiB | 590.6 MB | 1.30 MB |
-| `LINE_TABLES` | 34.99 s | 721 MiB | 39.8 MiB | 312.1 MB | 0.62 MB |
-| `SPLIT` | 38.32 s | 865 MiB | 42.7 MiB + 40.3 MiB `.dwo` | 605.4 MB | 1.07 MB |
-
-Line tables improved that controlled compile by 9.7%, reduced peak memory by 16.6%, content object
-size by 42.3%, the complete build tree by 47.2%, and the final tool by 52.5%. Two single-job
-`ContentManager.cpp` rebuilds averaged 9.20 s with full debug information and 8.30 s with line tables
-(9.8% faster). Mold made the final relink effectively identical (0.21 s versus 0.20 s), and no-op
-builds were 0.14 s versus 0.13 s.
-
-The first full clean-closure samples varied in the opposite direction (104.94 s full, 126.72 s line
-tables, 166.84 s split) as the host load changed, so they are disclosed but not used as the accepted
-speed metric. Split DWARF provided no meaningful controlled compile gain and made the total tree
-larger, so it has no preset. Both modes remain selectable for other machines. The measured line-table tool
-contained 18,922 decoded source-line rows and ran normally; Clang 19.1.7 also built and ran that
-preset with `-gline-tables-only`.
+In the reference measurement line tables cut a controlled content rebuild by about 10%, peak memory
+by about 17% and the build tree by about 47%. Split DWARF gave no meaningful compile gain and made
+the tree larger, so it has no preset; both modes remain selectable.
 
 ## Shared runtime library
 
 `CNA_SHARED_LIBRARY` (Vulkan parity VKPAR-0017) links the CNA runtime into one shared
 library, `libcna.so`, instead of statically into every executable that links `CNA`.
 
-**Why.** The historical integration tree had hundreds of separate test/example executables.
-Its static configuration repeated a broad runtime/debug closure: measured on
-`cmake-build-vulkan` (Debug, 2026-09-21), 798 executables at ~104 MB each —
-`.debug_*` ≈ 77 MB, `.strtab`/`.symtab` ≈ 17.5 MB, `.text` 7 MB — 83 GB in total, and one edit to a
-renderer `.cpp` relinked all of them, writing ~83 GB. On a machine whose SSD wear the repository
-rules exist to limit, that is the dominant cost of an edit–build–test cycle.
+**Why.** A static configuration repeats the runtime and its debug information in every test and
+example executable: about 104 MB each in a Debug integration tree, mostly DWARF and symbol tables,
+and an edit to one renderer `.cpp` relinked roughly 800 of them (~83 GB written). With `libcna.so`
+the engine and its debug information exist once; a typical test executable is 0.5–0.9 MB.
 
 **How.** `cna_shared` is linked from every CNA-owned static archive in the `CNA` closure with
 `$<LINK_LIBRARY:WHOLE_ARCHIVE,...>` (a shared library has no `main`, so without it the linker would
@@ -301,23 +216,10 @@ ordering/exclusion policy below prevents extraction of a second runtime. Direct 
 consumers retain archive relinks, while `CMAKE_LINK_DEPENDS_NO_SHARED` avoids relinking an umbrella
 consumer solely because `libcna.so` was rebuilt. Actual relink fan-out depends on the consumer graph.
 
-**Measured**, same machine and configuration (`VULKAN` was retired on 2026-10-13; the figures stand
-as recorded):
-
-| | Static | Shared |
-| --- | --- | --- |
-| `cmake-build-vulkan` | 87 GB (48 GB without the 341 EasyGL binaries VKPAR-0016 removed) | 5.4 GB |
-| Typical test executable | ~104 MB | 0.5–0.9 MB |
-| `libcna.so` | — | 182 MB (both renderers, 98 725 exported symbols, 0 unresolved) |
-| Relinked by a Vulkan renderer `.cpp` edit | ~800 targets, ~83 GB | 29 targets, ~1.7 GB |
-| Relinked by a rebuilt `libcna.so` | — | 0 |
-| Full suite, private display | `Vulkan_*` 319 passed / 51 failed | `Vulkan_*` 319 passed / 51 failed |
-
-The recorded 29 targets are the then-current direct archive consumers, not a current target list.
-Today `CnaTests` links the `CNA` umbrella; most focused groups/tools/probes use module composition,
-while `CnaRendererTests` uses the umbrella dependency for renderer-state identity. Consult the
-generated link lines rather than applying the old count to today's graph. The symbol-footprint
-probes deliberately remain static-only ([link boundaries](link-size-architecture.md)).
+Relink fan-out depends on the consumer graph: `CnaTests` links the `CNA` umbrella, most focused
+groups, tools and probes use module composition, and `CnaRendererTests` uses the umbrella for
+renderer-state identity. Consult the generated link lines rather than assuming a count. The
+symbol-footprint probes deliberately remain static-only ([link boundaries](link-size-architecture.md)).
 
 **One copy of everything.** A symbol defined both in `libcna.so` and in an executable would give it
 two copies of that code and of its static state. Naming the `CNA` interface first alone does not
@@ -327,9 +229,7 @@ link dependencies and excludes direct module archives already contained in that 
 `--no-as-needed` link feature retains this early DSO even when the application's first CNA
 reference comes from a later static framework; the previous linker state is restored immediately.
 Module-only consumers do not inherit this shared-target interface and remain static.
-The original `nm` investigation recorded only copy-relocated public data
-(`R_X86_64_COPY`, such as `BlendState::Opaque`) rather than independently live strong copies.
-That is historical binary evidence. Shared consumers now inherit `-fPIC`, keeping these objects
+Shared consumers inherit `-fPIC`, keeping exported objects
 in the DSO, and `-z nocopyreloc -z text`, refusing incompatible precompiled inputs instead of
 embedding a copy or dynamic text relocation. `CMAKE_POSITION_INDEPENDENT_CODE=ON` alone is
 insufficient: executable objects use PIE, which permits copy relocations on x86-64 GCC.
@@ -338,22 +238,20 @@ Current mixed-consumer and C API runtime-identity tests protect the relevant sin
 **Incremental ABI changes (MTH-BUILD-001 / CNA-FIX-L34).** The tracked-header dependency graph
 remains responsible for compiler ABI assumptions. A changed class layout used inline, or an added
 virtual in a base class, recompiles and relinks consumers that include that header. A consumer
-using only opaque declarations need not recompile. Previously, even such a consumer could reserve
-an exported object's old size through an ELF copy relocation; growing the object produced the
+virtual in a base class, recompiles and relinks consumers that include that header. A consumer
+using only opaque declarations need not recompile. Without PIC, such a consumer could still reserve
+an exported object's size through an ELF copy relocation; growing the object then produced the
 loader's `Symbol ... has different size in shared object` warning and truncated its initialization.
-PIC removes that extra link-time size dependency. Ordinary incremental builds now handle the
-covered cases without deleting executables. Applying this policy to an existing tree requires its
-normal reconfigure/build once so consumers acquire the compile and link options.
+PIC removes that link-time size dependency, so ordinary incremental builds handle the covered cases
+without deleting executables. Applying this policy to an existing tree requires its
 
 The early DSO injection forwards the target's absolute path as a quoted linker argument. A bare
-`$<TARGET_FILE:cna_shared>` link-library item accidentally defeated `LINK_DEPENDS_NO_SHARED`: the
-pre-fix helper relinked **every** shared consumer even for an implementation-only edit. The fixture
-therefore tests both the complete helper and, for reproduction, the plain shared-library policy
-that exposes the historical stale-copy defect. The ordinary target dependency still brings the
-DSO up to date before consumers; the injected argument preserves the early scoped `--no-as-needed`.
-Using a bare `-lcna` instead caused a separate installed-static-C regression: the archive generator
-expanded the runtime file into its archive but retained the name as an external dependency. The
-forwarded argument avoids that extra dependency; the ordinary target path still supplies the
+`$<TARGET_FILE:cna_shared>` link-library item defeats `LINK_DEPENDS_NO_SHARED` and relinks every
+shared consumer even for an implementation-only edit; the fixture therefore tests both the complete
+helper and, for reproduction, the plain shared-library policy that exposes the stale-copy defect.
+A bare `-lcna` breaks installed static C consumers: the archive generator expands the runtime file
+into its archive but keeps the name as an external dependency. The ordinary target dependency still
+brings the DSO up to date before consumers, and the ordinary target path supplies the archive
 generator's runtime closure. Installed C++ consumers resolve the relocated imported target's path.
 
 A global dynamic-symbol-size stamp was not selected: it would relink unrelated consumers and
@@ -363,35 +261,21 @@ no symbol-scanning step and no new production tool dependency. GNU ld documents 
 [copy-relocation and text-relocation guards](https://sourceware.org/binutils/docs/ld/Options.html).
 
 `CnaSharedRuntimeIncremental` runs a tiny fixture using the production CMake policy/helper. On
-Linux x86-64 (2026-11-02; CMake 3.31.6, Ninja 1.12.1, GCC 14.2 / Clang 19.1, shared ccache), it
-checks exported-data growth, inline layout, derived virtual dispatch, opaque consumers, mixed
-module/shared ordering, installed usage requirements, non-PIC refusal and three no-op builds.
-The installed checks include the production C API static-archive generator and package template,
-separate C++/C API component installs, relocated prefixes (including a space), and pure-C shared
-and static consumers. The static target and executable must have no CNA DSO dependency, and
-installed programs run with `LD_LIBRARY_PATH` unset.
-GCC with Unix Makefiles, GCC with Mold and Clang with LLD also pass. Fixture-scale
-implementation-edit measurements follow; these are single runs on a shared host, not a speed
-comparison or a real CNA-tree performance qualification:
+Linux x86-64 it checks exported-data growth, inline layout, derived virtual dispatch, opaque
+consumers, mixed module/shared ordering, installed usage requirements, non-PIC refusal and three
+no-op builds. The installed checks include the production C API static-archive generator and
+package template, separate C++/C API component installs, relocated prefixes (including a space),
+and pure-C shared and static consumers. The static target and executable must have no CNA DSO
+dependency, and installed programs run with `LD_LIBRARY_PATH` unset. In the fixture an
+implementation-only edit relinks no shared consumer (only the static control), a header edit
+relinks exactly the affected shared consumer plus the static control, and a no-op build changes no
+output. These are fixture-scale checks, not a performance qualification of a real CNA tree.
 
-| Configuration | Wall time | Shared consumers relinked | Static control relinked |
-| --- | ---: | ---: | ---: |
-| Pre-fix full helper, GCC/Ninja, five shared consumers | 1.260 s | 5 | 1 |
-| Fixed helper, GCC/Ninja, five shared consumers | 0.105 s | 0 | 1 |
-| Fixed helper, Clang/Ninja, five shared consumers | 0.133 s | 0 | 1 |
-| Fixed helper, GCC/Makefiles, five shared consumers | 0.255 s | 0 | 1 |
-
-The fixed edit changes one runtime object, its archive, the DSO and the static control (71,436
-bytes of output files with GCC/Ninja, versus 162,172 before; these sizes exclude linker temporaries
-and cache I/O). Shared consumer objects and executables retain their timestamps. Header edits
-relink exactly the one affected shared consumer plus the static control; no-op builds change no object/archive/DSO or
-consumer output (GCC/Ninja 0.012–0.015 s in the recorded run). The tiny C adapter/archive is built
-explicitly during the install checks, outside this incremental-edit measurement. Run the fixture without configuring
-the full runtime, using an approved existing work directory:
+The fixture requires `ccache` (point `CCACHE_DIR`/`CCACHE_BASEDIR` at your usual cache) and does
+not configure the full runtime; run it with an existing work directory:
 
 ```bash
-export CCACHE_DIR=/rv/cnaccache CCACHE_BASEDIR=/rv
-cmake -DCNA_SOURCE_DIR="$PWD" -DCNA_WORK_DIR=<approved-fixture-workdir> \
+cmake -DCNA_SOURCE_DIR="$PWD" -DCNA_WORK_DIR=<fixture-workdir> \
       -P cmake/Tests/SharedRuntimeIncrementalCase.cmake
 ```
 
@@ -412,7 +296,7 @@ it requires native ELF GNU/Clang, CMake 3.30+, Python 3 and Ninja or Make.
 untracked/incorrect headers, ABI-changing flags outside the build graph, or replacing libraries
 without rebuilding their dependent sources. An ABI fingerprint could not make those compiler
 assumptions safe by relinking alone. The whole CNA-tree rebuild/test and its real I/O cost remain
-integration checks; the lane qualification above used tiny CPU-only fixtures.
+integration checks; the fixture above uses tiny CPU-only consumers.
 
 **Scope.** The policy enables this by default only for native non-Apple Unix GNU/Clang with
 CMake ≥3.30, excluding Android, Emscripten and cross compilation. Other toolchains keep the static
@@ -451,23 +335,11 @@ SDL_AUDIODRIVER=dummy ./cmake-build-unit-unity/CnaCoreTests
 SDL_AUDIODRIVER=dummy ./cmake-build-unit-unity/CnaMathTests
 ```
 
-Two clean GCC 14.2.0 Debug/STUB/Mold builds with ccache off and four jobs measured 45.67/46.08 s
-without unity and 34.14/34.09 s with unity. The means are 45.88 s versus 34.12 s, a 25.6%
-improvement that meets the pilot threshold. Compile edges fell from 145 to 101 (30.3%), selected
-object size from 40.75 MB to 23.18 MB (43.1%), and the build tree from 197.57 MB to 173.26 MB
-(12.3%). Peak RSS rose from about 465 MiB to 502 MiB (8.0%), within the reference worker limit.
-
-At 12 jobs the same clean closure improved only from 28.51 s to 23.07 s (19.1%): wide ordinary
-parallelism reduces unity's benefit. Rebuilding just the 25 production core/math sources improved
-from 7.51 s to 1.65 s (78.0%). A one-source `Vector3.cpp` edit was slightly worse (0.87 s to
-0.92 s), while a public `Vector3.hpp` rebuild improved from 1.74 s to 1.47 s. Final relinking
-(0.19/0.20 s) and no-op builds (0.13 s each) were unchanged. These tradeoffs are why unity remains
-opt-in and why the preset documents four-way clean CI rather than replacing `unit`.
-
-The recorded 63 core and 840 math tests passed with GCC 14.2.0 and Clang 19.1.7, and under
-GCC AddressSanitizer; leak detection alone was disabled because the execution sandbox runs under
-ptrace, while address/ODR instrumentation remained active. Third-party targets, other modules,
-cross-builds, Emscripten, installed consumers, and ordinary presets are unaffected.
+On a clean four-job GCC build the pilot cut the core/math closure by about 26%, meeting its
+threshold, but at 12 jobs the gain fell to about 19% and a one-source edit became slightly slower.
+That is why unity stays opt-in and its preset targets four-job clean CI rather than replacing
+`unit`. Third-party targets, other modules, cross-builds, Emscripten, installed consumers and
+ordinary presets are unaffected.
 
 ## Compiler-policy layers
 
@@ -510,20 +382,15 @@ Inspect the actual cache instead of assuming it helps:
 cmake --build cmake-build-dev --target cna_ccache_stats
 ```
 
-On the shared development machine there is exactly one ccache, and its own `ccache.conf` governs
-its size and its `hash_dir = false` setting (the parent `CLAUDE.md`, Rule 1). Never point
-`CCACHE_DIR` at a new directory, and never export `CCACHE_MAXSIZE`, `CCACHE_HASHDIR` or
-`CCACHE_NOHASHDIR`: the environment overrides the cache's configuration for everyone using it. A
-shared cache is most effective when developer worktrees use the same `CNA_CCACHE_BASEDIR`.
+Do not export `CCACHE_MAXSIZE`, `CCACHE_HASHDIR` or `CCACHE_NOHASHDIR` against a shared cache: the
+environment overrides the cache's own configuration for everyone using it. A shared cache is most
+effective when developer worktrees use the same `CNA_CCACHE_BASEDIR`.
 
 Interpret direct/preprocessed hit counters as workload deltas, not as a lifetime percentage. A
-2026-08-28 investigation of an apparent 0% direct-hit rate showed `direct_mode = true` and a debug
-log result of `direct_cache_hit`. The counter did not advance because that sandboxed build could
-read cached objects but could not create ccache's statistics file under its configured temporary
-directory; the log ended with `Error while finalizing stats`. Repeating the same rebuild with a
-writable cache advanced the direct-hit counter from zero to one. This was an observation-environment
-problem, not a CNA launcher or ccache configuration defect, so CNA does not override the user's
-global direct-mode or sloppiness settings.
+build that can read the cache but cannot write ccache's statistics file under its
+`temporary_dir` (for example a sandbox) gets real hits that never advance the counters; the debug
+log then ends with `Error while finalizing stats`. That is an observation-environment problem, not
+a launcher defect, so CNA does not override the user's direct-mode or sloppiness settings.
 
 For a trustworthy one-file diagnosis, record stats before and after the same rebuild in an
 environment that can write both `cache_dir` and `temporary_dir`. When the aggregate counters are
@@ -537,20 +404,8 @@ CCACHE_DEBUG=1 CCACHE_DEBUGDIR="$PWD/cmake-build-unit/ccache-debug" \
 rg 'Result:|Error while finalizing stats' cmake-build-unit/ccache-debug
 ```
 
-Three writable-cache workloads on 2026-08-29 used the existing 50 GiB global cache with its
-configuration and accumulated contents unchanged. Each row is the before/after counter delta for
-one `cmake-build-unit` invocation:
-
-| Edited input and target | Wall time | Direct hits | Preprocessed hits | Misses | Uncacheable | Cleanups |
-| --- | ---: | ---: | ---: | ---: | ---: | ---: |
-| `MathHelperTests.cpp` → `CnaMathTests` | 0.27 s | 1 | 0 | 0 | 0 | 0 |
-| `ContentReader.cpp` → `CnaContentTests` | 4.07 s | 0 | 0 | 1 | 0 | 0 |
-| `Vector3.hpp` → `CnaMathTests` | 0.36 s | 23 | 0 | 0 | 0 | 0 |
-
-The production-source miss is legitimate: that exact object and current command were absent from
-the cache, and its time includes eight dependent archive/executable link steps. The public-header
-case is the stronger direct-mode check: all 23 invalidated compile edges were recovered without
-running the preprocessor and without growing or cleaning the cache.
+A public-header edit is the strongest direct-mode check: every invalidated compile edge should come
+back as a direct hit without running the preprocessor or growing the cache.
 
 ## Sanitizers
 
@@ -616,37 +471,12 @@ python3 tools/build/benchmark_final_link.py \
   --output cmake-build-release-modules/release-lld-link.json
 ```
 
-Repeat with `DEFAULT` and `MOLD`. The 2026-08-29 reference used GCC 14.2.0, GNU ld 2.44, LLD
-19.1.7, Mold 2.37.1, STUB, full Debug information for tests, and ordinary Release for the tool.
-All variants reused identical object files.
-
-| `CnaTests` metric | GNU ld | LLD | Mold |
-| --- | ---: | ---: | ---: |
-| Median final link (5 runs) | 10.638 s | **0.972 s** | 1.073 s |
-| Improvement from GNU ld | baseline | **90.9%** | 89.9% |
-| Peak process-tree RSS | **1,566 MiB** | 1,855 MiB | 1,943 MiB |
-| Executable size | **330,289,832 B** | 337,507,472 B | 350,046,664 B |
-| Interleaved startup median | 58.5 ms | **58.1 ms** | 59.2 ms |
-
-| Release `cna_tool_cnb_info` metric | GNU ld | LLD | Mold |
-| --- | ---: | ---: | ---: |
-| Median final link (7 runs) | 0.123 s | 0.063 s | **0.048 s** |
-| Improvement from GNU ld | baseline | 48.7% | **60.9%** |
-| Peak process-tree RSS | **29 MiB** | 105 MiB | 126 MiB |
-| Executable size | 158,008 B | **153,064 B** | 167,800 B |
-| Startup median | 2.0 ms | 1.9 ms | 2.1 ms |
-
-Both fast linkers exceeded the campaign's 20% acceptance threshold. LLD won that large Debug
-test link and used less memory than Mold; Mold won the small Release link. `AUTO` remains
-probe-based and prefers Mold; measure the relevant current target before deriving a local choice
-from these old samples.
-GNU ld remains a valid dependency-free fallback. All three `CnaTests` binaries ran the same 7,427
-tests and produced an identical normalized result set: 6,868 passed, 490 skipped, and the same 69
-baseline STUB/sandbox failures. Every Release tool emitted the expected usage output.
-
-The accompanying historical minimal probe verified three policy edges: switching from Mold to
-LLD without a stale cached path, refusing an unavailable explicit linker with a useful diagnostic,
-and leaving cross-build `AUTO` without a linker option.
+Repeat with `DEFAULT` and `MOLD`; every variant must reuse identical object files. In the reference
+measurement both fast linkers linked the large Debug `CnaTests` about ten times faster than GNU ld
+(LLD slightly ahead and using less memory than Mold), Mold was fastest on the small Release tool,
+and all three binaries produced identical test results. `AUTO` is therefore probe-based and
+prefers Mold; GNU ld remains a valid dependency-free fallback. Measure the relevant current target
+before deriving a local choice.
 
 `CNA_ENABLE_IPO=ON` enables CMake IPO/LTO only for supported native `Release`, `RelWithDebInfo`, or
 `MinSizeRel` CNA-owned targets after `CheckIPOSupported` succeeds. It is off by default because it
@@ -665,10 +495,9 @@ cache state, and target. Record:
 4. one-source and one-public-header incremental rebuild time;
 5. final-link time, output size, and relevant tests.
 
-Build with at most 8 jobs: the development machine's 16 cores and 30 GiB are shared by several
-sessions (the parent `CLAUDE.md`, Rule 5). Lower the count for one target that swaps rather than
-raising it elsewhere. `CNA_MAX_VENDORED_BUILD_JOBS` controls the nested configure-time SDL build
-separately; it is not the main Ninja parallelism limit.
+State the `--parallel` value with every measurement, and on a shared machine lower it for one target
+that swaps rather than raising it elsewhere. `CNA_MAX_VENDORED_BUILD_JOBS` controls the nested
+configure-time SDL build separately; it is not the main Ninja parallelism limit.
 
 ### CI trend report and structural guard
 
@@ -729,14 +558,13 @@ asks for those counters. Linux peak RSS is the sampled sum of the complete proce
 the outer CMake/Ninja process. Schema 2 introduced load average before and after each measured
 phase; schema 3 additionally records the effective configuration and provenance described above.
 
-The driver currently selects these broad profiles. Command counts in this table belong to the
-2026-08-29 record, not today's graph:
+The driver selects these broad profiles:
 
-| Profile | Target | Configuration and enabled closure | Commands / compilations |
-| --- | --- | --- | ---: |
-| `dev` | `cna_tool_cnb_info` | Debug/STUB; focused tool only | 508 / 483 |
-| `unit` | `CnaTests` | Debug/STUB; complete unit-test executable | 1,164 / 1,126 |
-| `legacy` | `all` | Debug/OPENGLES3; tests, examples, C API, CNAEXT, compiled effects, networking, video | 2,483 / 1,929 |
+| Profile | Target | Configuration and enabled closure |
+| --- | --- | --- |
+| `dev` | `cna_tool_cnb_info` | Debug/STUB; focused tool only |
+| `unit` | `CnaTests` | Debug/STUB; complete unit-test executable |
+| `legacy` | `all` | Debug/OPENGLES3; tests, examples, C API, CNAEXT, compiled effects, networking, video |
 
 All profiles disable PCH, unity, IPO, Draco, devices, diagnostics, the optional inspector and
 microbenchmarks, and the configure-audit cache. They select one renderer explicitly. The `dev` and `unit`
@@ -755,39 +583,11 @@ their measured intervals. If the snapshots differ, it retains both in the JSON, 
 `inputs_stable_between_snapshots=false` and exits unsuccessfully. Equal snapshots do not prove
 that no transient changes occurred between them. These identities allow comparison of new runs;
 they do not pin the complete external environment or reconstruct missing historical inputs.
-The 2026-08-29 reference used GCC
-14.2.0, Clang 19.1.7, Mold 2.37.1, CMake 3.31.6, Ninja 1.12.1, ccache 4.11.2, full debug
-information, and a 16-logical-CPU/30-GiB host. Each of the 18 points had its own initially empty
-cache. Times are single observed runs on a shared host, so the table is a machine baseline, not a
-portable timing promise. `Clang unit/j12` is a disclosed load outlier: its configure phase alone
-took 16.25 s while comparable focused points took about 5–7 s.
 
-| Profile | Compiler | Jobs | Clean build | Peak process-tree RSS |
-| --- | --- | ---: | ---: | ---: |
-| `dev` | GCC | 8 / 12 / 16 | 106.5 / 98.4 / **85.5 s** | 2.61 / 3.39 / 4.33 GiB |
-| `dev` | Clang | 8 / 12 / 16 | 108.2 / 97.3 / **94.3 s** | 1.80 / 2.59 / 3.23 GiB |
-| `unit` | GCC | 8 / 12 / 16 | 412.8 / 379.1 / **362.8 s** | 2.75 / 3.74 / 4.72 GiB |
-| `unit` | Clang | 8 / 12 / 16 | 453.5 / 520.2* / **370.0 s** | 1.95 / 2.73 / 3.54 GiB |
-| `legacy` | GCC | 8 / 12 / 16 | 742.4 / 643.8 / **605.1 s** | 4.55 / 4.73 / 6.23 GiB |
-| `legacy` | Clang | 8 / 12 / 16 | 662.9 / 605.2 / **582.3 s** | 3.42 / 4.65 / 7.39 GiB |
-
-Focused no-op builds took 0.15–0.34 s; complete no-op builds took 0.39–1.00 s. Full-profile
-configure phases took 7.90–8.92 s. Cold-cache counters matched the compile graph: 483 misses for
-`dev`, 1,125 misses plus one intra-build preprocessed hit for `unit`, and 1,929 misses for the
-complete profile. There were no direct hits because each isolated cache began empty; the subsequent
-no-op invoked no compiler. The final campaign graph had one additional non-compile asset-copy
-edge compared with the earliest GCC points, after the benchmark exposed and fixed a parallel copy
-race; all six complete measurements contain the same 1,929 compiler calls.
-
-At 12 jobs the complete build took 643.75 s (10 min 44 s) with GCC and 605.18 s (10 min 05 s) with
-Clang. Clang was 6.0% faster, peaked at 4.65 GiB versus GCC's 4.73 GiB, and produced a 20.80-GiB
-tree versus GCC's 29.54-GiB tree (29.6% smaller). Clang's 12→16 gain was only 3.8% while RSS rose
-58.8%; GCC gained 6.0% while RSS rose 31.7%. On that day twelve jobs was the balanced point and 16
-the fastest; Clang `-j16` was the fastest complete point at 582.34 s (9 min 42 s). The machine has
-since become shared, and 8 jobs is now the limit, so the 12- and 16-job rows are a historical
-record, not settings to use. GCC was fastest for the focused
-`dev` and `unit` closures, while Clang used less disk and usually less memory below saturation.
-Keep both compilers in CI rather than declaring one universal winner.
+A complete `legacy` clean build takes about ten minutes at 12 jobs on a 16-CPU host with either GCC
+or Clang. Clang produced a roughly 30% smaller tree and usually used less memory; GCC was faster for
+the focused `dev` and `unit` closures. Keep both compilers in CI rather than declaring one
+universal winner.
 
 With the owner's approval for a clean benchmark, measure a current point at the job limit. Each run creates its own
 `build-probe/cmake-build-benchmark-*` directory:
@@ -810,14 +610,12 @@ python3 tools/build/benchmark_clean_build.py --owner-approved \
   --fna3d-source /path/to/FNA3D --parallel 8 --linker MOLD
 ```
 
-The 2026-08-29 rows above used `--ccache isolated`; a new `--ccache off` run reports no cache
-counters and performs uncached compilation for its actual current graph. An empty cache does not
-make filesystem/OS page caches cold, and a 20 ms sum-of-RSS sampler can miss short peaks and count
-shared resident pages more than once. The driver does not run the built test suites, archive dirty
-source bytes/packages, or capture every transitive system header, environment variable and
-external tool input. Keep the required source/package archives and test results separately.
-The historical August matrix remains historical; the corrected defaults and current graph are
-not an exact replay of those measurements.
+A `--ccache off` run reports no cache counters and performs uncached compilation for the actual
+current graph. An empty cache does not make filesystem/OS page caches cold, and a 20 ms
+sum-of-RSS sampler can miss short peaks and count shared resident pages more than once. The driver
+does not run the built test suites, archive dirty source bytes/packages, or capture every transitive
+system header, environment variable and external tool input. Keep the required source/package
+archives and test results separately.
 
 ## Deferred techniques
 
@@ -831,29 +629,9 @@ A C++ modules migration needs a separate design covering toolchains, dependency 
 consumption and cross-compiles. Any measured experiment becomes a
 default only after it meets its acceptance threshold on both native GCC and Clang builds.
 
-## Current verification
-
-The 2026-11-01 documentation audit checked current preset inheritance, test-group mappings,
-compiler/debug/instrumentation/linker/IPO policy, configure-cache inputs, shared C/C++ runtime
-composition, CI wiring and measurement helpers. The build-performance policy checker passes.
-The existing focused `cna_tool_cnb_info` target builds, and the report helper emits valid current
-graph/artifact JSON with no invented timing inputs. The related runtime-first/shared-runtime/export
-configuration tests and six footprint gates also pass in this pass (9/9; see
-[link-size verification](link-size-architecture.md#current-verification)). No full clean rebuild,
-cache reset, PCH/unity/IPO/sanitizer/compiler matrix or fresh timing campaign was needed or run;
-the historical tables above do not become current benchmark results through this source audit.
-
-The 2026-11-02 `CNA-FIX-L12` regressions exercise real, compilation-free CMake/Ninja fixture graphs.
-The original scripts fail both the static-default and source-revision controls. All eight corrected
-test groups pass, covering static/shared selection, platforms, unanticipated cache entries,
-dependency modifications, nested pins, source exports and changed-input/mismatched-selection
-refusal. The existing focused tool builds, and its schema-2 report records its actual shared CNA,
-SDL3 platform and dependency identities. The registered tool test and provenance/pipeline/C ABI
-gates pass. No full clean CNA benchmark, cache reset or historical timing replay was run.
-
 ## Focused coverage collection
 
-The [coverage collector recipe](../tools/coverage/README.md) (`4cacdf854`) owns setup,
+The [coverage collector recipe](../tools/coverage/README.md) owns setup,
 commands and metric definitions. It requires a dedicated, already configured HEADLESS platform
 and renderer tree, GCC 14 coverage instrumentation, matching gcov JSON format 2, Ninja,
 Python 3 and GNU `timeout`. For a prepared snapshot and caller-owned artifact directory:

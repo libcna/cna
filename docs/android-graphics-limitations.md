@@ -9,25 +9,14 @@ SDL3 supplies the Android platform/window integration. Device input, audio and s
 separate qualification in [devices-android.md](devices-android.md) and the NDK build recipe in
 [devices-build.md §4](devices-build.md#4-android-cross-compile).
 
-`SDL_RENDERER`, the former Android default, was retired on 2026-10-13; its selector is refused.
-See [removed-renderers.md](removed-renderers.md).
+## Evidence and its limits
 
-## Recorded evidence
-
-The project has earlier NDK 29 x86_64/android-24 cross-build evidence for CNA and its C API
-(CBIND-136), plus application runs on an x86_64 Android emulator (CBIND-137–139). Those runs
-exercised graphics, portrait orientation and Back-key delivery in external samples. They are
-historical evidence at their recorded revisions, not a full qualification of the current tree or
-an external consumer's current release.
-
-The later dependency audit recorded SDL/platform cross-compilation at `aa3139087e69`;
-Android was not rebuilt at the final `10f650b9d0f6` audit pin (recorded in the former
-`handoff.md`, now Git history). Preserve that distinction between a platform build, a full CNA/C API
-build and an application run.
-
-No physical Android device qualification is recorded. `SDLGPU` remains unqualified on Android,
-and no workflow under `.github/workflows/` currently builds Android. The existence of another
-renderer/platform selector is not Android runtime evidence.
+NDK x86_64/android-24 cross-builds of CNA and its C API (CBIND-136) and application runs of external
+samples on an x86_64 Android emulator (CBIND-137–139, covering graphics, portrait orientation and
+Back-key delivery) are recorded at their revisions; they are not a qualification of the current
+tree. Keep a platform build, a full CNA/C API build and an application run distinct. No physical
+Android device qualification is recorded, `SDLGPU` is unqualified on Android, and no workflow under
+`.github/workflows/` builds Android.
 
 ## Emulator base-vertex workaround
 
@@ -50,12 +39,11 @@ The renderer's transfer selection and packed subrectangle/cube layouts have a na
 `EasyGLFloatReadbackTest.EsFloatTransfersUseRgbaFloatAndPreservePackedSubrectangles`, which
 observes the actual GL transfer pair. The diagnostic and recorded NDK/emulator evidence are in
 [HALF_FLOAT_READBACK.md](../tools/graphics/HALF_FLOAT_READBACK.md). A standalone driver probe does
-not establish a complete CNA Android application run. The external museum application's complete
-Android revalidation and physical-device qualification remain separate.
+not establish a complete CNA Android application run or physical-device qualification.
 
 ## Open behavior boundary
 
-EasyGL Texture3D resources now participate in the same recovery registry as cube textures. Their
+EasyGL Texture3D resources participate in the same recovery registry as cube textures. Their
 native names are discarded on loss, then every mip is restored from exact declared-format CPU
 data. The OpenGLES3/OpenGL33 regressions recreate real GL contexts on Linux and sample the same
 volume objects afterwards; see [volume recovery](texture3d-texturecube-support.md#easygl-context-recovery).
