@@ -614,6 +614,14 @@ queue labels alone neither establish a current defect nor close one.
   `tests/reference/xna40/model/model-import-oracle.json`. No test checks this fixture. The rule was
   measured on `target.x` and is documented as not understood outside that window; re-measure with
   per-face probes before changing it.
+  First probes (CNA-FIX-XVERT-01, evidence `cnaplan/evidence/rev002/hnd-xvert-01/`, design in its
+  DESIGN.md): with map `2,2,2,3` both faces `(0,2,3)` and `(1,2,3)` stay (CNA drops both), which only the "two lowest file
+  indices of a group" candidate (D_pair) predicts -- still to be checked against target.x, which is not
+  available locally, and the fixture's full vertex remapping (source position order `0,1,2,3,5,4`) is not
+  explained by any face rule. The normal-order probe (one quad naming raw vertex 0 four times with four
+  different normals) produced **no mesh**: a triangle whose three corners name one raw vertex is dropped
+  even with three different normals, which CNA keeps; the two-corner case `(3,4,3)` is kept. No production
+  change yet; the next probe must separate the normal order with two distinct raw vertices per triangle.
 - **Genuine-XNA native teardown fault (TQ-SWEEP14-02), unattributed.** The harness ownership gap is
   repaired (2026-11-08, §0.3); the one-off Wine fault of sweep 14 did not reproduce with the old or the
   new harness. If it recurs, capture `+loaddll,+seh` and a WineDbg stack as INTEGRATOR_COMMANDS.md in the
