@@ -30,18 +30,19 @@ void ExpectEventVoice(Cue& cue, std::size_t track, std::size_t event, float gain
 
 TEST(XactLoopVariation, OrderedCandidatesReachBothRealMixersForEveryFiniteIteration)
 {
-    // FACT initial-1 then cyclic+1; the initial prepare consumes a positive count.
+    // FACT initial-1 then cyclic+1. HND-XACT-05 (Microsoft3.6): NEW_ON_LOOP raw n plays
+    // n+1 complete waves; the initial wave does not consume a count.
     for (const uint8_t loops : {uint8_t(0),uint8_t(1),uint8_t(2),uint8_t(254)})
     {
         AuthoredTracks tracks{{VariedAt(0,loops,XsbTrackVariationType::Ordered)}};
         ScheduledBanks b(tracks,0,false,{},false,VariationSound(tracks));
         auto cue=b.Play();
-        for (unsigned iteration=0;iteration<std::max<unsigned>(loops,1);++iteration)
+        for (unsigned iteration=0;iteration<loops+1u;++iteration)
         {
             ExpectEventVoice(*cue,0,0,ValueBaseGain,1);
             ExpectMarker(manualDevice->Render(441),(float(iteration%3+1)*.125f)*ValueBaseGain);
             ExpectSilence(manualDevice->Render(32));
-            if (iteration+1<std::max<unsigned>(loops,1)) EXPECT_TRUE(cue->getIsPlayingProperty()); // getter must not erase loop state
+            if (iteration<loops) EXPECT_TRUE(cue->getIsPlayingProperty()); // getter must not erase loop state
             b.Tick((iteration+1)*10);
         }
         EXPECT_TRUE(cue->getIsStoppedProperty()); ExpectSilence(manualDevice->Render(882));
@@ -51,6 +52,7 @@ TEST(XactLoopVariation, OrderedCandidatesReachBothRealMixersForEveryFiniteIterat
 TEST(XactLoopVariation, RandomAlgorithmsDeliverLiteralWaveSequencesAndBounds)
 {
     // Independent bucket arithmetic from FACT: initial+advance, then one advance per loop.
+    // Raw3 authors the four waves (HND-XACT-05 n+1) whose literal draws are checked.
     for (auto type : {XsbTrackVariationType::OrderedFromRandom,XsbTrackVariationType::Random,
                       XsbTrackVariationType::RandomNoRepeats,XsbTrackVariationType::Shuffle})
     {
@@ -60,7 +62,7 @@ TEST(XactLoopVariation, RandomAlgorithmsDeliverLiteralWaveSequencesAndBounds)
             : random ? std::vector<uint32_t>{5,0,1,3,2} : std::vector<uint32_t>{5,1,3,0,0};
         const std::vector<int> sequence=ordered ? std::vector<int>{2,0,1,2}
             : random ? std::vector<int>{0,1,2,1} : std::vector<int>{1,2,0,1};
-        AuthoredTracks tracks{{VariedAt(0,4,type)}};
+        AuthoredTracks tracks{{VariedAt(0,3,type)}};
         ScheduledBanks b(tracks,0,false,{},false,VariationSound(tracks));
         std::vector<uint32_t> bounds;
         InjectVariation(*b.engine,rolls,bounds);
@@ -202,8 +204,9 @@ TEST(XactLoopVariation, InfiniteEffectVariationReappliesNewValuesWithoutTrackVar
 TEST(XactLoopVariation, EachEventAndNewCueStartsFreshAndStoppedCueCannotReplay)
 {
     // FACTEventInstance belongs to one event in one sound instance (:724-771).
-    AuthoredTracks tracks{{VariedAt(0,2,XsbTrackVariationType::Ordered),
-                           VariedAt(40,2,XsbTrackVariationType::Ordered)}};
+    // Raw1 is two waves per event (HND-XACT-05 n+1).
+    AuthoredTracks tracks{{VariedAt(0,1,XsbTrackVariationType::Ordered),
+                           VariedAt(40,1,XsbTrackVariationType::Ordered)}};
     ScheduledBanks b(tracks,0,false,{},false,VariationSound(tracks)); auto cue=b.Play();
     for (int event=0;event<2;++event)
     {
@@ -224,7 +227,8 @@ TEST(XactLoopVariation, PauseAtCompletionRetainsPendingLoopUntilResume)
     // FACT.c:2102-2108,2654-2669 leaves completed waves stopped on Cue.Resume.
     // FACT_internal.c:1725-1733 defers pending promotion while the cue is paused.
     // Ordered advances0->1, so .125 first wave must become .25 only on Update.
-    AuthoredTracks tracks{{VariedAt(0,2,XsbTrackVariationType::Ordered)}};
+    // Raw1: two waves, one pending after the first (HND-XACT-05 n+1).
+    AuthoredTracks tracks{{VariedAt(0,1,XsbTrackVariationType::Ordered)}};
     ScheduledBanks b(tracks,0,false,{},false,VariationSound(tracks)); auto cue=b.Play();
     ExpectMarker(manualDevice->Render(441),(.125f)*ValueBaseGain); ExpectSilence(manualDevice->Render(32));
     auto* completed=CueTestAccess::EventVoice(*cue,0,0); ASSERT_NE(completed,nullptr);
@@ -251,11 +255,11 @@ TEST(XactLoopVariation, PausedVoiceFinishesItsRemainingFramesBeforeNextVariation
 {
     // FACT.c:2111-2119 pauses/resumes a live voice without replaying its prefix.
     // FACT_internal.c:1530-1548 promotes after EOF. GAP-01b excludes paused clock time:
-    // pause at7ms, resume1007ms ->Update1019 is19ms, Update1020 is20ms.
+    // pause at7ms, resume1007ms ->Update1019 is19ms, Update1020 is20ms. Raw1: two waves.
     for (int played : {400,441})
     {
         SCOPED_TRACE(played);
-        AuthoredTracks tracks{{VariedAt(0,2,XsbTrackVariationType::Ordered),StopAt(20,1)}};
+        AuthoredTracks tracks{{VariedAt(0,1,XsbTrackVariationType::Ordered),StopAt(20,1)}};
         ScheduledBanks b(tracks,0,false,{},false,VariationSound(tracks)); auto cue=b.Play();
         ExpectMarker(manualDevice->Render(played),(.125f)*ValueBaseGain);
         b.SetTime(7); cue->Pause(); b.Tick(1007);
@@ -279,8 +283,9 @@ TEST(XactLoopVariation, PausedVoiceFinishesItsRemainingFramesBeforeNextVariation
 TEST(XactLoopVariation, TrackStopCancelsItsLoopWhileOtherTrackContinues)
 {
     // FACT_internal.c:1189-1214 clears only the stopped track's loop budget.
+    // The sibling's raw1 is exactly two waves (HND-XACT-05 n+1).
     AuthoredTracks tracks{{VariedAt(0,3,XsbTrackVariationType::Ordered),StopAt(10,1)},
-                           {VariedAt(0,2,XsbTrackVariationType::Ordered)}};
+                           {VariedAt(0,1,XsbTrackVariationType::Ordered)}};
     ScheduledBanks b(tracks,0,false,{},false,VariationSound(tracks)); auto cue=b.Play();
     ExpectMarker(manualDevice->Render(441),(.25f)*ValueBaseGain); ExpectSilence(manualDevice->Render(32));
     b.Tick(10); ExpectMarker(manualDevice->Render(441),(.25f)*ValueBaseGain);
@@ -343,16 +348,27 @@ TEST(XactLoopVariation, EffectOnlyEventsUseLoopFlagsWithoutAnyCandidateTable)
     }
 }
 
-TEST(XactLoopVariation, FiniteCandidateEventsReselectWithEitherHasVariationValue)
+TEST(XactLoopVariation, FiniteCandidateEventsReselectOnlyWithNewOnLoop)
 {
-    // FACT_internal.c:195-199 is an empty conditional, not a finite-loop gate.
-    // Only the infinite delegation check at271-277 uses has_variation.
+    // FAudio reselects finite candidates whatever has_variation says (FACT_internal.c:195-199).
+    // Microsoft3.6 does not (HND-XACT-05 nol0 cells): without NEW_ON_LOOP one wave of the
+    // first candidate is held for all n+1 passes; with it every pass is the next candidate.
     for (bool hasVariation : {false,true})
     {
-        AuthoredTracks tracks{{VariedAt(0,2,XsbTrackVariationType::Ordered,0,hasVariation)}};
+        SCOPED_TRACE(hasVariation);
+        AuthoredTracks tracks{{VariedAt(0,1,XsbTrackVariationType::Ordered,0,hasVariation)}};
         ScheduledBanks b(tracks,0,false,{},false,VariationSound(tracks)); auto cue=b.Play();
-        ExpectMarker(manualDevice->Render(441),(.125f)*ValueBaseGain); ExpectSilence(manualDevice->Render(32));
-        b.Tick(10); ExpectMarker(manualDevice->Render(441),(.25f)*ValueBaseGain);
+        auto* first=CueTestAccess::EventVoice(*cue,0,0); ASSERT_NE(first,nullptr);
+        if (!hasVariation)
+        {
+            ExpectMarker(manualDevice->Render(882),(.125f)*ValueBaseGain);
+            EXPECT_EQ(CueTestAccess::EventVoice(*cue,0,0),first);
+        }
+        else
+        {
+            ExpectMarker(manualDevice->Render(441),(.125f)*ValueBaseGain); ExpectSilence(manualDevice->Render(32));
+            b.Tick(10); ExpectMarker(manualDevice->Render(441),(.25f)*ValueBaseGain);
+        }
         ExpectSilence(manualDevice->Render(32)); b.Tick(20);
         EXPECT_TRUE(cue->getIsStoppedProperty());
     }
@@ -370,7 +386,7 @@ TEST(XactLoopVariation, VariedIterationsUseCompleteWavesWithRegionsForResidentAn
             // XWB metadata24 per entry, loopStart+16=48, loopLength+20=96.
             bytes[144+i*24+16]=48; bytes[144+i*24+20]=96;
         }
-        AuthoredTracks tracks{{VariedAt(0,2,XsbTrackVariationType::Ordered)}};
+        AuthoredTracks tracks{{VariedAt(0,1,XsbTrackVariationType::Ordered)}}; // two waves
         ScheduledBanks b(tracks,0,false,{},false,VariationSound(tracks),bytes,stream);
         auto cue=b.Play();
         ExpectMarker(manualDevice->Render(441),(.125f)*ValueBaseGain); ExpectSilence(manualDevice->Render(32));

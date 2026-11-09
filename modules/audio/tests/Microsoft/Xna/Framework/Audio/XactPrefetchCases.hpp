@@ -42,8 +42,8 @@ protected:
     {
         if (factoryCalls == 0) manualDeviceRate = 22050;
         ASSERT_EQ(manualDeviceRate, 22050u)
-            << "the device is already open at another rate; run HndXactPrefetch.* and "
-               "HndXactCrossBank.* in their own process";
+            << "the device is already open at another rate; run HndXactPrefetch.*, "
+               "HndXactCrossBank.* and HndXactCardinality.* in their own process";
     }
 };
 class HndXactPrefetch : public NativeRateXact {};
@@ -83,8 +83,8 @@ TEST_F(HndXactPrefetch, SuccessorOwnsItsBankBeforeCurrentWaveEndsWithoutStarting
 TEST_F(HndXactPrefetch, PromotionConsumesThePreparedCandidateAndPreservesTheMeasuredPrefix)
 {
     // samebank/ordered/ordered-streaming normal and lateB: native actual PLAY
-    // indices0,1,0,1 in A, or bankA,B,A,B/index0. Test prefix0..2 only: raw3's
-    // native4 versus previous FAudio3 budget needs the controls in OWNER_QUESTIONS.
+    // indices0,1,0,1 in A, or bankA,B,A,B/index0. This test stops after the prefix
+    // 0..2; the complete count is SdkRawThreeProducesFourCompleteWaveActivations.
     for(const char* profile:{"samebank","ordered","ordered-streaming"})
     {
         SCOPED_TRACE(profile);auto b=PrefetchBanks(profile);auto other=PrefetchB(*b,profile);
@@ -97,6 +97,28 @@ TEST_F(HndXactPrefetch, PromotionConsumesThePreparedCandidateAndPreservesTheMeas
         }
         EXPECT_EQ(other->getIsInUseProperty(),!same);cue->Stop(AudioStopOptions::Immediate);
         EXPECT_TRUE(cue->getIsStoppedProperty());EXPECT_FLOAT_EQ(NumInstances(*cue),0);
+    }
+}
+
+TEST_F(HndXactPrefetch, SdkRawThreeProducesFourCompleteWaveActivations)
+{
+    // Every complete native-v3-prefetch-{x86,x64}-{samebank,ordered,ordered-streaming}-
+    // {normal,no-props,lateB} cell: raw loop3, FOUR actual WAVEPLAY/STOP/DESTROY. The
+    // HND-XACT-05 controls (XactFiniteCardinalityCases.hpp) isolate the cause: n+1 waves.
+    for(const char* profile:{"samebank","ordered","ordered-streaming"})
+    {
+        SCOPED_TRACE(profile);auto b=PrefetchBanks(profile);auto other=PrefetchB(*b,profile);
+        auto cue=CountCue(*b->sound,"ShapeCue");b->Tick(300);cue->Play();unsigned played=0;
+        const bool same=std::string(profile)=="samebank";
+        for(unsigned i=0;i<5;++i)
+        {
+            if(!CueTestAccess::ActiveInstance(*cue,0))break;
+            PrefetchCurrentWave(*cue,(i%2?(same?3072.f:2048.f):1024.f)/32768);
+            ++played;(void)manualDevice->Render(50000);b->Tick(1500+i*1200);
+        }
+        EXPECT_EQ(played,4u); // Microsoft lifecycle count, never derived from CNA
+        EXPECT_TRUE(cue->getIsStoppedProperty());EXPECT_FLOAT_EQ(NumInstances(*cue),0);
+        ExpectSilence(manualDevice->Render(256));
     }
 }
 

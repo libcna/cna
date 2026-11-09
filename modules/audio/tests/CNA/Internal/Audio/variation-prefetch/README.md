@@ -27,7 +27,7 @@ The native checker validates all88, raw loader evidence and the following values
 CNA regressions use the committed SDK bytes, actual voices/offline EOF and bank
 ownership. They assert the measured candidate prefix and missing-B termination.
 They do not assert a native700ms PCM duration, precise callback time or exact
-lookahead-to-delay mapping. CNA's previous FAudio-derived finite budget is3 starts
-for raw3 versus native4 here: the native checker retains4, and OWNER_QUESTIONS.md
-requests discriminating count/flags controls before a general conversion change.
-No existing finite-count oracle was silently rewritten.
+lookahead-to-delay mapping. CNA's previous FAudio-derived finite budget was3 starts
+for raw3 versus native4 here; the native checker retains4. HND-XACT-05's one-field
+controls (../finite-cardinality/README.md) settled the cause -- raw n plays n+1 waves --
+and HndXactPrefetch.SdkRawThreeProducesFourCompleteWaveActivations now asserts all four.

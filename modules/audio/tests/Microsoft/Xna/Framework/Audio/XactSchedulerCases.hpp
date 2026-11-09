@@ -405,12 +405,10 @@ TEST(XactScheduler, MissingWaveDoesNotBlockLaterValidPlayOrLeaveCueStuck)
 
 TEST(XactScheduler, DelayedWavePreservesFiniteLoopBudget)
 {
+    // HND-XACT-05: a plain PlayWave hands raw2 to its one wave, three passes.
     ScheduledBanks b({{PlayAt(20,0,2)}}); auto cue=b.Play(); b.Tick(20);
-    ExpectMarker(manualDevice->Render(441),0.125f);
+    ExpectMarker(manualDevice->Render(3*441),0.125f);
     ExpectSilence(manualDevice->Render(32));b.Tick(21);
-    if(auto* voice=CueTestAccess::EventVoice(*cue,0,0))voice->setVolumeProperty(1);
-    ExpectMarker(manualDevice->Render(441),0.125f);
-    ExpectSilence(manualDevice->Render(32));b.Tick(22);
     EXPECT_TRUE(cue->getIsStoppedProperty()); EXPECT_FALSE(cue->getIsPlayingProperty());
 }
 

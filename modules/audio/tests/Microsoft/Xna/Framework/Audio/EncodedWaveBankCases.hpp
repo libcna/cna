@@ -66,7 +66,7 @@ public:
     bool subregion=false;
     int Total(int repeats) const { return 8192+repeats*(subregion ? 4096 : 8192); }
     Gap05Banks(const std::string& stem,std::uint8_t count,bool streaming,bool truncated=false,
-               bool throughEnd=false,bool nativeFull=false)
+               bool throughEnd=false,bool nativeFull=false,bool newOnLoop=false)
     {
         const auto root=std::filesystem::path(CNA_GAP05_FIXTURE_ROOT);
         const bool pro=stem=="wmapro";
@@ -122,7 +122,7 @@ public:
             wave=std::make_unique<WaveBank>(engine.get(),Write("fixture.xwb",embedded),2048,2);
         }
         else wave=std::make_unique<WaveBank>(engine.get(),Write("fixture.xwb",bytes));
-        sound=std::make_unique<SoundBank>(engine.get(),Write("fixture.xsb",Xsb(count)));
+        sound=std::make_unique<SoundBank>(engine.get(),Write("fixture.xsb",Xsb(count,newOnLoop)));
     }
     ~Gap05Banks()
     {
@@ -192,20 +192,33 @@ TEST_P(Gap05EncodedPlayback, CachedSoundDurationAndLoopMetadataMatchDecodedFrame
     EXPECT_EQ(SoundEffectInstanceTestAccess::LoopLength(instance),streaming ? 8192u : 4096u);
 }
 
+void Gap05ExpectCompleteWaves(Gap05Banks& banks,Cue& cue,int waves)
+{
+    for(int pass=0;pass<waves;++pass)
+    {
+        Gap05Expect(manualDevice->Render(8192),banks.golden,0,0,false);
+        ExpectSilence(manualDevice->Render(32));banks.Update(cue);
+    }
+}
+
 TEST_P(Gap05EncodedPlayback, WholeOutputFiniteLoopRegionAndCompletionMatchReference)
 {
     const auto [stem,streaming]=GetParam();
-    // Finite event counts include the first wave; delegated255 uses its buffer region.
+    // HND-XACT-05: raw n plays n+1 passes. A plain PlayWave hands n (and 255) to the
+    // decoded wave's buffer region; NEW_ON_LOOP replays complete decoded waves.
+    for (const bool newOnLoop : {false,true})
     for (int count : {0,2,255})
     {
+        SCOPED_TRACE(newOnLoop);
         SCOPED_TRACE(count);
-        Gap05Banks banks(stem,static_cast<std::uint8_t>(count),streaming);
+        Gap05Banks banks(stem,static_cast<std::uint8_t>(count),streaming,false,false,false,newOnLoop);
         auto cue=banks.Play(); ASSERT_TRUE(cue->getIsPlayingProperty());
-        if(count==255)Gap05Expect(manualDevice->Render(24576),banks.golden,0,255,banks.subregion);
-        else for(int pass=0;pass<std::max(count,1);++pass)
+        if(newOnLoop)Gap05ExpectCompleteWaves(banks,*cue,count==255?3:count+1);
+        else if(count==255)Gap05Expect(manualDevice->Render(24576),banks.golden,0,255,banks.subregion);
+        else
         {
-            Gap05Expect(manualDevice->Render(8192),banks.golden,0,0,false);
-            ExpectSilence(manualDevice->Render(32));banks.Update(*cue);
+            Gap05Expect(manualDevice->Render(banks.Total(count)+32),banks.golden,0,count,banks.subregion);
+            banks.Update(*cue);
         }
         EXPECT_EQ(cue->getIsStoppedProperty(),count!=255);
         EXPECT_EQ(cue->getIsPlayingProperty(),count==255);
@@ -215,15 +228,15 @@ TEST_P(Gap05EncodedPlayback, WholeOutputFiniteLoopRegionAndCompletionMatchRefere
 
 TEST_P(Gap05EncodedPlayback, PauseResumeStopsAndFreshPlaybackKeepDecodedPosition)
 {
-    const auto [stem,streaming]=GetParam(); Gap05Banks banks(stem,2,streaming);
+    // NEW_ON_LOOP raw2: three complete decoded waves (HND-XACT-05 n+1).
+    const auto [stem,streaming]=GetParam(); Gap05Banks banks(stem,2,streaming,false,false,false,true);
     auto cue=banks.Play();
     Gap05Expect(manualDevice->Render(3001),banks.golden,0,0,false);
     cue->Pause(); EXPECT_TRUE(cue->getIsPausedProperty());
     ExpectSilence(manualDevice->Render(1024)); cue->Resume();
     Gap05Expect(manualDevice->Render(8192-3001),banks.golden,3001,0,false);
     ExpectSilence(manualDevice->Render(32));banks.Update(*cue);
-    Gap05Expect(manualDevice->Render(8192),banks.golden,0,0,false);
-    ExpectSilence(manualDevice->Render(32));banks.Update(*cue);
+    Gap05ExpectCompleteWaves(banks,*cue,2);
     EXPECT_TRUE(cue->getIsStoppedProperty());
     for (auto stop : {AudioStopOptions::Immediate,AudioStopOptions::AsAuthored})
     {
@@ -232,11 +245,7 @@ TEST_P(Gap05EncodedPlayback, PauseResumeStopsAndFreshPlaybackKeepDecodedPosition
         EXPECT_TRUE(fresh->getIsStoppedProperty());
     }
     auto fresh=banks.Play();
-    for(int pass=0;pass<2;++pass)
-    {
-        Gap05Expect(manualDevice->Render(8192),banks.golden,0,0,false);
-        ExpectSilence(manualDevice->Render(32));banks.Update(*fresh);
-    }
+    Gap05ExpectCompleteWaves(banks,*fresh,3);
     EXPECT_TRUE(fresh->getIsStoppedProperty());
 }
 
@@ -298,18 +307,14 @@ TEST_P(Gap05EncodedPlayback, TruncatedEntryCannotCreateAPlayingVoice)
 
 TEST_P(Gap05EncodedPlayback, FiniteEventsWithThroughEofRegionReplayCompleteDecodedWaves)
 {
-    const auto [stem,streaming]=GetParam(); Gap05Banks banks(stem,2,streaming,false,true);
+    const auto [stem,streaming]=GetParam(); Gap05Banks banks(stem,2,streaming,false,true,false,true);
     auto cue=banks.Play();
     auto* instance=CueTestAccess::ActiveInstance(*cue,0); ASSERT_NE(instance,nullptr);
     const int start=streaming ? 0 : 2048;
     EXPECT_EQ(SoundEffectInstanceTestAccess::LoopStart(*instance),static_cast<unsigned>(start));
     EXPECT_EQ(SoundEffectInstanceTestAccess::LoopLength(*instance),0u);
-    // Both event activations replay all8192 frames, irrespective of loop start.
-    for(int pass=0;pass<2;++pass)
-    {
-        Gap05Expect(manualDevice->Render(8192),banks.golden,0,0,false);
-        ExpectSilence(manualDevice->Render(32));banks.Update(*cue);
-    }
+    // All three NEW_ON_LOOP activations replay all8192 frames, irrespective of loop start.
+    Gap05ExpectCompleteWaves(banks,*cue,3);
     EXPECT_TRUE(cue->getIsStoppedProperty());
 }
 

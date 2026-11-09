@@ -1224,21 +1224,31 @@ namespace Microsoft::Xna::Framework::Audio
                 event.finished = true;
                 if (const auto* play = std::get_if<XsbPlayWaveEvent>(&event.authored.payload))
                 {
-                    // FACT_internal.c:271-278 delegates infinite/no-variation to
-                    // the wave. Every finite repetition prepares a complete new wave,
-                    // irrespective of its authored loop region or variation flags.
+                    const uint8_t count = play->wave.loopCount;
+                    const bool trackNewOnLoop = (play->variationInfo & 0x00400000u) != 0;
                     const bool newEffects = (play->wave.effectVariationFlags & 0x0f00) != 0;
-                    const bool delegateInfinite = play->wave.loopCount == 255
-                        && (play->variationInfo & 0x00400000u) == 0 && !newEffects;
-                    event.managedLoops = play->wave.loopCount > 0 && !delegateInfinite;
+                    // Refresh Cue.Play IL_0006 reaches native IXACT3Cue::Play (UnsafeNativeMethods/
+                    // Cue::Play IL_0032-0036), so the count is Microsoft XACT3.6 behaviour. HND-XACT-05
+                    // measured it on x86/x64 (docs/xact-looping.md, finite-cardinality/ORACLE.json):
+                    // PlayWave and PlayWaveTrackVariation play the wave n+1 times for a positive
+                    // byte n, whatever the play-wave flags byte. With track NEW_ON_LOOP every
+                    // pass is a new complete wave; without it one wave loops n times, as
+                    // FACT_internal.c:271-278 already delegates 255. FAudio plays max(n,1) waves.
+                    const bool measured = event.authored.type == XsbEventType::PlayWave
+                        || event.authored.type == XsbEventType::PlayWaveTrackVariation;
+                    // The effect families were not measured: keep FAudio's budget for them.
+                    const bool delegated = measured ? !trackNewOnLoop
+                        : count == 255 && !trackNewOnLoop && !newEffects;
+                    event.managedLoops = count > 0 && !delegated;
 #ifndef SOUND_ENABLED
                     // NULL audio has no completion-producing voice. Preserve its
                     // existing one-shot/property behavior instead of inventing loops.
                     event.managedLoops = false;
 #endif
-                    // Native's initial GetNextWave consumes one positive finite count.
-                    event.loopsRemaining = !event.managedLoops ? 0 : play->wave.loopCount==255
-                        ? 255 : play->wave.loopCount-1;
+                    // Measured: the first wave is not part of n. FAudio's initial GetNextWave
+                    // consumes one finite count. 255 stays the unbounded sentinel.
+                    event.loopsRemaining = !event.managedLoops ? 0 : count == 255 || measured
+                        ? count : count - 1;
                     StartWave(play->wave, t, e, &event);
                 }
                 else if (const auto* stop = std::get_if<XsbStopEvent>(&event.authored.payload))
@@ -1270,7 +1280,7 @@ namespace Microsoft::Xna::Framework::Audio
                 if (voice == active_.end()) { event.loopsRemaining = 0; continue; }
                 if (voice->instance && voice->instance->getStateProperty() != SoundState::Stopped) continue;
                 active_.erase(voice);
-                // Owner-approved255 remains infinite. Native nondelegated255 instead
+                // Owner-approved255 remains infinite. FAudio's nondelegated255 instead
                 // decrements to254 on initial preparation (FACT_internal.c:449-451).
                 if (event.loopsRemaining != 255) --event.loopsRemaining;
                 StartWave(std::get<XsbPlayWaveEvent>(event.authored.payload).wave, t, e, &event);
@@ -1420,8 +1430,8 @@ namespace Microsoft::Xna::Framework::Audio
         // successor banks terminate the sequence, even if loaded before that EOF.
         // The native88-cell receipt does not qualify random/effect draw timing.
         // Reuse the preparation slot; a prefetched wave must not start a voice or
-        // advance selection again when promoted. Retain the existing count budget
-        // until the SDK raw3/native4 discrepancy is isolated (OWNER_QUESTIONS).
+        // advance selection again when promoted. HND-XACT-05 settles the count: the
+        // last of the n+1 waves prepares no successor (raw3: four PREPARED, four PLAY).
         using namespace CNA::Internal::Audio;
         if (loopEvent && loopEvent->managedLoops && loopEvent->loopsRemaining > 0
             && loopEvent->authored.type == XsbEventType::PlayWaveTrackVariation

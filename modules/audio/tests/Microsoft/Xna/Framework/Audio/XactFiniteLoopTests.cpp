@@ -106,11 +106,14 @@ Bytes Xgs()
     return b;
 }
 
-Bytes Xsb(std::uint8_t count)
+Bytes Xsb(std::uint8_t count, bool newOnLoop = false)
 {
     // XSB v46: bank names at 74/138, complex sound at 202; track table
-    // 9+1+9 bytes, event count at 221, one 16-byte PlayWave at 222.
-    constexpr std::uint32_t sound = 202, events = 221, cue = 238, names = 243, text = 249;
+    // 9+1+9 bytes, event count at 221, one 16-byte PlayWave at 222. newOnLoop
+    // authors a 26-byte one-candidate ordered PlayWaveTrackVariation with
+    // NEW_ON_LOOP (bit22) instead, which plays every pass as a complete wave.
+    const std::uint32_t grow = newOnLoop ? 10 : 0;
+    const std::uint32_t sound = 202, events = 221, cue = 238 + grow, names = 243 + grow, text = 249 + grow;
     Bytes b; Text(b, "SDBK", 4); U16(b, 46); U16(b, 0); U16(b, 0);
     b.resize(18, 0); U8(b, 0);
     U16(b, 1); U16(b, 0); U16(b, 0); U16(b, 0); U8(b, 1);
@@ -120,8 +123,13 @@ Bytes Xsb(std::uint8_t count)
     Text(b, "Gap02Sound", 64); Text(b, "Gap02Wave", 64);
     U8(b, 1); U16(b, 0); U8(b, 180); U16(b, 0); U8(b, 0); U16(b, 0);
     U8(b, 1); U8(b, 180); U32(b, events); U16(b, 0); U16(b, 0);
-    U8(b, 1); U32(b, 1); U16(b, 0); U8(b, 255); // one event, timestamp zero
-    U8(b, 0); U16(b, 0); U8(b, 0); U8(b, count); U16(b, 0); U16(b, 0);
+    U8(b, 1); U32(b, newOnLoop ? 3 : 1); U16(b, 0); U8(b, 255); // one event, timestamp zero
+    if (newOnLoop)
+    {
+        U8(b, 0); U8(b, count); U16(b, 0); U16(b, 0);
+        U32(b, 1u | 0x00400000u); U32(b, 0); U16(b, 0); U8(b, 0); U8(b, 0); U8(b, 255);
+    }
+    else { U8(b, 0); U16(b, 0); U8(b, 0); U8(b, count); U16(b, 0); U16(b, 0); }
     U8(b, 0); U32(b, sound); U32(b, text); U16(b, 0); Text(b, "Loop", 5);
     return b;
 }
@@ -174,7 +182,8 @@ public:
     std::unique_ptr<AudioEngine> engine;
     std::unique_ptr<WaveBank> wave;
     std::unique_ptr<SoundBank> sound;
-    Banks(std::uint8_t count, int codec, bool region, bool streamed, bool throughEnd = false)
+    Banks(std::uint8_t count, int codec, bool region, bool streamed, bool throughEnd = false,
+          bool newOnLoop = false)
     {
         directory_ = CNA::TestSupport::FixtureRoot() / "gap02-fixture";
         std::filesystem::create_directories(directory_);
@@ -182,7 +191,7 @@ public:
         const auto xwb = Write("fixture.xwb", Xwb(codec, region, streamed, throughEnd));
         if (streamed) wave = std::make_unique<WaveBank>(engine.get(), xwb, 0, 2);
         else wave = std::make_unique<WaveBank>(engine.get(), xwb);
-        sound = std::make_unique<SoundBank>(engine.get(), Write("fixture.xsb", Xsb(count)));
+        sound = std::make_unique<SoundBank>(engine.get(), Write("fixture.xsb", Xsb(count, newOnLoop)));
     }
     ~Banks()
     {
@@ -252,26 +261,49 @@ protected:
 
 #include "EncodedWaveBankCases.hpp"
 
+// HND-XACT-05 (docs/xact-looping.md, finite-cardinality/ORACLE.json): a raw byte n plays n+1
+// passes. A plain PlayWave hands n to its wave -- prefix, n+1 region passes, suffix, as the
+// voice contract below; with NEW_ON_LOOP every pass is a separate complete wave instead.
+void ExpectCompleteWaves(Banks& banks, Cue& cue, int waves)
+{
+    for(int pass=0;pass<waves;++pass)
+    {
+        ExpectOutput(manualDevice->Render(192),0,0,false);
+        ExpectSilence(manualDevice->Render(32));banks.Update(cue);
+        EXPECT_EQ(cue.getIsStoppedProperty(),pass+1==waves);
+    }
+}
+
 TEST_P(XactFiniteLoop, AuthoredCountsHaveExactOutputAndCompletion)
 {
     const auto [codec, region, streamed] = GetParam();
+    for (const bool newOnLoop : {false,true})
     for (int count : {0,1,2,254,255})
     {
+        SCOPED_TRACE(newOnLoop);
         SCOPED_TRACE(count);
-        const auto parsed = ParseXsb(Xsb(static_cast<std::uint8_t>(count)));
+        const auto parsed = ParseXsb(Xsb(static_cast<std::uint8_t>(count), newOnLoop));
         ASSERT_EQ(parsed.sounds.size(), 1u);
         ASSERT_EQ(parsed.sounds[0].waves.size(), 1u);
         ASSERT_EQ(parsed.sounds[0].waves[0].loopCount, count); // literal byte in Xsb()
-        Banks banks(static_cast<std::uint8_t>(count), codec, region, streamed);
+        Banks banks(static_cast<std::uint8_t>(count), codec, region, streamed, false, newOnLoop);
         auto cue = banks.Play();
         ASSERT_TRUE(cue->getIsPlayingProperty());
-        if(count==255)ExpectOutput(manualDevice->Render(Total(255,region)+32),0,255,region);
-        else for(int pass=0;pass<std::max(count,1);++pass)
+        if (count == 255)
         {
-            // Event counts include the initial complete wave; buffer repeats do not.
-            ExpectOutput(manualDevice->Render(192),0,0,false);
-            ExpectSilence(manualDevice->Render(32));banks.Update(*cue);
-            EXPECT_EQ(cue->getIsStoppedProperty(),pass+1==std::max(count,1));
+            // Plain255 delegates to the wave; NEW_ON_LOOP255 keeps CNA's unbounded sentinel.
+            if (!newOnLoop) ExpectOutput(manualDevice->Render(Total(255,region)+32),0,255,region);
+            else for (int pass=0;pass<4;++pass)
+            {
+                ExpectOutput(manualDevice->Render(192),0,0,false);
+                ExpectSilence(manualDevice->Render(32));banks.Update(*cue);
+            }
+        }
+        else if (newOnLoop) ExpectCompleteWaves(banks,*cue,count+1);
+        else
+        {
+            ExpectOutput(manualDevice->Render(Total(count,region)+32),0,count,region);
+            banks.Update(*cue);
         }
         EXPECT_EQ(cue->getIsStoppedProperty(), count != 255);
         EXPECT_EQ(cue->getIsPlayingProperty(), count == 255);
@@ -283,18 +315,18 @@ TEST_P(XactFiniteLoop, AuthoredCountsHaveExactOutputAndCompletion)
 TEST_P(XactFiniteLoop, FiniteCountsCannotSurviveAnExtraWholePassBudget)
 {
     const auto [codec, region, streamed] = GetParam();
+    for (const bool newOnLoop : {false,true})
     for (int count : {0,1,2,254})
     {
+        SCOPED_TRACE(newOnLoop);
         SCOPED_TRACE(count);
-        Banks banks(static_cast<std::uint8_t>(count), codec, region, streamed);
+        Banks banks(static_cast<std::uint8_t>(count), codec, region, streamed, false, newOnLoop);
         auto cue = banks.Play();
-        for(int pass=0;pass<std::max(count,1);++pass)
-        {
-            ExpectOutput(manualDevice->Render(192),0,0,false);
-            ExpectSilence(manualDevice->Render(32));banks.Update(*cue);
-        }
-        // No further pass after the native event budget, including raw0/raw1.
+        if (newOnLoop) ExpectCompleteWaves(banks,*cue,count+1);
+        else { ExpectOutput(manualDevice->Render(Total(count,region)),0,count,region); banks.Update(*cue); }
+        // No further pass after the n+1 measured passes, including raw0.
         ExpectSilence(manualDevice->Render(192));
+        banks.Update(*cue);
         ExpectSilence(manualDevice->Render(32));
         EXPECT_TRUE(cue->getIsStoppedProperty());
         EXPECT_FALSE(cue->getIsPlayingProperty());
@@ -304,39 +336,49 @@ TEST_P(XactFiniteLoop, FiniteCountsCannotSurviveAnExtraWholePassBudget)
 TEST_P(XactFiniteLoop, PauseResumePreservesPositionAndRemainingPasses)
 {
     const auto [codec, region, streamed] = GetParam();
-    Banks banks(2, codec, region, streamed);
-    auto cue = banks.Play();
-    ExpectOutput(manualDevice->Render(64), 0, 2, region);
-    cue->Pause();
-    EXPECT_TRUE(cue->getIsPausedProperty()); EXPECT_TRUE(cue->getIsPlayingProperty());
-    ExpectSilence(manualDevice->Render(1024));
-    cue->Resume();
-    ExpectOutput(manualDevice->Render(128),64,0,false);
-    ExpectSilence(manualDevice->Render(32));banks.Update(*cue);
-    ExpectOutput(manualDevice->Render(192),0,0,false);
-    ExpectSilence(manualDevice->Render(32));banks.Update(*cue);
-    EXPECT_TRUE(cue->getIsStoppedProperty());
+    for (const bool newOnLoop : {false,true})
+    {
+        SCOPED_TRACE(newOnLoop);
+        Banks banks(2, codec, region, streamed, false, newOnLoop);
+        auto cue = banks.Play();
+        ExpectOutput(manualDevice->Render(64), 0, newOnLoop ? 0 : 2, region);
+        cue->Pause();
+        EXPECT_TRUE(cue->getIsPausedProperty()); EXPECT_TRUE(cue->getIsPlayingProperty());
+        ExpectSilence(manualDevice->Render(1024));
+        cue->Resume();
+        if (newOnLoop)
+        {
+            ExpectOutput(manualDevice->Render(128),64,0,false);
+            ExpectSilence(manualDevice->Render(32));banks.Update(*cue);
+            ExpectCompleteWaves(banks,*cue,2);
+        }
+        else
+        {
+            ExpectOutput(manualDevice->Render(Total(2,region)-64+32),64,2,region);
+            banks.Update(*cue);
+        }
+        EXPECT_TRUE(cue->getIsStoppedProperty());
+    }
 }
 
 TEST_P(XactFiniteLoop, BothCueStopsSilenceAndFreshCueRestartsBudget)
 {
     const auto [codec, region, streamed] = GetParam();
+    for (const bool newOnLoop : {false,true})
     for (auto stop : {AudioStopOptions::Immediate, AudioStopOptions::AsAuthored})
     {
-        Banks banks(2, codec, region, streamed);
+        SCOPED_TRACE(newOnLoop);
+        Banks banks(2, codec, region, streamed, false, newOnLoop);
         auto cue = banks.Play();
-        ExpectOutput(manualDevice->Render(64), 0, 2, region);
+        ExpectOutput(manualDevice->Render(64), 0, newOnLoop ? 0 : 2, region);
         cue->Stop(stop); // FACTCue_Stop: no fade/RPC release authored => hard stop
         EXPECT_TRUE(cue->getIsStoppedProperty());
         ExpectSilence(manualDevice->Render(1024));
         cue->Play(); // A Cue is single-use; a fresh GetCue is the replay route.
         ExpectSilence(manualDevice->Render(32));
         auto fresh = banks.Play();
-        for(int pass=0;pass<2;++pass)
-        {
-            ExpectOutput(manualDevice->Render(192),0,0,false);
-            ExpectSilence(manualDevice->Render(32));banks.Update(*fresh);
-        }
+        if (newOnLoop) ExpectCompleteWaves(banks,*fresh,3);
+        else { ExpectOutput(manualDevice->Render(Total(2,region)+32),0,2,region); banks.Update(*fresh); }
         EXPECT_TRUE(fresh->getIsStoppedProperty());
     }
 }
@@ -344,14 +386,10 @@ TEST_P(XactFiniteLoop, BothCueStopsSilenceAndFreshCueRestartsBudget)
 TEST_P(XactFiniteLoop, FiniteEventsReplayCompleteWavesWhenRegionExtendsThroughEof)
 {
     const auto [codec, region, streamed] = GetParam();
-    Banks banks(2, codec, region, streamed, true);
+    Banks banks(2, codec, region, streamed, true, true);
     auto cue = banks.Play();
-    // Finite events pass wave loop0, so a through-EOF region cannot omit the prefix.
-    for(int pass=0;pass<2;++pass)
-    {
-        ExpectOutput(manualDevice->Render(192),0,0,false);
-        ExpectSilence(manualDevice->Render(32));banks.Update(*cue);
-    }
+    // NEW_ON_LOOP passes use wave loop0, so a through-EOF region cannot omit the prefix.
+    ExpectCompleteWaves(banks,*cue,3);
     EXPECT_TRUE(cue->getIsStoppedProperty());
 }
 
@@ -504,6 +542,7 @@ std::map<void*, VoiceReceipt> voiceReceipts;
 #include "XactBankLifetimeCases.hpp"
 #include "XactPreparationShapeCases.hpp"
 #include "XactPrefetchCases.hpp"
+#include "XactFiniteCardinalityCases.hpp"
 #include "XactCrossBankCases.hpp"
 #include "XactResourceLifetimeCases.hpp"
 #include "XactPitchRangeCases.hpp"
