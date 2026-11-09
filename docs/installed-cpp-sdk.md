@@ -122,10 +122,12 @@ otherwise using the filesystem would not include.
 ### Version contract
 
 The existing `CNAConfigVersion.cmake` version remains the **C ABI version**
-(currently 0.52.0, SameMajorVersion); it is not silently replaced with the C++
+(currently 0.60.0, SameMajorVersion); it is not silently replaced with the C++
 runtime's product version. Thus existing `find_package(CNA 0.1 CONFIG)` consumers keep their
 contract. `CNA_RUNTIME_VERSION` exposes the separate runtime version after loading
-the C++ SDK. C++ consumers still require a compatible compiler, standard library,
+the C++ SDK. `CNA_SDK_GRAPHICS_RENDERER` names the renderer the SDK was compiled for (the one
+`CNA::getCurrentGraphicsRendererName()` reports, in the consumer's translation units too) and
+`CNA_SDK_GRAPHICS_RENDERERS` lists every compiled-in identity, default first. C++ consumers still require a compatible compiler, standard library,
 architecture and build configuration; the C ABI version is not a promise of C++
 binary ABI stability between arbitrary builds.
 

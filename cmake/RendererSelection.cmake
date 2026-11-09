@@ -394,6 +394,15 @@ list(GET CNA_RENDERER_DIRS 0 RENDERER_DIR)
 # default's -- which in a HEADLESS;SOFTWARE;STUB build meant the whole project compiled as though
 # STUB were selected. It names the default renderer, like the two scalars above.
 list(GET CNA_RENDERER_DEFINES 0 CNA_RENDERER_DEFINE)
+# The three EasyGL identities share CNA_RENDERER_EASYGL; CNA_GL_PROFILE_<X> is what tells them
+# apart (GraphicsRendererType.hpp). It rides cna_build_config INTERFACE beside CNA_RENDERER_DEFINE,
+# so a consumer's own translation units name the same default renderer as CNA's do: without it an
+# OPENGL33 or WEBGL2 build reported "OPENGLES3" from getCurrentGraphicsRendererName() in the
+# consumer (cna-template missing.md CNA-2).
+set(CNA_GL_PROFILE_DEFINE "")
+if(CNA_GRAPHICS_RENDERER MATCHES "^(OPENGLES3|OPENGL33|WEBGL2)$")
+    set(CNA_GL_PROFILE_DEFINE "CNA_GL_PROFILE_${CNA_GRAPHICS_RENDERER}")
+endif()
 
 # Applies the browser-context contract of the selected public renderer to a final Emscripten link.
 # The WebGL version must be exact: accepting Emscripten's WebGL 1 default for WEBGL2 makes EasyGL

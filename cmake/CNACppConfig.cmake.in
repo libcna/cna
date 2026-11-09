@@ -2,6 +2,11 @@
 @PACKAGE_INIT@
 
 set(CNA_RUNTIME_VERSION "@CNA_VERSION_STRING@")
+# The renderer identities this SDK was compiled with; CNA_SDK_GRAPHICS_RENDERER is the default and
+# the identity getCurrentGraphicsRendererName() reports. Named apart from a consumer's own
+# CNA_GRAPHICS_RENDERER option, which this package does not set.
+set(CNA_SDK_GRAPHICS_RENDERER "@CNA_GRAPHICS_RENDERER@")
+set(CNA_SDK_GRAPHICS_RENDERERS "@CNA_RENDERER_IDENTITIES@")
 set(CNA_CPP_COMPONENTS "@CNA_CPP_COMPONENTS@")
 if(TARGET CNA::CNA)
     get_target_property(_cna_sdk_loaded CNA::CNA CNA_INSTALLED_SDK)

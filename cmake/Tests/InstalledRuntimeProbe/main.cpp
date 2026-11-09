@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 #include "CNA/AssemblyInfo.hpp"
+#include "CNA/GraphicsRendererType.hpp"
 #include "CNA/Logger.hpp"
 #include "CNA/Version.hpp"
 #include "Microsoft/Xna/Framework/Vector3.hpp"
@@ -12,6 +13,7 @@
 #include "System/IO/MemoryStream.hpp"
 #include "SharpRuntime/Version.hpp"
 #include <cstdio>
+#include <string_view>
 #ifdef CNA_PACKAGE_TEST_C_API
 extern "C" int installed_c_check_state(void);
 extern "C" int installed_c_set_level(void);
@@ -27,6 +29,7 @@ int main()
 {
     using namespace Microsoft::Xna::Framework;
     if (Vector3::Distance(Vector3::Zero, Vector3(3, 4, 0)) != 5) return 1;
+    if (CNA::getCurrentGraphicsRendererName() != std::string_view{CNA_PACKAGE_EXPECTED_RENDERER}) return 10;
     if (Input::KeyboardState().IsKeyDown(Input::Keys::Space)) return 2;
     if (Graphics::SamplerState::PointClamp.getIsDisposedProperty()) return 3;
     System::IO::MemoryStream stream;

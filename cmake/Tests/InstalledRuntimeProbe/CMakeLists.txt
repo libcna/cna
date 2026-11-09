@@ -113,6 +113,13 @@ foreach(_order IN ITEMS CppFirst CFirst)
     else()
         target_compile_options(InstalledRuntime_${_order} PRIVATE -Wall -Wextra -Wpedantic -Werror)
     endif()
+    # The package publishes its default renderer, and the consumer's own translation units must
+    # report the same one; for OPENGL33/WEBGL2 that needs the exported CNA_GL_PROFILE_* define.
+    if(NOT CNA_SDK_GRAPHICS_RENDERER)
+        message(FATAL_ERROR "The CNA package does not publish CNA_SDK_GRAPHICS_RENDERER")
+    endif()
+    target_compile_definitions(InstalledRuntime_${_order} PRIVATE
+        CNA_PACKAGE_EXPECTED_RENDERER="${CNA_SDK_GRAPHICS_RENDERER}")
     add_test(NAME InstalledRuntime_${_order} COMMAND InstalledRuntime_${_order})
 endforeach()
 if(EMSCRIPTEN)
