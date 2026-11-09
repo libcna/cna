@@ -838,8 +838,9 @@ CNA_C_API CNA_Result cna_graphics_device_reset_with_parameters(
  * @param destination Caller-owned output pixels, or null only when @p capacity is zero.
  * @param capacity Capacity of @p destination measured in pixels.
  * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_BUFFER_TOO_SMALL` when @p capacity cannot hold
- * `start_index + element_count` pixels, `CNA_RESULT_NOT_SUPPORTED` when the active renderer has no
- * honest back-buffer readback, or another documented argument/handle/thread/native failure. No
+ * `start_index + element_count` pixels, `CNA_RESULT_NOT_SUPPORTED` when the device's graphics
+ * profile is Reach (XNA 4.0 supports GetBackBufferData only under HiDef) or the active renderer has
+ * no honest back-buffer readback, or another documented argument/handle/thread/native failure. No
  * partial pixel array is written.
  */
 CNA_C_API CNA_Result cna_graphics_device_get_backbuffer_data_window(

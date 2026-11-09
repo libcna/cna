@@ -901,6 +901,7 @@ CNA_C_API CNA_Result cna_graphics_device_get_backbuffer_info(
  * @param capacity Capacity of @p destination measured in pixels.
  * @param out_pixels Receives the exact width-times-height pixel count.
  * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_BUFFER_TOO_SMALL`, `CNA_RESULT_NOT_SUPPORTED` when the
+ * device's graphics profile is Reach (XNA 4.0 supports GetBackBufferData only under HiDef) or the
  * active renderer has no honest backbuffer readback, or another documented
  * argument/handle/thread/native failure. No partial pixel array is written.
  *

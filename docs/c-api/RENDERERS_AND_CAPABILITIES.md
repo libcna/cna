@@ -147,8 +147,10 @@ through native `Color` values; neither exposes or reinterprets renderer memory.
 Capacity and structure errors are decided before native readback. Pixel writes are all-or-nothing,
 including when the renderer returns `CNA_RESULT_NOT_SUPPORTED`. Callers must still follow each
 route's documented scalar-output rules: the full-buffer route reports its required count before
-the native read is attempted. `HEADLESS` has no rasterized backbuffer and honestly returns
-`CNA_RESULT_NOT_SUPPORTED`.
+the native read is attempted. Every renderer returns `CNA_RESULT_NOT_SUPPORTED` while the device's
+graphics profile is Reach, as XNA 4.0 refuses GetBackBufferData there (TQ-024/TQ-070); a game that
+reads its back buffer selects HiDef, or renders into a `RenderTarget2D` and reads that.
+`HEADLESS` has no rasterized backbuffer and honestly returns `CNA_RESULT_NOT_SUPPORTED`.
 
 ## Verification policy
 

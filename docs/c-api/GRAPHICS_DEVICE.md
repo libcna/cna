@@ -241,8 +241,8 @@ caller's array the pixels land. Two capacity rules are decided in C, before any 
 the array must hold `start_index + element_count` pixels, and `element_count` must cover the whole
 selected region. Both report `CNA_RESULT_BUFFER_TOO_SMALL`; the canonical routine would otherwise
 surface an undersized count as a generic native failure. Nothing outside the requested window is
-written, and a renderer without honest readback returns `CNA_RESULT_NOT_SUPPORTED` with the
-destination untouched.
+written. A Reach-profile device (XNA 4.0 refuses GetBackBufferData there) and a renderer without
+honest readback both return `CNA_RESULT_NOT_SUPPORTED` with the destination untouched.
 
 Buffer binding replaces the native pointer-and-vector surface:
 
