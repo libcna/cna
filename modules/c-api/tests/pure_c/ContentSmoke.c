@@ -866,8 +866,10 @@ static int write_unsupported_texture_asset(void)
     /* An ordinal no SurfaceFormat has. Alpha8 used to serve here, but SOFTWARE-275 gave the XNB
        reader every classic XNA format, so Alpha8 now decodes and fails later against the Reach
        profile instead -- a renderer- and profile-dependent verdict, no use as one expected value.
-       An out-of-range ordinal is what the reader itself genuinely cannot decode, which is the
-       content failure this fixture is for, and is what the C++ mirror of it uses. */
+       An out-of-range ordinal is what the reader itself genuinely cannot decode, and is what the
+       C++ mirror of it uses. XNA 4.0 Refresh refuses it with NotSupportedException
+       (Texture2D.ValidateCreationParameters IL_0034-005d), unwrapped by ReadAsset (HND-TQ-16-XNB),
+       which the C API reports as CNA_RESULT_NOT_SUPPORTED. */
     offset = push_u32_le(asset, offset, UINT32_C(999));
     offset = push_u32_le(asset, offset, UINT32_C(1));
     offset = push_u32_le(asset, offset, UINT32_C(1));
@@ -992,10 +994,11 @@ static int validate_unsupported_texture_load(const CNA_Handle manager)
         sizeof(CNA_ErrorInfo), UINT32_C(1), CNA_RESULT_SUCCESS, CNA_ERROR_CATEGORY_NONE, 0U
     };
     if (cna_content_manager_load_texture2d(
-            manager, view(UnsupportedTextureAssetName), &texture) != CNA_RESULT_IO ||
+            manager, view(UnsupportedTextureAssetName), &texture) != CNA_RESULT_NOT_SUPPORTED ||
         texture != CNA_INVALID_HANDLE ||
         cna_error_get_last_info(&error) != CNA_RESULT_SUCCESS ||
-        error.result != CNA_RESULT_IO || error.category != CNA_ERROR_CATEGORY_IO ||
+        error.result != CNA_RESULT_NOT_SUPPORTED ||
+        error.category != CNA_ERROR_CATEGORY_NOT_SUPPORTED ||
         error.message_byte_length == 0U) {
         return 0;
     }
