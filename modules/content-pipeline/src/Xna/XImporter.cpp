@@ -945,6 +945,14 @@ namespace Microsoft::Xna::Framework::Content::Pipeline
                 for (std::size_t corner = 2; corner < faces[face].size(); ++corner)
                 {
                     const std::array<std::size_t, 3> triangle{0u, corner - 1u, corner};
+                    // Three corners naming one file vertex are discarded whatever normals they
+                    // carry: a quad that names one vertex four times with four different normals
+                    // answers no mesh at all (CNA-FIX-XVERT-01).
+                    if (faces[face][triangle[0]] == faces[face][triangle[1]] &&
+                        faces[face][triangle[1]] == faces[face][triangle[2]])
+                    {
+                        continue;
+                    }
                     if (sameCorner(face, triangle[0], triangle[1]) ||
                         sameCorner(face, triangle[1], triangle[2]) ||
                         sameCorner(face, triangle[0], triangle[2]))
@@ -997,7 +1005,7 @@ namespace Microsoft::Xna::Framework::Content::Pipeline
                     // A polygon becomes a triangle fan, which is how every reader of this format
                     // turns an n-gon into triangles; the fan triangles a corner test discarded are
                     // not emitted and their corners create no vertex (`XNASWEEP-198`).
-                    const auto place = [&](const std::size_t corner)
+                    const auto place = [&](const std::size_t corner, const std::size_t normalCorner)
                     {
                         const std::size_t vertex = faces[face][corner];
                         // The key is the position *and* the normal the corner names, because a
@@ -1006,9 +1014,9 @@ namespace Microsoft::Xna::Framework::Content::Pipeline
                         // one vertex. `x_position_merge.x` declares eight vertices over five
                         // positions and the genuine importer answers six (`XNASWEEP-173`).
                         std::size_t normalIndex = vertex;
-                        if (face < normalFaces.size() && corner < normalFaces[face].size())
+                        if (face < normalFaces.size() && normalCorner < normalFaces[face].size())
                         {
-                            normalIndex = normalFaces[face][corner];
+                            normalIndex = normalFaces[face][normalCorner];
                         }
                         // A *generated* normal belongs to the position rather than to the corner,
                         // because that is what it is accumulated into -- so two file vertices at
@@ -1037,9 +1045,26 @@ namespace Microsoft::Xna::Framework::Content::Pipeline
                     };
                     for (const std::array<std::size_t, 3>& triangle : keptTriangles[face])
                     {
-                        for (const std::size_t corner : triangle)
+                        // Two corners of one triangle that name the same file vertex exchange
+                        // their declared normals. Genuine XNA answers that for the pair at every
+                        // corner position, over a quad and over each of a heptagon's five fan
+                        // triangles separately, and never across triangles or faces
+                        // (`x_corner_normals_*.x`, CNA-FIX-XVERT-01). Without `MeshNormals` a
+                        // corner's normal index is its vertex, so the exchange changes nothing.
+                        std::array<std::size_t, 3> normalCorner = triangle;
+                        for (std::size_t left = 0; left < 3u; ++left)
                         {
-                            indices.push_back(place(corner));
+                            for (std::size_t right = left + 1u; right < 3u; ++right)
+                            {
+                                if (faces[face][triangle[left]] == faces[face][triangle[right]])
+                                {
+                                    std::swap(normalCorner[left], normalCorner[right]);
+                                }
+                            }
+                        }
+                        for (std::size_t at = 0; at < 3u; ++at)
+                        {
+                            indices.push_back(place(triangle[at], normalCorner[at]));
                         }
                     }
                 }

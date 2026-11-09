@@ -768,6 +768,48 @@
    "generator": "tools/xna-pipeline-oracle/model/make_generated_normal_space_probes.py",
    "note": "Two oblique triangles sharing two corners: the shared corners answer the basis change of the twice-normalized sum, not a basis change normalized again (CNA-FIX-L49). Measured on the same geometry with other mesh names and comments; cnaplan/evidence/rev002/hnd-l49-generated-normals.",
    "thirdParty": false
+  },
+  {
+   "file": "x_corner_normals_pair01.x",
+   "origin": "generated",
+   "generator": "tools/xna-pipeline-oracle/model/make_corner_normal_probes.py",
+   "note": "One triangle naming its vertex at corners 0 and 1 with three different normals: the genuine importer answers the pair with their normals exchanged (CNA-FIX-XVERT-01). Measured on these exact files; cnaplan/evidence/rev002/hnd-xvert-01/round3.",
+   "thirdParty": false
+  },
+  {
+   "file": "x_corner_normals_pair02.x",
+   "origin": "generated",
+   "generator": "tools/xna-pipeline-oracle/model/make_corner_normal_probes.py",
+   "note": "The same pair at corners 0 and 2, the shape of x_face_degenerate_normals.x: exchanged (CNA-FIX-XVERT-01). Measured on these exact files; cnaplan/evidence/rev002/hnd-xvert-01/round3.",
+   "thirdParty": false
+  },
+  {
+   "file": "x_corner_normals_pair12.x",
+   "origin": "generated",
+   "generator": "tools/xna-pipeline-oracle/model/make_corner_normal_probes.py",
+   "note": "The same pair at corners 1 and 2, its normal indices ascending in table order and descending in value: exchanged, so neither order is a sort (CNA-FIX-XVERT-01). Measured on these exact files; cnaplan/evidence/rev002/hnd-xvert-01/round3.",
+   "thirdParty": false
+  },
+  {
+   "file": "x_corner_normals_quad.x",
+   "origin": "generated",
+   "generator": "tools/xna-pipeline-oracle/model/make_corner_normal_probes.py",
+   "note": "A quad naming one vertex at corners 0 and 2: both fan triangles hold the pair and exchange it (CNA-FIX-XVERT-01). Measured on these exact files; cnaplan/evidence/rev002/hnd-xvert-01/round3.",
+   "thirdParty": false
+  },
+  {
+   "file": "x_corner_normals_heptagon.x",
+   "origin": "generated",
+   "generator": "tools/xna-pipeline-oracle/model/make_corner_normal_probes.py",
+   "note": "A heptagon naming one vertex at corners 0, 2, 4 and 6 with four normals: each of the five fan triangles exchanges its own pair, rather than the polygon permuting the four (CNA-FIX-XVERT-01). Measured on these exact files; cnaplan/evidence/rev002/hnd-xvert-01/round3.",
+   "thirdParty": false
+  },
+  {
+   "file": "x_corner_normals_one_vertex.x",
+   "origin": "generated",
+   "generator": "tools/xna-pipeline-oracle/model/make_corner_normal_probes.py",
+   "note": "A quad naming one vertex four times with four different normals: a triangle whose three corners name one vertex is discarded and the file answers no mesh (CNA-FIX-XVERT-01). Measured on these exact files; cnaplan/evidence/rev002/hnd-xvert-01/round3.",
+   "thirdParty": false
   }
  ]
 }

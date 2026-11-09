@@ -570,6 +570,12 @@ TEST(XnaXImporter, EveryFileAnswersTheGraphXnaAnswers)
           // Nine frames whose transforms hold a zero of each sign, checked entry by entry in
           // `TheBasisChangeIsAMultiplicationRatherThanFiveNegations` below (`XNASWEEP-189`).
           "x_basis_signed_zero.x",
+          // Degenerate faces (`XNASWEEP-198`): a triangle naming one corner twice is discarded and
+          // the rest of its polygon is not, a material or a mesh whose faces all go answers no
+          // geometry, and the same vertex named twice with two normals is kept with those normals
+          // exchanged (CNA-FIX-XVERT-01).
+          "x_face_degenerate.x", "x_face_degenerate_all.x", "x_face_degenerate_materials.x",
+          "x_face_degenerate_normals.x", "x_face_degenerate_quad.x", "x_no_faces.x",
           "oblique_normals.x", "quad_textured.x", "transform_z.x", "two_materials.x",
           "with_templates.x", "zero_power.x"})
     {
@@ -743,6 +749,103 @@ TEST(XnaXImporter, AGeneratedNormalIsFinishedInTheFilesOwnSpace)
     EXPECT_EQ(rounding.at(1), (Bits{0x3F6BB9F6u, 0xBCE24C1Fu, 0xBEC73056u}));
     EXPECT_EQ(rounding.at(2), (Bits{0x3F0526E6u, 0x3F0A6D9Eu, 0x3F293EF9u}));
     EXPECT_EQ(rounding.at(3), (Bits{0xBF34A7EBu, 0x3E80A61Fu, 0x3F2997D1u}));
+}
+
+// CNA-FIX-XVERT-01: a triangle that names one file vertex at two of its corners answers those
+// two corners with each other's declared normal, and a triangle that names one vertex at all three
+// is discarded whatever its normals. The strings are the genuine importer's own answer for the
+// committed `x_corner_normals_*.x`, read with `CNA_MODEL_ORACLE_BITS=1` (Microsoft d3dx9_41
+// 9.26.952.2844 loaded natively; cnaplan/evidence/rev002/hnd-xvert-01/round3): the pair at
+// corners 0/1, 0/2 and 1/2, a quad whose two fan triangles share the pair, and a heptagon whose
+// five fan triangles each exchange their own pair of four different normals.
+TEST(XnaXImporter, TwoCornersOfATriangleOnOneVertexExchangeTheirNormals)
+{
+    const auto hex = [](const float value)
+    {
+        std::uint32_t raw = 0;
+        std::memcpy(&raw, &value, sizeof(raw));
+        std::ostringstream text;
+        text << "0x" << std::uppercase << std::hex << std::setw(8) << std::setfill('0') << raw;
+        return text.str();
+    };
+    const auto triple = [&](const Vector3& v)
+    { return "(" + hex(v.X) + "," + hex(v.Y) + "," + hex(v.Z) + ")"; };
+    // positions, indices, positionIndices, Normal0 -- or nothing when the file answers no mesh.
+    const auto answerOf = [&](const std::string& fixture)
+    {
+        ImporterContext context;
+        XImporter importer;
+        const std::shared_ptr<Graphics::NodeContent> root =
+            importer.Import(CNA::Internal::PathToUtf8(Fixture(fixture)), context);
+        std::vector<std::string> answer;
+        if (root == nullptr || root->getChildrenProperty().getCountProperty() == 0) { return answer; }
+        const auto mesh = std::dynamic_pointer_cast<Graphics::MeshContent>(
+            std::shared_ptr<Graphics::NodeContent>(root->getChildrenProperty()[0]));
+        if (mesh == nullptr || mesh->getGeometryProperty().getCountProperty() != 1)
+        {
+            answer.push_back("unexpected shape");
+            return answer;
+        }
+        std::string positions;
+        for (SharpRuntime::intcs i = 0; i < mesh->getPositionsProperty().getCountProperty(); ++i)
+        {
+            positions += (positions.empty() ? "" : " ") + triple(mesh->getPositionsProperty()[i]);
+        }
+        const std::shared_ptr<Graphics::GeometryContent> geometry = mesh->getGeometryProperty()[0];
+        std::string indices;
+        for (SharpRuntime::intcs i = 0; i < geometry->getIndicesProperty().getCountProperty(); ++i)
+        {
+            indices += (indices.empty() ? "" : ",") + std::to_string(geometry->getIndicesProperty()[i]);
+        }
+        std::string positionIndices;
+        const auto& mapped = geometry->getVerticesProperty().getPositionIndicesProperty();
+        for (SharpRuntime::intcs i = 0; i < mapped.getCountProperty(); ++i)
+        {
+            positionIndices += (positionIndices.empty() ? "" : ",") +
+                               std::to_string(Xna::Unbox<SharpRuntime::intcs>(mapped[i]));
+        }
+        std::string normals = "no Normal0";
+        const auto& channels = geometry->getVerticesProperty().getChannelsProperty();
+        for (SharpRuntime::intcs at = 0; at < channels.getCountProperty(); ++at)
+        {
+            const std::shared_ptr<Graphics::VertexChannelBase>& channel = channels[at];
+            if (channel == nullptr || channel->getNameProperty() != "Normal0") { continue; }
+            normals.clear();
+            for (SharpRuntime::intcs index = 0; index < channel->getCountProperty(); ++index)
+            {
+                normals += (normals.empty() ? "" : " ") + triple(Xna::Unbox<Vector3>((*channel)[index]));
+            }
+        }
+        answer = {positions, indices, positionIndices, normals};
+        return answer;
+    };
+    const std::string p0 = "(0x3F800000,0x00000000,0x00000000)";
+    const std::string p1 = "(0x00000000,0x40000000,0x00000000)";
+    const std::string p2 = "(0x40400000,0x00000000,0x00000000)";
+    const std::string p3 = "(0x00000000,0x00000000,0xC0800000)";
+    const std::string y = "(0x00000000,0x3F800000,0x00000000)";
+    const std::string x = "(0x3F800000,0x00000000,0x00000000)";
+    const std::string minusX = "(0xBF800000,0x00000000,0x00000000)";
+    const std::string minusY = "(0x00000000,0xBF800000,0x80000000)";
+    const std::string forward = "(0x00000000,0x00000000,0xBF800000)";
+    const std::string back = "(0x00000000,0x00000000,0x3F800000)";
+    const std::string diagonal = "(0x3F13CD3A,0x3F13CD3A,0xBF13CD3A)";
+
+    EXPECT_EQ(answerOf("x_corner_normals_pair01.x"),
+              (std::vector<std::string>{p0 + " " + p1, "0,1,2", "0,0,1", y + " " + forward + " " + x}));
+    EXPECT_EQ(answerOf("x_corner_normals_pair02.x"),
+              (std::vector<std::string>{p0 + " " + p1, "0,1,2", "0,1,0", y + " " + x + " " + forward}));
+    EXPECT_EQ(answerOf("x_corner_normals_pair12.x"),
+              (std::vector<std::string>{p0 + " " + p1, "0,1,2", "1,0,0", forward + " " + y + " " + x}));
+    EXPECT_EQ(answerOf("x_corner_normals_quad.x"),
+              (std::vector<std::string>{p0 + " " + p1 + " " + p2, "0,1,2,0,2,3", "0,1,0,2",
+                                        y + " " + x + " " + minusX + " " + minusY}));
+    EXPECT_EQ(answerOf("x_corner_normals_heptagon.x"),
+              (std::vector<std::string>{p0 + " " + p1 + " " + p2 + " " + p3,
+                                        "0,1,2,0,2,3,4,3,2,4,2,5,6,5,2", "0,1,0,2,0,3,0",
+                                        y + " " + minusY + " " + forward + " " + back + " " + minusX +
+                                            " " + diagonal + " " + x}));
+    EXPECT_EQ(answerOf("x_corner_normals_one_vertex.x"), std::vector<std::string>{});
 }
 
 // XNASWEEP-181: the sign of a zero in a `.x` normal, which the

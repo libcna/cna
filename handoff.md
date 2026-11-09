@@ -45,8 +45,8 @@ cmake-build-webgpu now has CNA_CNAEXT and CNA_WEBGPU_COMPILED_EFFECTS ON so it b
 CNA-FIX-L49 (generated `.x` normals in the file's own space, measured on genuine XNA; evidence
 `cnaplan/evidence/rev002/hnd-l49-generated-normals/`). The two feasible rows of the reconciled queue are
 therefore closed. The confirming full sweep 16 on bc5e629ab has no failure in any of the seven trees
-(section 0.3). Still open: the finite-loop cardinality question below, the `.x` vertex-order observation
-in 5.1, and FNA3D-8 (`docs/fna3d-dependency-defects.md`): fork
+(section 0.3). CNA-FIX-XVERT-01 then fixed the `.x` corner-normal order over degenerate faces (5.1). Still open:
+the finite-loop cardinality question below, the `.x` VertexDuplicationIndices window in 5.1, and FNA3D-8 (`docs/fna3d-dependency-defects.md`): fork
 4ff109a already converts OpenGL presentation rectangles, so its OpenGL half needs a native rerun of
 `Gap08PresentedPixels` before CNA's FNA3D non-default-Present refusal can be reconsidered; the SDLGPU half
 (DONT_CARE swapchain load) still needs a fork repair.
@@ -597,13 +597,13 @@ queue labels alone neither establish a current defect nor close one.
   full-image TEXREG2AR/GB/RGB/TEXDP3/TEXDP3TEX witnesses pass privately on SDLGPU, WEBGPU and both
   FNA3D drivers (evidence: cnaplan/evidence/rev002/fork-pin-01/). TEXM3X2DEPTH was implemented
   later the same night (TQ-TEXM3X2DEPTH-01, MojoShader 0dc4f2e) and is admitted at the current pin.
-- **`.x` vertex order with declared normals over degenerate faces (observed 2026-11-09, not fixed).**
-  A genuine bits-mode run over the committed corpus (CNA-FIX-L49 evidence, `corpus-compare-final.txt`)
-  shows `x_face_degenerate_normals.x`'s two vertices at position 3 carrying their normals in the opposite
-  order from XNA (XNA vertex 3 `(0,1,0)` and 5 `(1,0,0)`; CNA the reverse); positions, indices and
-  positionIndices agree, and the committed text-reference test does not see it. Identical before and after
-  L49. Next: reproduce with a probe that separates the vertex-creation orders, then fix with a bits
-  regression.
+- **`.x` corner normals over degenerate faces -- fixed 2026-11-09 (CNA-FIX-XVERT-01).** Genuine XNA
+  (Microsoft d3dx9_41 9.26.952.2844, loaded natively in the oracle prefix; `+loaddll` evidence in
+  `cnaplan/evidence/rev002/hnd-xvert-01/loadorder/`) exchanges the declared normals of two corners of one
+  fan triangle that name the same file vertex, per triangle and at every corner position, and discards a
+  triangle whose three corners name one vertex whatever its normals. CNA now does both; six committed
+  probes `x_corner_normals_*.x` (rounds 2-3 in the same evidence directory) pin the genuine bits, and the
+  committed `.x` corpus now differs from a genuine bits run only in `x_vertex_duplication.x` below.
 - **`.x` VertexDuplicationIndices window disagrees with genuine XNA on its own fixture (observed
   2026-11-09, not fixed).** For `x_vertex_duplication.x` (map `0,1,2,3,3,3`; faces `(0,1,2) (0,4,5)
   (1,3,4) (1,2,3)`) CNA's XNASWEEP-198 rule drops both faces naming two vertices of group 3 and answers
@@ -616,10 +616,8 @@ queue labels alone neither establish a current defect nor close one.
   DESIGN.md): with map `2,2,2,3` both faces `(0,2,3)` and `(1,2,3)` stay (CNA drops both), which only the "two lowest file
   indices of a group" candidate (D_pair) predicts -- still to be checked against target.x, which is not
   available locally, and the fixture's full vertex remapping (source position order `0,1,2,3,5,4`) is not
-  explained by any face rule. The normal-order probe (one quad naming raw vertex 0 four times with four
-  different normals) produced **no mesh**: a triangle whose three corners name one raw vertex is dropped
-  even with three different normals, which CNA keeps; the two-corner case `(3,4,3)` is kept. No production
-  change yet; the next probe must separate the normal order with two distinct raw vertices per triangle.
+  explained by any face rule. No production change to the duplication window yet. The mesh topology is
+  D3DX's own (XImporter calls `D3DXLoadMeshHierarchyFromXW`), so only black-box probes can settle it.
 - **Genuine-XNA native teardown fault (TQ-SWEEP14-02), unattributed.** The harness ownership gap is
   repaired (2026-11-08, §0.3); the one-off Wine fault of sweep 14 did not reproduce with the old or the
   new harness. If it recurs, capture `+loaddll,+seh` and a WineDbg stack as INTEGRATOR_COMMANDS.md in the
