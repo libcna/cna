@@ -270,7 +270,7 @@ namespace CNA::Internal::Audio
          * event-level loop retrigger. Playback uses that candidate instead of this struct's
          * always-entry-0 parse-time fallback.
          */
-        std::vector<XsbTrackVariationEntry> trackVariationEntries;
+        std::vector<XsbTrackVariationEntry> trackVariationEntries{};
         /** @brief Selection algorithm for @ref trackVariationEntries; meaningless when that list is empty. */
         XsbTrackVariationType trackVariationType = XsbTrackVariationType::Ordered;
 
