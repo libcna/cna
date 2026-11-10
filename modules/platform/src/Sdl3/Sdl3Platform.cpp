@@ -12,6 +12,8 @@
 
 #include <SDL3/SDL.h>
 
+#include <algorithm>
+#include <array>
 #include <atomic>
 #include <cstdio>
 #include <mutex>
@@ -49,12 +51,21 @@ namespace CNA::Platform::Sdl3 {
             return missing;
         }
 
-        // The connection that reported that BadWindow: the same numeric id on another X server
-        // is a different window, so the refusal also requires SDL's own display.
-        std::atomic<void*>& X11PendingImportErrorDisplay()
+        // The connections that reported such a BadWindow during the import. The same numeric id
+        // on another X server is a different window, so the refusal also requires SDL's own
+        // display. Every matching connection is kept, so a later error from another server
+        // cannot overwrite SDL's; more than a handful during one import is not a real case.
+        constexpr std::size_t kX11PendingErrorDisplaySlots = 8;
+        std::array<std::atomic<void*>, kX11PendingErrorDisplaySlots>& X11PendingImportErrorDisplays()
         {
-            static std::atomic<void*> display{nullptr};
-            return display;
+            static std::array<std::atomic<void*>, kX11PendingErrorDisplaySlots> displays{};
+            return displays;
+        }
+
+        std::atomic<std::size_t>& X11PendingImportErrorCount()
+        {
+            static std::atomic<std::size_t> count{0};
+            return count;
         }
 
         auto& ImportedNativeWindows()
@@ -153,9 +164,15 @@ namespace CNA::Platform::Sdl3 {
                 {
                     constexpr unsigned char BadWindow = 3;
                     const unsigned long pending = X11PendingImport().load();
-                    if (e->error_code == BadWindow && pending != 0 && e->resourceid == pending)
+                    // SDL validates a foreign window with GetWindowAttributes (x11window.c,
+                    // SetupWindowData); an error queued from any other request is not that answer.
+                    constexpr unsigned char X_GetWindowAttributes = 3;
+                    if (e->error_code == BadWindow && e->request_code == X_GetWindowAttributes
+                        && pending != 0 && e->resourceid == pending)
                     {
-                        X11PendingImportErrorDisplay().store(e->display);
+                        const std::size_t slot = X11PendingImportErrorCount().fetch_add(1);
+                        if (slot < kX11PendingErrorDisplaySlots)
+                            X11PendingImportErrorDisplays()[slot].store(e->display);
                         X11PendingImportMissing().store(true);
                     }
                     std::fprintf(stderr,
@@ -664,7 +681,8 @@ namespace CNA::Platform::Sdl3 {
         if (x11Import)
         {
             X11PendingImportMissing().store(false);
-            X11PendingImportErrorDisplay().store(nullptr);
+            X11PendingImportErrorCount().store(0);
+            for (auto& display : X11PendingImportErrorDisplays()) display.store(nullptr);
             X11PendingImport().store(static_cast<unsigned long>(handle));
         }
         SDL_Window* imported = configured ? SDL_CreateWindowWithProperties(properties) : nullptr;
@@ -675,9 +693,17 @@ namespace CNA::Platform::Sdl3 {
         // SDL's X11 import ignores a failed XGetWindowAttributes and carries on with an
         // uninitialized window, which crashed at the first surface presentation. The handler
         // records the BadWindow that query raised for an id that names no window.
-        if (x11Import && X11PendingImportMissing().exchange(false)
-            && X11PendingImportErrorDisplay().load() == SDL_GetPointerProperty(
-                   SDL_GetWindowProperties(imported), SDL_PROP_WINDOW_X11_DISPLAY_POINTER, nullptr))
+        const auto importErrorOnSdlDisplay = [imported]
+        {
+            void* const sdlDisplay = SDL_GetPointerProperty(
+                SDL_GetWindowProperties(imported), SDL_PROP_WINDOW_X11_DISPLAY_POINTER, nullptr);
+            const std::size_t recorded = std::min(X11PendingImportErrorCount().load(),
+                                                  kX11PendingErrorDisplaySlots);
+            for (std::size_t i = 0; i < recorded; ++i)
+                if (X11PendingImportErrorDisplays()[i].load() == sdlDisplay) return true;
+            return false;
+        };
+        if (x11Import && X11PendingImportMissing().exchange(false) && importErrorOnSdlDisplay())
         {
             SDL_DestroyWindow(imported);
             throw PlatformException("AdoptNativeWindowHandle", "the X11 window id names no window");
