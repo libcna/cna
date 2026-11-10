@@ -49,6 +49,14 @@ namespace CNA::Platform::Sdl3 {
             return missing;
         }
 
+        // The connection that reported that BadWindow: the same numeric id on another X server
+        // is a different window, so the refusal also requires SDL's own display.
+        std::atomic<void*>& X11PendingImportErrorDisplay()
+        {
+            static std::atomic<void*> display{nullptr};
+            return display;
+        }
+
         auto& ImportedNativeWindows()
         {
             static auto* windows = new std::map<SDL_Window*, std::weak_ptr<SDL_Window>>();
@@ -146,7 +154,10 @@ namespace CNA::Platform::Sdl3 {
                     constexpr unsigned char BadWindow = 3;
                     const unsigned long pending = X11PendingImport().load();
                     if (e->error_code == BadWindow && pending != 0 && e->resourceid == pending)
+                    {
+                        X11PendingImportErrorDisplay().store(e->display);
                         X11PendingImportMissing().store(true);
+                    }
                     std::fprintf(stderr,
                                  "[CNA][platform] X protocol error ignored: error_code=%u "
                                  "request=%u.%u serial=%lu resource=0x%lx. Xlib's default handler "
@@ -653,6 +664,7 @@ namespace CNA::Platform::Sdl3 {
         if (x11Import)
         {
             X11PendingImportMissing().store(false);
+            X11PendingImportErrorDisplay().store(nullptr);
             X11PendingImport().store(static_cast<unsigned long>(handle));
         }
         SDL_Window* imported = configured ? SDL_CreateWindowWithProperties(properties) : nullptr;
@@ -663,7 +675,9 @@ namespace CNA::Platform::Sdl3 {
         // SDL's X11 import ignores a failed XGetWindowAttributes and carries on with an
         // uninitialized window, which crashed at the first surface presentation. The handler
         // records the BadWindow that query raised for an id that names no window.
-        if (x11Import && X11PendingImportMissing().exchange(false))
+        if (x11Import && X11PendingImportMissing().exchange(false)
+            && X11PendingImportErrorDisplay().load() == SDL_GetPointerProperty(
+                   SDL_GetWindowProperties(imported), SDL_PROP_WINDOW_X11_DISPLAY_POINTER, nullptr))
         {
             SDL_DestroyWindow(imported);
             throw PlatformException("AdoptNativeWindowHandle", "the X11 window id names no window");

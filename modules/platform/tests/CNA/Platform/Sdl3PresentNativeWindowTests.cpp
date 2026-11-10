@@ -3,6 +3,7 @@
 #include "CNA/Platform/PlatformFactory.hpp"
 #include "CNA/Platform/PlatformException.hpp"
 #include "PresentedWindowCapture.hpp"
+#include <cstdint>
 #include <memory>
 #include <vector>
 namespace {
@@ -90,8 +91,18 @@ TEST_F(Gap08NativeWindowTest, AnX11IdThatNamesNoWindowIsRefused)
 }
 TEST_F(Gap08NativeWindowTest, AnX11IdWiderThanTheProtocolsTwentyNineBitsIsRefused)
 {
-    // The server would see it truncated to 32 bits: 0x20001234 must not be imported as another id.
-    EXPECT_THROW((void)platform->AdoptNativeWindowHandle(0x20001234u),PlatformException);
+#if defined(CNA_GAP08_X11_CAPTURE)
+    if constexpr (sizeof(std::uintptr_t) < sizeof(std::uint64_t))
+        GTEST_SKIP() << "a handle cannot exceed 32 bits here";
+    // The low 32 bits name a live foreign window. Without the width check, Xlib would send the
+    // truncated id and the import would quietly adopt that other window.
+    CNA::Testing::PresentedWindow foreign(original->GetNativeHandle(),8,8,true,CNA::Testing::PresentedCaptureMethod::Auto);
+    const std::uint64_t wide=(std::uint64_t{1} << 32) | foreign.NativeToken();
+    EXPECT_THROW((void)platform->AdoptNativeWindowHandle(static_cast<std::uintptr_t>(wide)),PlatformException);
+    EXPECT_TRUE(foreign.IsAlive());
+#else
+    GTEST_SKIP() << "X11 observation unavailable";
+#endif
 }
 
 TEST_F(Gap08NativeWindowTest, RegionPresenterScalesAndPreservesTheRestOfTheClient)
