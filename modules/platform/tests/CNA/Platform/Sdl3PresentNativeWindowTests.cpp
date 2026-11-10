@@ -82,6 +82,12 @@ TEST_F(Gap08NativeWindowTest, AZeroNativeHandleIsRefused)
 {
     EXPECT_THROW((void)platform->AdoptNativeWindowHandle(0),PlatformException);
 }
+TEST_F(Gap08NativeWindowTest, AnX11IdThatNamesNoWindowIsRefused)
+{
+    // SDL's X11 import ignores a failed attribute query; adopting a bogus id used to return a
+    // window that crashed at its first surface presentation (CNA-DEMOS-ISSUE-158).
+    EXPECT_THROW((void)platform->AdoptNativeWindowHandle(0x1234),PlatformException);
+}
 
 TEST_F(Gap08NativeWindowTest, RegionPresenterScalesAndPreservesTheRestOfTheClient)
 {

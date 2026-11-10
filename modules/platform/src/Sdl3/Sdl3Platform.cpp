@@ -31,6 +31,22 @@ namespace CNA::Platform::Sdl3 {
         // SDL's window list is global, including imports made by another Sdl3Platform instance.
         // Keep imported wrappers shared while any borrowing device remains alive. A weak registry
         // avoids making the native wrapper outlive its last borrower. Access is under the SDL lock.
+        // The last X BadWindow error the handler below saw, and how many it has seen. SDL validates
+        // a foreign X11 window with a synchronous XGetWindowAttributes, so a bogus id raises
+        // BadWindow during SDL_CreateWindowWithProperties itself; AdoptNativeWindowHandle reads
+        // these to refuse it instead of continuing with an unvalidated window.
+        std::atomic<std::uint64_t>& X11BadWindowCount()
+        {
+            static std::atomic<std::uint64_t> count{0};
+            return count;
+        }
+
+        std::atomic<unsigned long>& X11LastBadWindowResource()
+        {
+            static std::atomic<unsigned long> resource{0};
+            return resource;
+        }
+
         auto& ImportedNativeWindows()
         {
             static auto* windows = new std::map<SDL_Window*, std::weak_ptr<SDL_Window>>();
@@ -125,6 +141,12 @@ namespace CNA::Platform::Sdl3 {
             setHandler([](void*, XErrorEventLayout* e) -> int {
                 if (e != nullptr)
                 {
+                    constexpr unsigned char BadWindow = 3;
+                    if (e->error_code == BadWindow)
+                    {
+                        X11LastBadWindowResource().store(e->resourceid);
+                        X11BadWindowCount().fetch_add(1);
+                    }
                     std::fprintf(stderr,
                                  "[CNA][platform] X protocol error ignored: error_code=%u "
                                  "request=%u.%u serial=%lu resource=0x%lx. Xlib's default handler "
@@ -623,10 +645,20 @@ namespace CNA::Platform::Sdl3 {
             : SDL_SetNumberProperty(properties, numberProperty, static_cast<Sint64>(handle));
         // SDL's EXTERNAL paths skip native-host destruction (x11window.c:569,2208;
         // windowswindow.c:698,602; cocoawindow.m:2449,3252; waylandwindow.c:2944,3595).
+        const std::uint64_t badWindowsBefore = X11BadWindowCount().load();
         SDL_Window* imported = configured ? SDL_CreateWindowWithProperties(properties) : nullptr;
         SDL_DestroyProperties(properties);
         if (imported == nullptr)
             throw PlatformException("AdoptNativeWindowHandle", SDL_GetError());
+        // SDL's X11 import ignores a failed XGetWindowAttributes and carries on with an
+        // uninitialized window, which crashed at the first surface presentation. The handler
+        // records the BadWindow that query raised for an id that names no window.
+        if (system == "x11" && X11BadWindowCount().load() != badWindowsBefore
+            && X11LastBadWindowResource().load() == static_cast<unsigned long>(handle))
+        {
+            SDL_DestroyWindow(imported);
+            throw PlatformException("AdoptNativeWindowHandle", "the X11 window id names no window");
+        }
         auto lifetime = std::shared_ptr<SDL_Window>(imported, [](SDL_Window* window)
         {
             std::optional<SdlGlobalStateLock> lock;

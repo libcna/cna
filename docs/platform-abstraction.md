@@ -148,7 +148,8 @@ length behind a raw pointer. The caller retains complete storage through Present
 `AdoptWindowHandle` remains the legacy platform-token round trip. `AdoptNativeWindowHandle`
 consumes a native HWND/XID/surface/window identity in the active graphical window system. SDL3
 first matches known native identities, then imports external X11/Win32/Cocoa hosts using documented
-SDL creation properties. Imported SDL wrappers share a lease across borrowers; destroying the last
+SDL creation properties. An X11 id that names no window is refused, because SDL's import
+would otherwise go on with an uninitialized window. Imported SDL wrappers share a lease across borrowers; destroying the last
 wrapper releases SDL resources but leaves its external native host alive. Caller keeps the host
 alive through every borrowing renderer. Known Wayland windows are reusable; a bare external
 wl_surface cannot report its size and refuses rather than inventing a drawable size.
