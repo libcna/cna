@@ -223,10 +223,12 @@ namespace
 
     constexpr const char* kApply3DWaveBankName = "Apply3DWaveBank";
 
-    // Minimal compact .xwb with one mono 16-bit PCM entry (200 bytes of silence) -- needed
+    // Minimal compact .xwb with one mono 16-bit PCM entry (half a second of silence) -- needed
     // (unlike BuildXsbFixtureBytes above) so that Cue::Play() resolves a real WaveBank entry and
     // creates an actual SoundEffectInstance, which T-4B's PlayCue-3D geometry test needs a real
-    // MIX_Track to inspect.
+    // MIX_Track to inspect. The wave must outlast PlayCue itself: PlayCue keeps a fire-and-forget
+    // cue only if it is still playing after Play(), and a 2 ms wave was sometimes already over on
+    // a loaded CI runner, so the test found no cue to inspect.
     std::vector<uint8_t> BuildApply3DXwbFixtureBytes()
     {
         constexpr uint32_t headerSize        = 48;
@@ -234,7 +236,7 @@ namespace
         constexpr uint32_t entryCount        = 1;
         constexpr uint32_t entryMetaDataSize = 4;
         constexpr uint32_t entryMetaSegSize  = entryCount * entryMetaDataSize;
-        constexpr uint32_t waveDataLength    = 200;
+        constexpr uint32_t waveDataLength    = 44100; // 22050 frames at 44.1 kHz
         constexpr uint32_t alignment         = 4;
 
         const uint32_t segOffset[5] = {
@@ -814,7 +816,7 @@ TEST(SoundBankTest, DisposeForceStopsAlreadyStoppedButUndisposedCueObtainedViaGe
     delete cue;
 }
 
-// P9-LIFECYCLE-003/006: unlike "Explosion" above, "Apply3DCue" has a real (200-byte, ~1.13ms)
+// P9-LIFECYCLE-003/006: unlike "Explosion" above, "Apply3DCue" has a real (half-second)
 // WaveBank-backed instance, so its fire-and-forget cue actually finishes naturally -- IsInUse must
 // become false soon afterward without any explicit Stop() or a second PlayCue() call to trigger
 // the sweep (SoundBank::getIsInUseProperty() queries each cue's live, reconciled IsPlaying/
