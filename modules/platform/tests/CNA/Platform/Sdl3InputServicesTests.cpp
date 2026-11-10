@@ -74,6 +74,30 @@ protected:
         return virtualJoystick_;
     }
 
+    // Starts video on the named SDL driver. Returns an empty string when it runs there,
+    // otherwise why this test cannot run on it.
+    std::string AcquireVideoOnDriver(const char* name)
+    {
+        SDL_SetHint(SDL_HINT_VIDEO_DRIVER, name);
+        try
+        {
+            platform_->AcquireSubsystem(PlatformSubsystem::Video);
+        }
+        catch (const std::exception& error)
+        {
+            SDL_ResetHint(SDL_HINT_VIDEO_DRIVER);
+            return std::string("no ") + name + " video subsystem: " + error.what();
+        }
+        SDL_ResetHint(SDL_HINT_VIDEO_DRIVER);
+        const char* driver = SDL_GetCurrentVideoDriver();
+        if (driver == nullptr || std::strcmp(driver, name) != 0)
+        {
+            platform_->ReleaseSubsystem(PlatformSubsystem::Video);
+            return "video is already up on another driver in this process";
+        }
+        return {};
+    }
+
     std::unique_ptr<IPlatform> platform_;
     SDL_JoystickID virtualJoystick_ = 0;
     bool gamepadSubsystemAcquired_ = false;
@@ -158,22 +182,9 @@ TEST_F(Sdl3InputTest, PositionRefusesAnUnknownNonZeroWindowId)
 
 TEST_F(Sdl3InputTest, WaylandRecenteringSurvivesACompositorThatCannotWarpThePointer)
 {
-    SDL_SetHint(SDL_HINT_VIDEO_DRIVER, "wayland");
-    try
+    if (const std::string why = AcquireVideoOnDriver("wayland"); !why.empty())
     {
-        platform_->AcquireSubsystem(PlatformSubsystem::Video);
-    }
-    catch (const std::exception& error)
-    {
-        SDL_ResetHint(SDL_HINT_VIDEO_DRIVER);
-        GTEST_SKIP() << "no Wayland video subsystem: " << error.what();
-    }
-    SDL_ResetHint(SDL_HINT_VIDEO_DRIVER);
-    const char* driver = SDL_GetCurrentVideoDriver();
-    if (driver == nullptr || std::strcmp(driver, "wayland") != 0)
-    {
-        platform_->ReleaseSubsystem(PlatformSubsystem::Video);
-        GTEST_SKIP() << "video is already up on another driver in this process";
+        GTEST_SKIP() << why;
     }
 
     WindowDescription description;
@@ -635,22 +646,9 @@ TEST_F(Sdl3InputTest, MouseReadsThePointerBesideTheWindowAsXnaDoes)
     // reads as a position past its edge, and a window that moves under a still pointer reads the
     // new relative position. SDL's window state keeps the last position it saw inside: a game
     // whose window moved after it started read the stale one (Jomata/Mahjong's menu).
-    SDL_SetHint(SDL_HINT_VIDEO_DRIVER, "x11");
-    try
+    if (const std::string why = AcquireVideoOnDriver("x11"); !why.empty())
     {
-        platform_->AcquireSubsystem(PlatformSubsystem::Video);
-    }
-    catch (const std::exception& error)
-    {
-        SDL_ResetHint(SDL_HINT_VIDEO_DRIVER);
-        GTEST_SKIP() << "no X11 video subsystem (no X display): " << error.what();
-    }
-    SDL_ResetHint(SDL_HINT_VIDEO_DRIVER);
-    const char* driver = SDL_GetCurrentVideoDriver();
-    if (driver == nullptr || std::strcmp(driver, "x11") != 0)
-    {
-        platform_->ReleaseSubsystem(PlatformSubsystem::Video);
-        GTEST_SKIP() << "video is already up on another driver in this process";
+        GTEST_SKIP() << why;
     }
 
     WindowDescription description;
@@ -872,22 +870,9 @@ TEST_F(Sdl3InputTest, HeadlessVideoDriversPromiseNeitherCursorsNorRelativeModeAn
     // SDL's offscreen driver creates no cursor and has no relative mouse mode. Once video runs
     // there the capabilities must say so, and the mouse refuses the requests by capability
     // instead of passing them to SDL and failing with a generic PlatformException.
-    SDL_SetHint(SDL_HINT_VIDEO_DRIVER, "offscreen");
-    try
+    if (const std::string why = AcquireVideoOnDriver("offscreen"); !why.empty())
     {
-        platform_->AcquireSubsystem(PlatformSubsystem::Video);
-    }
-    catch (const std::exception& error)
-    {
-        SDL_ResetHint(SDL_HINT_VIDEO_DRIVER);
-        GTEST_SKIP() << "no offscreen video subsystem: " << error.what();
-    }
-    SDL_ResetHint(SDL_HINT_VIDEO_DRIVER);
-    const char* driver = SDL_GetCurrentVideoDriver();
-    if (driver == nullptr || std::strcmp(driver, "offscreen") != 0)
-    {
-        platform_->ReleaseSubsystem(PlatformSubsystem::Video);
-        GTEST_SKIP() << "video is already up on another driver in this process";
+        GTEST_SKIP() << why;
     }
 
     const PlatformCapabilities capabilities = platform_->GetCapabilities();
