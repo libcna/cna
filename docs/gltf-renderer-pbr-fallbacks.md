@@ -36,6 +36,11 @@ white: decoded white points along (1,1,1), about 54.7 degrees from flat. RGBA8's
 | SOFTWARE | Base surface plus a six-entry optional-map array and semantic defaults |
 | WEBGPU | Bind group 1 sampler at 0, textures at 1…7 |
 
+Per-map `SamplerState`s (the five core slots and the two specular slots of `ModelMeshPart`) are
+honoured by DirectX9, EasyGL, FNA3D and SDLGPU. WEBGPU and SOFTWARE sample every PBR map with slot
+0's `SamplerState`, so a map whose filter or address mode differs from the base colour's is
+sampled with the base colour's on those two.
+
 Native register/uniform-block layout is implementation-owned, not a common byte ABI. Additional
 IBL/shadow resources are separate from these seven map roles; their existence does not make them
 mandatory glTF image slots. See the current renderer guides for those extended features.
