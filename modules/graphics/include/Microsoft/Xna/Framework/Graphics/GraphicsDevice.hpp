@@ -353,8 +353,9 @@ namespace Microsoft::Xna::Framework::Graphics
          * short: SDLGPU, WEBGPU and OPENGL33 honour all three arguments, presenting to a foreign
          * window through readback and the platform's native presenter; SOFTWARE honours a source
          * rectangle, and a destination rectangle or foreign window once it has its own platform
-         * window; OPENGLES3 and WEBGL2 share the OPENGL33 path without hardware qualification, and
-         * WEBGL2 refuses a foreign window; DIRECTX9 forwards all three to Direct3D 9's `Present`;
+         * window; OPENGLES3 and WEBGL2 share the OPENGL33 path without hardware qualification; in
+         * the browser, WEBGL2 and WEBGPU present only to their canvas and refuse a foreign window;
+         * DIRECTX9 forwards all three to Direct3D 9's `Present`;
          * HEADLESS accepts any request and presents nothing; FNA3D and STUB refuse.
          *
          * @param sourceRectangle The part of the backbuffer to present, or nullopt for all of it.
