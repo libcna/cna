@@ -88,6 +88,11 @@ TEST_F(Gap08NativeWindowTest, AnX11IdThatNamesNoWindowIsRefused)
     // window that crashed at its first surface presentation (CNA-DEMOS-ISSUE-158).
     EXPECT_THROW((void)platform->AdoptNativeWindowHandle(0x1234),PlatformException);
 }
+TEST_F(Gap08NativeWindowTest, AnX11IdWiderThanTheProtocolsTwentyNineBitsIsRefused)
+{
+    // The server would see it truncated to 32 bits: 0x20001234 must not be imported as another id.
+    EXPECT_THROW((void)platform->AdoptNativeWindowHandle(0x20001234u),PlatformException);
+}
 
 TEST_F(Gap08NativeWindowTest, RegionPresenterScalesAndPreservesTheRestOfTheClient)
 {

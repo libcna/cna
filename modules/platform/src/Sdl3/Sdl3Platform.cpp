@@ -31,20 +31,22 @@ namespace CNA::Platform::Sdl3 {
         // SDL's window list is global, including imports made by another Sdl3Platform instance.
         // Keep imported wrappers shared while any borrowing device remains alive. A weak registry
         // avoids making the native wrapper outlive its last borrower. Access is under the SDL lock.
-        // The last X BadWindow error the handler below saw, and how many it has seen. SDL validates
-        // a foreign X11 window with a synchronous XGetWindowAttributes, so a bogus id raises
-        // BadWindow during SDL_CreateWindowWithProperties itself; AdoptNativeWindowHandle reads
-        // these to refuse it instead of continuing with an unvalidated window.
-        std::atomic<std::uint64_t>& X11BadWindowCount()
+        // While AdoptNativeWindowHandle imports a foreign X11 window: the id it imports (0 when
+        // none), and whether the handler below saw a BadWindow for exactly that id. SDL validates
+        // the window with a synchronous XGetWindowAttributes, so the error arrives inside
+        // SDL_CreateWindowWithProperties. Only the pending id is matched, so a BadWindow another
+        // thread provokes for some other window neither hides nor fakes the refusal. Imports are
+        // serialized by the SDL global-state lock.
+        std::atomic<unsigned long>& X11PendingImport()
         {
-            static std::atomic<std::uint64_t> count{0};
-            return count;
+            static std::atomic<unsigned long> id{0};
+            return id;
         }
 
-        std::atomic<unsigned long>& X11LastBadWindowResource()
+        std::atomic<bool>& X11PendingImportMissing()
         {
-            static std::atomic<unsigned long> resource{0};
-            return resource;
+            static std::atomic<bool> missing{false};
+            return missing;
         }
 
         auto& ImportedNativeWindows()
@@ -142,11 +144,9 @@ namespace CNA::Platform::Sdl3 {
                 if (e != nullptr)
                 {
                     constexpr unsigned char BadWindow = 3;
-                    if (e->error_code == BadWindow)
-                    {
-                        X11LastBadWindowResource().store(e->resourceid);
-                        X11BadWindowCount().fetch_add(1);
-                    }
+                    const unsigned long pending = X11PendingImport().load();
+                    if (e->error_code == BadWindow && pending != 0 && e->resourceid == pending)
+                        X11PendingImportMissing().store(true);
                     std::fprintf(stderr,
                                  "[CNA][platform] X protocol error ignored: error_code=%u "
                                  "request=%u.%u serial=%lu resource=0x%lx. Xlib's default handler "
@@ -621,6 +621,10 @@ namespace CNA::Platform::Sdl3 {
         }
 
         const std::string system(driver);
+        // X resource ids have 29 bits (the protocol keeps the top three zero). A wider handle
+        // would reach the server truncated to 32 bits and import some other id.
+        if (system == "x11" && handle > 0x1FFFFFFFu)
+            throw PlatformException("AdoptNativeWindowHandle", "an X11 window id has at most 29 bits");
         const char* pointerProperty = nullptr;
         const char* numberProperty = nullptr;
         if (system == "windows") pointerProperty = SDL_PROP_WINDOW_CREATE_WIN32_HWND_POINTER;
@@ -645,16 +649,21 @@ namespace CNA::Platform::Sdl3 {
             : SDL_SetNumberProperty(properties, numberProperty, static_cast<Sint64>(handle));
         // SDL's EXTERNAL paths skip native-host destruction (x11window.c:569,2208;
         // windowswindow.c:698,602; cocoawindow.m:2449,3252; waylandwindow.c:2944,3595).
-        const std::uint64_t badWindowsBefore = X11BadWindowCount().load();
+        const bool x11Import = system == "x11";
+        if (x11Import)
+        {
+            X11PendingImportMissing().store(false);
+            X11PendingImport().store(static_cast<unsigned long>(handle));
+        }
         SDL_Window* imported = configured ? SDL_CreateWindowWithProperties(properties) : nullptr;
+        if (x11Import) X11PendingImport().store(0);
         SDL_DestroyProperties(properties);
         if (imported == nullptr)
             throw PlatformException("AdoptNativeWindowHandle", SDL_GetError());
         // SDL's X11 import ignores a failed XGetWindowAttributes and carries on with an
         // uninitialized window, which crashed at the first surface presentation. The handler
         // records the BadWindow that query raised for an id that names no window.
-        if (system == "x11" && X11BadWindowCount().load() != badWindowsBefore
-            && X11LastBadWindowResource().load() == static_cast<unsigned long>(handle))
+        if (x11Import && X11PendingImportMissing().exchange(false))
         {
             SDL_DestroyWindow(imported);
             throw PlatformException("AdoptNativeWindowHandle", "the X11 window id names no window");
