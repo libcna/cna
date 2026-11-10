@@ -16,7 +16,16 @@
 # its owning edge rather than entering through an open-ended tests/ exemption.
 # =====================================================================================
 
-option(CNA_PLATFORM_RATCHET "Report remaining direct SDL coupling at configure time (PLAT-8)" ON)
+# The ratchet audits CNA's own sources, tests and examples. A project that adds CNA as a
+# subdirectory cannot act on its verdict, so the default is on only when CNA is the top-level
+# project; a consumer that wants it still sets CNA_PLATFORM_RATCHET=ON.
+if(CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR)
+    set(_cna_platform_ratchet_default ON)
+else()
+    set(_cna_platform_ratchet_default OFF)
+endif()
+option(CNA_PLATFORM_RATCHET "Report remaining direct SDL coupling at configure time (PLAT-8)"
+       ${_cna_platform_ratchet_default})
 option(CNA_PLATFORM_RATCHET_STRICT "Make the platform ratchet a hard error instead of a warning (PLAT-121)" ON)
 
 if(NOT CNA_PLATFORM_RATCHET)
