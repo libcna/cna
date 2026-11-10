@@ -866,3 +866,47 @@ TEST_F(Sdl3InputTest, EveryModifierBitIsDistinct)
         seen = static_cast<std::uint16_t>(seen | bit);
     }
 }
+
+TEST_F(Sdl3InputTest, HeadlessVideoDriversPromiseNeitherCursorsNorRelativeModeAndRefuseThemByName)
+{
+    // SDL's offscreen driver creates no cursor and has no relative mouse mode. Once video runs
+    // there the capabilities must say so, and the mouse refuses the requests by capability
+    // instead of passing them to SDL and failing with a generic PlatformException.
+    SDL_SetHint(SDL_HINT_VIDEO_DRIVER, "offscreen");
+    try
+    {
+        platform_->AcquireSubsystem(PlatformSubsystem::Video);
+    }
+    catch (const std::exception& error)
+    {
+        SDL_ResetHint(SDL_HINT_VIDEO_DRIVER);
+        GTEST_SKIP() << "no offscreen video subsystem: " << error.what();
+    }
+    SDL_ResetHint(SDL_HINT_VIDEO_DRIVER);
+    const char* driver = SDL_GetCurrentVideoDriver();
+    if (driver == nullptr || std::strcmp(driver, "offscreen") != 0)
+    {
+        platform_->ReleaseSubsystem(PlatformSubsystem::Video);
+        GTEST_SKIP() << "video is already up on another driver in this process";
+    }
+
+    const PlatformCapabilities capabilities = platform_->GetCapabilities();
+    EXPECT_FALSE(capabilities.cursorShapes);
+    EXPECT_FALSE(capabilities.relativeMouse);
+    EXPECT_FALSE(platform_->Supports(PlatformCapability::CursorShapes));
+    EXPECT_FALSE(platform_->Supports(PlatformCapability::RelativeMouse));
+
+    IPlatformMouse* mouse = platform_->GetMouse();
+    ASSERT_NE(mouse, nullptr);
+    EXPECT_THROW(mouse->SetCursor(SystemCursor::Arrow), PlatformNotSupportedException);
+    const std::array<std::uint32_t, 1> pixel{0xFFFFFFFFu};
+    CursorImage image;
+    image.width = 1;
+    image.height = 1;
+    image.rgba = pixel;
+    EXPECT_THROW(mouse->SetCursor(image), PlatformNotSupportedException);
+    EXPECT_THROW(mouse->SetRelativeMode(1, true), PlatformNotSupportedException);
+    EXPECT_NO_THROW(mouse->SetRelativeMode(1, false));
+
+    platform_->ReleaseSubsystem(PlatformSubsystem::Video);
+}

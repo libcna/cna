@@ -19,6 +19,16 @@ namespace CNA::Platform::Sdl3 {
     /** @brief Starts SDL's camera subsystem once, and answers whether it is up. @return Whether it is. */
     [[nodiscard]] bool EnsureCameraSubsystem();
 
+    /**
+     * @brief Whether the running video driver is SDL's offscreen or dummy driver.
+     *
+     * Those drivers create no system or custom cursor and have no relative mouse mode. Before the
+     * video subsystem starts there is no driver to ask, and the answer is false.
+     *
+     * @return True when an initialized video subsystem runs the offscreen or dummy driver.
+     */
+    [[nodiscard]] bool HeadlessVideoDriverActive();
+
     /** @brief Whether SDL's camera subsystem is running, without starting it. @return Whether it is. */
     [[nodiscard]] bool CameraSubsystemRunning();
 }

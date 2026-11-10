@@ -331,8 +331,12 @@ namespace CNA::Platform::Sdl3 {
         // key-release events and true pixel coordinates, so both are honestly true here.
         capabilities.exactKeyboardState = true;
         capabilities.pixelAccurateMouse = true;
-        capabilities.relativeMouse = true;
-        capabilities.cursorShapes = true;
+        // SDL's offscreen and dummy video drivers create no cursor and have no relative mouse mode,
+        // so a promise there made Mouse::SetCursor and relative mode throw. Before video starts
+        // the driver is unknown and the answer is the SDL platform's usual one.
+        const bool headlessVideo = HeadlessVideoDriverActive();
+        capabilities.relativeMouse = !headlessVideo;
+        capabilities.cursorShapes = !headlessVideo;
         capabilities.gamepad = true;
         capabilities.joystick = true;
         capabilities.gamepadRumble = true;

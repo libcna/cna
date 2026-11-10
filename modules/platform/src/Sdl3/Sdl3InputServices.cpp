@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MS-PL
 
 #include "Sdl3InputServices.hpp"
+#include "Sdl3ServiceSupport.hpp"
 
 #include "Sdl3GamepadControls.hpp"
 #include "Sdl3JoystickControls.hpp"
@@ -363,6 +364,10 @@ namespace CNA::Platform::Sdl3 {
 
     void Sdl3Mouse::SetCursor(const SystemCursor cursor)
     {
+        if (HeadlessVideoDriverActive())
+        {
+            throw PlatformNotSupportedException(PlatformCapability::CursorShapes, "SDL3");
+        }
         SDL_Cursor* created = SDL_CreateSystemCursor(ToSdlCursor(cursor));
         if (created == nullptr)
         {
@@ -374,6 +379,10 @@ namespace CNA::Platform::Sdl3 {
 
     void Sdl3Mouse::SetCursor(const CursorImage& cursor)
     {
+        if (HeadlessVideoDriverActive())
+        {
+            throw PlatformNotSupportedException(PlatformCapability::CursorShapes, "SDL3");
+        }
         if (cursor.width <= 0 || cursor.height <= 0
             || cursor.width > std::numeric_limits<int>::max() / static_cast<int>(sizeof(std::uint32_t)))
         {
@@ -446,6 +455,15 @@ namespace CNA::Platform::Sdl3 {
 
     void Sdl3Mouse::SetRelativeMode(const WindowId window, const bool enabled)
     {
+        if (HeadlessVideoDriverActive())
+        {
+            // Nothing can have been captured, so turning capture off has nothing to undo.
+            if (!enabled)
+            {
+                return;
+            }
+            throw PlatformNotSupportedException(PlatformCapability::RelativeMouse, "SDL3");
+        }
         // SDL3 scopes relative mode to a window. With no associated window there is nothing to
         // capture, so the request is refused rather than silently reporting success.
         SDL_Window* target = window != 0 ? SDL_GetWindowFromID(window) : nullptr;

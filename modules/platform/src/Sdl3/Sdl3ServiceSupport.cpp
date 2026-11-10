@@ -10,6 +10,8 @@
 
 #include <SDL3/SDL.h>
 
+#include <string_view>
+
 #include <optional>
 
 namespace CNA::Platform::Sdl3 {
@@ -69,5 +71,16 @@ namespace CNA::Platform::Sdl3 {
     bool CameraSubsystemRunning()
     {
         return SDL_WasInit(SDL_INIT_CAMERA) != 0;
+    }
+
+    bool HeadlessVideoDriverActive()
+    {
+        const char* driver = SDL_GetCurrentVideoDriver();
+        if (driver == nullptr)
+        {
+            return false;
+        }
+        const std::string_view name{driver};
+        return name == "offscreen" || name == "dummy";
     }
 }
