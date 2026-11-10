@@ -542,10 +542,13 @@ CNA_C_API CNA_Result cna_wave_bank_get_is_disposed(CNA_Handle wave_bank, CNA_Boo
 CNA_C_API CNA_Result cna_wave_bank_get_is_prepared(CNA_Handle wave_bank, CNA_Bool* out_is_prepared);
 
 /**
- * @brief Reports whether any cue is currently using a wave bank.
+ * @brief Reports whether a sound bank retains resolved references to wave data from a wave bank.
+ *
+ * References can outlive stopped or disposed cues and a failed cue preparation.
  *
  * @param wave_bank Owned wave-bank handle.
- * @param out_is_in_use Receives non-zero while a cue is using the bank.
+ * @param out_is_in_use Receives non-zero until every sound bank retaining resolved references to
+ *        the bank is disposed.
  * @return `CNA_RESULT_SUCCESS` or a documented argument/handle/thread failure.
  */
 CNA_C_API CNA_Result cna_wave_bank_get_is_in_use(CNA_Handle wave_bank, CNA_Bool* out_is_in_use);
@@ -633,10 +636,15 @@ CNA_C_API CNA_Result cna_sound_bank_get_is_disposed(
     CNA_Bool* out_is_disposed);
 
 /**
- * @brief Reports whether any cue from a sound bank is currently playing.
+ * @brief Reports whether a sound bank retains any undisposed cue handles.
+ *
+ * Counts every cue associated with the bank, including fire-and-forget cues started by
+ * `cna_sound_bank_play_cue`. Stopped cues keep the bank in use until they are disposed;
+ * playback is not counted.
  *
  * @param sound_bank Owned sound-bank handle.
- * @param out_is_in_use Receives non-zero while a cue from the bank is playing.
+ * @param out_is_in_use Receives non-zero while a cue handle associated with the bank remains
+ *        undisposed.
  * @return `CNA_RESULT_SUCCESS` or a documented argument/handle/thread failure.
  */
 CNA_C_API CNA_Result cna_sound_bank_get_is_in_use(CNA_Handle sound_bank, CNA_Bool* out_is_in_use);
