@@ -119,7 +119,11 @@ namespace Microsoft::Xna::Framework::GamerServices
         /**
          * @brief Gets the gamer's friends list.
          *
-         * @return An empty FriendCollection in this platform's implementation.
+         * @return The friends of the gamer's online account, as the gamer services backend reports
+         *         them.
+         * @throws GamerPrivilegeException when the profile is not signed in to an online account,
+         *         as XNA does for an offline profile.
+         * @throws System::ObjectDisposedException when the gamer has been disposed.
          */
         [[nodiscard]] FriendCollection GetFriends() const;
 
