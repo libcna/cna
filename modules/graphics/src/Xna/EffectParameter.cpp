@@ -1108,10 +1108,17 @@ namespace Microsoft::Xna::Framework::Graphics
     }
     void EffectParameter::SetValue(Texture* v)
     {
-        if (compiledStorage_)
+        // XNA SetValue(Texture) IL_0002-0059 refuses a disposed texture, then an active render
+        // target, then a declaration that is not a texture, for compiled and stock effects alike
+        // (the stock effects are compiled effects there). Standalone CNAEXT parameters keep their
+        // unreflected storage contract.
+        if (compiledStorage_ || stockParameter_)
         {
             RequireTextureValueUsable(v);
             RequireTextureSetterParameter();
+        }
+        if (compiledStorage_)
+        {
             compiledStorage_->texture = v;
             compiledStorage_->dirty = true;
             return;
@@ -1125,6 +1132,11 @@ namespace Microsoft::Xna::Framework::Graphics
             SetValue(static_cast<Texture*>(v));
             return;
         }
+        if (stockParameter_)
+        {
+            RequireTextureValueUsable(v);
+            RequireTextureSetterParameter();
+        }
         texture2DData_ = v;
     }
     void EffectParameter::SetValue(Texture3D* v)
@@ -1134,6 +1146,11 @@ namespace Microsoft::Xna::Framework::Graphics
             SetValue(static_cast<Texture*>(v));
             return;
         }
+        if (stockParameter_)
+        {
+            RequireTextureValueUsable(v);
+            RequireTextureSetterParameter();
+        }
         texture3DData_ = v;
     }
     void EffectParameter::SetValue(TextureCube* v)
@@ -1142,6 +1159,11 @@ namespace Microsoft::Xna::Framework::Graphics
         {
             SetValue(static_cast<Texture*>(v));
             return;
+        }
+        if (stockParameter_)
+        {
+            RequireTextureValueUsable(v);
+            RequireTextureSetterParameter();
         }
         textureCubeData_ = v;
     }

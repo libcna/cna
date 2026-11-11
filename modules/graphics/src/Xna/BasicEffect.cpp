@@ -563,8 +563,8 @@ namespace Microsoft::Xna::Framework::Graphics
     }
     void BasicEffect::setTextureProperty(Texture2D* v)
     {
-        texture_ = v;
         if (textureParam_) textureParam_->SetValue(v);
+        texture_ = v;
     }
     void BasicEffect::SetOwnedTexture(std::shared_ptr<Texture2D> texture)
     {

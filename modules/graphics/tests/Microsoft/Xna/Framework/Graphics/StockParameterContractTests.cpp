@@ -3,6 +3,7 @@
 #include <memory>
 #include <cmath>
 #include <limits>
+#include <string>
 #include <vector>
 #include <gtest/gtest.h>
 #include "Microsoft/Xna/Framework/Graphics/AlphaTestEffect.hpp"
@@ -13,9 +14,16 @@
 #include "Microsoft/Xna/Framework/Graphics/EffectParameter.hpp"
 #include "Microsoft/Xna/Framework/Graphics/EffectParameterCollection.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
+#include "Microsoft/Xna/Framework/Graphics/RenderTarget2D.hpp"
+#include "Microsoft/Xna/Framework/Graphics/SurfaceFormat.hpp"
+#include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
+#include "Microsoft/Xna/Framework/Graphics/TextureCube.hpp"
 #include "Microsoft/Xna/Framework/Matrix.hpp"
 #include "Microsoft/Xna/Framework/Vector4.hpp"
 #include "System/InvalidCastException.hpp"
+#include "System/InvalidOperationException.hpp"
+#include "System/NotSupportedException.hpp"
+#include "System/ObjectDisposedException.hpp"
 
 namespace
 {
@@ -114,6 +122,95 @@ TYPED_TEST(StockParameterShapeTest, NonStringDeclarationsUseDefaultStringCastRef
         check([&] { (void)p->GetValueString(); });
         check([&] { p->SetValue(std::string("rejected")); });
     }
+}
+
+template <typename Operation>
+void ExpectDisposedTextureNamed(const std::string& expected, Operation operation)
+{
+    try { operation(); ADD_FAILURE() << "Expected ObjectDisposedException(" << expected << ")"; }
+    catch (const System::ObjectDisposedException& e) { EXPECT_EQ(e.getObjectNameProperty(), expected); }
+}
+
+template <typename Operation>
+void ExpectActiveTargetRefusal(Operation operation)
+{
+    try { operation(); ADD_FAILURE() << "Expected InvalidOperationException"; }
+    catch (const System::ObjectDisposedException&) { ADD_FAILURE() << "Expected the active-target refusal"; }
+    catch (const System::InvalidOperationException& e)
+    {
+        EXPECT_EQ(e.getMessageProperty(),
+            "The render target must not be set on the device when it is used as a texture.");
+    }
+}
+
+// XNA SetValue(Texture) IL_0002-0059 guards a stock effect's parameter as it does any other (the
+// stock effects are compiled effects there): a disposed texture first (IL_0005-0015,
+// ObjectDisposedException named by the texture's class), then an active render target
+// (IL_001a-002c), then a declaration that is not a texture (IL_002d-0059). A refused write keeps
+// the texture the parameter held; the Texture property setter is that same SetValue.
+TYPED_TEST(StockParameterShapeTest, TextureSetterRefusesDisposedThenActiveTargetThenNonTexture)
+{
+    TypeParam effect(this->device);
+    auto* texture = effect.getParametersProperty()["Texture"];
+    auto* diffuse = effect.getParametersProperty()["DiffuseColor"];
+    ASSERT_NE(texture, nullptr);
+    ASSERT_NE(diffuse, nullptr);
+    const Vector4 diffuseValue(2, 3, 5, 7);
+    diffuse->SetValue(diffuseValue);
+    Texture2D kept(this->device, 1, 1);
+    effect.setTextureProperty(&kept);
+    ASSERT_EQ(texture->GetValueTexture2D(), &kept);
+
+    Texture2D disposed(this->device, 1, 1);
+    disposed.setNameProperty("NamedByTheGame");
+    disposed.Dispose();
+    ExpectDisposedTextureNamed("Texture2D", [&] { texture->SetValue(&disposed); });
+    ExpectDisposedTextureNamed("Texture2D", [&] { texture->SetValue(static_cast<Texture*>(&disposed)); });
+    ExpectDisposedTextureNamed("Texture2D", [&] { effect.setTextureProperty(&disposed); });
+    ExpectDisposedTextureNamed("Texture2D", [&] { diffuse->SetValue(&disposed); });
+    RenderTarget2D disposedTarget(this->device, 1, 1);
+    disposedTarget.Dispose();
+    ExpectDisposedTextureNamed("RenderTarget2D", [&] { texture->SetValue(&disposedTarget); });
+    EXPECT_EQ(texture->GetValueTexture2D(), &kept);
+    EXPECT_EQ(effect.getTextureProperty(), &kept);
+
+    RenderTarget2D target(this->device, 1, 1);
+    bool targetBound = true;
+    try { this->device.SetRenderTarget(&target); }
+    catch (const System::NotSupportedException&) { targetBound = false; }  // STUB: no targets
+    if (targetBound)
+    {
+        ExpectActiveTargetRefusal([&] { texture->SetValue(&target); });
+        ExpectActiveTargetRefusal([&] { effect.setTextureProperty(&target); });
+        ExpectActiveTargetRefusal([&] { diffuse->SetValue(static_cast<Texture*>(&target)); });
+        this->device.SetRenderTarget(nullptr);
+        EXPECT_EQ(texture->GetValueTexture2D(), &kept);
+    }
+
+    EXPECT_THROW(diffuse->SetValue(&kept), System::InvalidCastException);
+    EXPECT_THROW(diffuse->SetValue(static_cast<Texture*>(&kept)), System::InvalidCastException);
+    EXPECT_THROW(diffuse->SetValue(static_cast<Texture2D*>(nullptr)), System::InvalidCastException);
+    EXPECT_EQ(diffuse->GetValueVector4(), diffuseValue);
+
+    effect.setTextureProperty(&target);
+    EXPECT_EQ(texture->GetValueTexture2D(), &target);
+    effect.setTextureProperty(nullptr);
+    EXPECT_EQ(texture->GetValueTexture2D(), nullptr);
+}
+
+TEST_F(StockParameterDeviceTest, EnvironmentMapSetterRefusesADisposedCube)
+{
+    // SetValue(Texture) IL_0005-0015 names the cube by its own class.
+    EnvironmentMapEffect effect(device);
+    TextureCube kept(device, 1, false, SurfaceFormat::Color);
+    effect.setEnvironmentMapProperty(&kept);
+    TextureCube disposed(device, 1, false, SurfaceFormat::Color);
+    disposed.setNameProperty("NamedByTheGame");
+    disposed.Dispose();
+    ExpectDisposedTextureNamed("TextureCube", [&] { effect.setEnvironmentMapProperty(&disposed); });
+    ExpectDisposedTextureNamed("TextureCube", [&] {
+        effect.getParametersProperty()["EnvironmentMap"]->SetValue(&disposed); });
+    EXPECT_EQ(effect.getEnvironmentMapProperty(), &kept);
 }
 
 TYPED_TEST(StockParameterShapeTest, ValidScalarRetainsValue)
