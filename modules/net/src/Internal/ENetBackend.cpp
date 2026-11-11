@@ -1641,7 +1641,15 @@ namespace CNA::Internal::Net
         // this session). Registering for discovery *before* committing to Sessions() means a
         // throw here instead just unwinds normally: `state`'s ENetHostHandle destructor tears
         // down the half-created host, and Sessions() never learns about it at all.
-        ENetDiscoveryService::RegisterHost(session, boundPort);
+        // UB-011: only the session's host answers discovery. A joined client's own ENet host
+        // (ConnectToHost starts one for a later promotion) is registered when a migration promotes
+        // it (the RegisterHost call in the host-migration path), not here: registered at once, every
+        // joined client listed the session again under its own port, and that entry could not be
+        // joined.
+        if (session->getIsHostProperty())
+        {
+            ENetDiscoveryService::RegisterHost(session, boundPort);
+        }
 
         sessions.emplace(session, std::move(state));
     }

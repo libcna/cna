@@ -13,7 +13,10 @@
 // The discovery controls instead use public Find/Join in both process startup orders, without
 // passing a port to the client. Other roles exercise migration, roster changes and voice.
 #include <gtest/gtest.h>
+#include "CNA/Internal/Net/ENetDiscoveryService.hpp"
 #include "CNA/Internal/Net/VoiceChat.hpp"
+#include "Microsoft/Xna/Framework/Net/AvailableNetworkSession.hpp"
+#include "Microsoft/Xna/Framework/Net/NetworkSessionType.hpp"
 
 #include <csignal>
 #include <cerrno>
@@ -229,6 +232,64 @@ TEST(TwoProcessLoopbackTest, AFixedHostPortBindsOnlyTheSessionTheMachineCreates)
     EXPECT_TRUE(clientFinished) << clientOutput;
     EXPECT_EQ(hostCode, 0) << hostOutput;
     EXPECT_EQ(clientCode, 0) << clientOutput;
+}
+
+// UB-011 (Galaxy Eggbert's 4-player LAN test): a client that joined a SystemLink session answered
+// discovery queries as if it hosted, so a third searcher listed the session once per joined client
+// and could not join the extra entries. Only the session's host answers.
+TEST(TwoProcessLoopbackTest, AJoinedClientDoesNotAnswerDiscoveryAsAHost) {
+    struct Released {
+        int fds[2]{-1, -1};
+        ~Released() { for (int fd : fds) if (fd >= 0) close(fd); }
+    } hostInput, clientInput;
+    ASSERT_EQ(pipe(hostInput.fds), 0);
+    ASSERT_EQ(pipe(clientInput.fds), 0);
+    for (int fd : {hostInput.fds[0], hostInput.fds[1], clientInput.fds[0], clientInput.fds[1]})
+        ASSERT_NE(fcntl(fd, F_SETFD, FD_CLOEXEC), -1);
+
+    const std::string name = "--gamertag=Linger-" + std::to_string(getpid());
+    const std::string timeoutArg = "--timeout=" + std::to_string(kHarnessInternalTimeoutSeconds);
+    const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(kOuterWatchdogSeconds);
+
+    SpawnedProcess host = SpawnHarness({"--role=linger-host", name, timeoutArg}, hostInput.fds[0]);
+    ASSERT_NE(host.pid, -1);
+    std::string hostOutput;
+    ASSERT_TRUE(ReadLineWithDeadline(host.readFd, deadline, &hostOutput)) << hostOutput;
+    const auto portPos = hostOutput.find("PORT=");
+    ASSERT_NE(portPos, std::string::npos) << hostOutput;
+    const int hostPort = std::stoi(hostOutput.substr(portPos + 5));
+
+    SpawnedProcess client = SpawnHarness(
+        {"--role=linger-client", name, "--port=" + std::to_string(hostPort), timeoutArg}, clientInput.fds[0]);
+    ASSERT_NE(client.pid, -1);
+    std::string clientOutput;
+    ASSERT_TRUE(ReadLineWithDeadline(client.readFd, deadline, &clientOutput)) << clientOutput;
+    ASSERT_NE(clientOutput.find("JOINED"), std::string::npos) << clientOutput;
+
+    const std::string hostName = name.substr(std::string("--gamertag=").size());
+    int listed = 0, listedAtHostPort = 0;
+    for (const auto& session : CNA::Internal::Net::ENetDiscoveryService::FindSessions(
+             Microsoft::Xna::Framework::Net::NetworkSessionType::SystemLink)) {
+        if (session.getHostGamertagProperty() != hostName) continue;
+        ++listed;
+        if (session.GetConnectPort() == hostPort) ++listedAtHostPort;
+    }
+    EXPECT_EQ(listed, 1) << "the joined client also answered the search as a host";
+    EXPECT_EQ(listedAtHostPort, 1);
+
+    ASSERT_EQ(write(clientInput.fds[1], "STOP\n", 5), 5);
+    ASSERT_EQ(write(hostInput.fds[1], "STOP\n", 5), 5);
+    int hostCode = -1, clientCode = -1;
+    const bool clientFinished = WaitWithWatchdog(client.pid, deadline, &clientCode);
+    const bool hostFinished = WaitWithWatchdog(host.pid, deadline, &hostCode);
+    DrainRemaining(host.readFd, &hostOutput);
+    DrainRemaining(client.readFd, &clientOutput);
+    close(host.readFd);
+    close(client.readFd);
+    EXPECT_TRUE(clientFinished) << clientOutput;
+    EXPECT_TRUE(hostFinished) << hostOutput;
+    EXPECT_EQ(clientCode, 0) << clientOutput;
+    EXPECT_EQ(hostCode, 0) << hostOutput;
 }
 
 // CNA-DEMOS-ISSUE-026: search replies must reach the same client regardless of which process

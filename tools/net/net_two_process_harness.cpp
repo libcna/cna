@@ -60,6 +60,7 @@
 #include <thread>
 #include <vector>
 
+#include <poll.h>
 #include <sys/resource.h>
 #include <sys/socket.h>
 #include <netinet/in.h>
@@ -311,6 +312,57 @@ namespace {
     // search's local-gamer limit, and a search given a list joins exactly that group. Two gamers are
     // signed in; --find=limit searches with a limit of one, --find=list with only the second gamer.
     // Either way exactly one local gamer joins, then exchanges the usual payload with a host role.
+    // Pumps the session until the parent writes a line to stdin (or closes it), or the deadline.
+    bool PumpUntilParentReleases(NetworkSession* session, std::chrono::steady_clock::time_point deadline) {
+        while (std::chrono::steady_clock::now() < deadline) {
+            pollfd input{STDIN_FILENO, POLLIN, 0};
+            if (::poll(&input, 1, 0) > 0) return true;
+            session->Update();
+            std::this_thread::sleep_for(kPollInterval);
+        }
+        return false;
+    }
+
+    // UB-011: a host and a joined client stay in their session while the parent searches.
+    int RunLingerHost(const std::string& name, int timeoutSeconds) {
+        auto gamer = SignedInGamer::CreateInternal(name);
+        NetworkSession* session = NetworkSession::Create(
+            NetworkSessionType::SystemLink, std::vector<SignedInGamer*>{&gamer}, 8, 0, NetworkSessionProperties{});
+        std::printf("PORT=%u\n", static_cast<unsigned>(ENetBackend::GetBoundPort(session)));
+        std::fflush(stdout);
+        const bool released = PumpUntilParentReleases(
+            session, std::chrono::steady_clock::now() + std::chrono::seconds(timeoutSeconds));
+        session->Dispose();
+        delete session;
+        return released ? 0 : 1;
+    }
+
+    int RunLingerClient(uint16_t port, const std::string& hostName, int timeoutSeconds) {
+        auto gamer = SignedInGamer::CreateInternal("LingerClient");
+        using Microsoft::Xna::Framework::GamerServices::Gamer;
+        using Microsoft::Xna::Framework::GamerServices::SignedInGamerCollection;
+        Gamer::setSignedInGamersProperty(new SignedInGamerCollection(SignedInGamerCollection::CreateInternal({&gamer})));
+        struct RestoreSignedIn {
+            ~RestoreSignedIn() { Gamer::setSignedInGamersProperty(new SignedInGamerCollection(SignedInGamerCollection::CreateInternal({}))); }
+        } restore;
+        auto available = AvailableNetworkSession::CreateInternal(1, hostName, 0, 7, NetworkSessionProperties{},
+            QualityOfService::CreateInternal(), "127.0.0.1", port, NetworkSessionType::SystemLink);
+        NetworkSession* session = NetworkSession::Join(&available);
+        const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(timeoutSeconds);
+        if (!PumpUntil(session, deadline, [&] { return session->getAllGamersProperty().getCountProperty() >= 2; })) {
+            std::fprintf(stderr, "linger-client: timed out joining the host\n");
+            session->Dispose();
+            delete session;
+            return 1;
+        }
+        std::printf("JOINED\n");
+        std::fflush(stdout);
+        const bool released = PumpUntilParentReleases(session, deadline);
+        session->Dispose();
+        delete session;
+        return released ? 0 : 1;
+    }
+
     int RunFindJoinClient(uint16_t port, const std::string& mode, int timeoutSeconds) {
         if (port == 0) {
             std::fprintf(stderr, "find-join-client: --port is required and must be nonzero\n");
@@ -1369,6 +1421,12 @@ int main(int argc, char** argv) {
         if (role == "discovery-host") {
             if (gamertag.empty()) return 64;
             return RunHost(timeoutSeconds, false, gamertag);
+        }
+        if (role == "linger-host") {
+            return RunLingerHost(gamertag.empty() ? "HostPlayer" : gamertag, timeoutSeconds);
+        }
+        if (role == "linger-client") {
+            return RunLingerClient(port, gamertag.empty() ? "HostPlayer" : gamertag, timeoutSeconds);
         }
         if (role == "discovery-client") {
             if (gamertag.empty()) return 64;

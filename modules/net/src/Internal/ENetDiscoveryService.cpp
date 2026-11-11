@@ -336,6 +336,12 @@ namespace CNA::Internal::Net
             {
                 return;
             }
+            // UB-011: a session whose host is now another machine (a migration moved it away) no
+            // longer hosts what it would announce; that machine answers instead.
+            if (!registeredHost_->getIsHostProperty())
+            {
+                return;
+            }
 
             DiscoveryAnnounceMessage announce;
             announce.ConnectPort = registeredHostPort_;
