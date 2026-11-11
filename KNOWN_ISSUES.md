@@ -66,7 +66,15 @@ page under `docs/` (index: `docs/README.md`), deliberate divergences from FNA an
   cannot close it (KI-X11-SERIAL, 2026-11-11): SDL publishes its X11 `Display*` per window only, so it
   is unknown before a first import, and the range [next request before, last processed after] also
   contains a concurrent request on the same connection. The concurrent cases are argued from source,
-  not covered by a test.
+  not covered by a test. An independent review of e28fea5bf (2026-11-11) adds three gaps, none
+  reproduced against a server and none fixed (X11 takes only fixes that real use finds): an error
+  callback from another Display that matched the pending id and paused after reserving its slot can
+  resume during the next import and overwrite that import's SDL entry, so an invalid id is accepted
+  (needs a capture mutex covering reservation, store and the reset); `XGetWindowAttributes` sends
+  GetWindowAttributes and then GetGeometry, and a window destroyed between the two fails the second
+  with BadDrawable (request 14), which the filter does not match, while SDL reads the unfilled
+  geometry; and the error handler CNA installs replaces the host's for good (the previous one is
+  neither kept nor restored).
 
 ### Divergences from XNA, not fixed (state of 2026-11-11)
 
@@ -87,6 +95,19 @@ page under `docs/` (index: `docs/README.md`), deliberate divergences from FNA an
   no Refresh), EffectMaterial clones of BasicEffect, AlphaTestEffect, EnvironmentMapEffect and
   SkinnedEffect throw NullReferenceException in `Effect..ctor(Effect)`; Refresh is unmeasured, which
   bears on the HND-TQ-25 D9 premise.
+- Graphics, from an independent review of the Apply latch (d07de8c49, c5afd4874, 0d97c3033) on
+  2026-11-11, source-traced and not yet reproduced by a test: (1) the five stock classes latch their
+  properties at Apply, not the final parameter values, so a raw `Parameters["DiffuseColor"]`,
+  `["WorldViewProj"]`, `["FogVector"]` or `["ShaderIndex"]` write that the next OnApply does not
+  overwrite (its dirty bit is clear) never reaches the draw, where XNA's pass commits it; Basic,
+  EnvironmentMap and Skinned also rebuild light values and lighting transforms from fields (the
+  renderers take World/View/Projection and material fields, not WVP, so a fix crosses every renderer
+  interface; base-Effect and EffectMaterial clones already read raw storage, so a source and its clone
+  can render differently); (2) the Software renderer clears both shader stages before each compiled
+  pass, so a pass that assigns only a pixel shader throws "no applied vertex shader" where XNA keeps
+  the previous pass's vertex shader (`SoftwareCompiledEffect.cpp:725-726`); (3) SpriteEffect (CNAEXT,
+  FNA's) reflects no `Texture` parameter, so a clone cannot carry or bind FNA's texture at Apply and
+  draws device slot 0 (SpriteBatch rebinds slot 0 and hides this).
 - C API: content tags of meshes/parts have no C route; HND-TQ-22 C route (ObjectValue handles, ABI 0.61)
   not done; `CNA::Net::SystemLinkDiscovery` (GALAXY-NET-01) has no C route (planned, CBIND-127).
 - Content: Texture3D/TextureCube level counts <= 0 are accepted by XNA (same loop as Texture2D), CNA
@@ -305,7 +326,14 @@ page under `docs/` (index: `docs/README.md`), deliberate divergences from FNA an
   the code only, not measured in a browser. Remedies, none taken: `SDL_HINT_AUDIO_DEVICE_SAMPLE_FRAMES`
   (halves the constant part, more dropouts on long frames); a CNA web audio device on an
   AudioWorklet (`-sAUDIO_WORKLET`, needs cross-origin isolation for `SharedArrayBuffer`); running the
-  game off the main thread (pthreads, same hosting requirement).
+  game off the main thread (pthreads, same hosting requirement). An independent review the same day
+  agreed and added two smaller effects: while the AudioContext is still suspended (before the first
+  user gesture) SDL's timer mixes and discards each block (`SDL_emscriptenaudio.c:276-293`), so an
+  effect played then is never heard; and the first block after opening a 44.1 kHz stream on a 48 kHz
+  context comes up six or seven frames short (SDL's resampler padding; CNA's `FeedStream` supplies
+  exactly the approximate amount SDL asks for), a sub-millisecond gap. Mobile Eggbert's 20 Hz
+  update adds 0-50 ms before `Play` on top. The owner decided on 2026-11-11 to leave the web audio
+  path unchanged for now.
 - **Three audio reports from the 2026-07-17 audit stay unconfirmed, not open:** high-pitched sound
   effects, missing audio files, and distorted or sped-up gameplay audio. They were never
   reproduced against the game they came from, which is not available. The audit narrowed the
