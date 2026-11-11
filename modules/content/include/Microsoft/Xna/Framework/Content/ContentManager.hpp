@@ -151,6 +151,10 @@ namespace Microsoft::Xna::Framework::Content
         /// the parameter `input` (see ContentManager.cpp).
         static void RequireOpenedStream(const System::IO::Stream* stream);
 
+        /// Refuses an OpenStream() result that cannot be read as Refresh does, before reading it:
+        /// System::ArgumentException "Stream was not readable." (see ContentManager.cpp).
+        static void RequireReadableStream(const System::IO::Stream& stream);
+
         /// The injected device, else the service provider's IGraphicsDeviceService device, else null.
         [[nodiscard]] Graphics::GraphicsDevice* FindGraphicsDevice() const;
 
@@ -193,6 +197,7 @@ namespace Microsoft::Xna::Framework::Content
             StreamReadState state;
             try
             {
+                RequireReadableStream(stream);
                 state.canSeek = stream.getCanSeekProperty();
                 const std::vector<std::uint8_t> bytes =
                     ReadStreamToEnd(stream, assetName, state.canSeek);
@@ -352,6 +357,7 @@ namespace Microsoft::Xna::Framework::Content
          * @throws System::ObjectDisposedException if this manager has been disposed.
          * @throws System::ArgumentNullException if @p assetName is empty, or (parameter `input`)
          *         if OpenStream() returns null, as XNA's reader construction does.
+         * @throws System::ArgumentException if the stream OpenStream() returns cannot be read.
          * @throws ContentLoadException if the asset cannot be opened or read.
          */
         template <typename T>
@@ -642,6 +648,7 @@ namespace Microsoft::Xna::Framework::Content
          * @throws ContentLoadException if the asset cannot be loaded.
          * @throws System::ArgumentNullException if @p assetName is empty, or (parameter `input`)
          *         if OpenStream() returns null.
+         * @throws System::ArgumentException if the stream OpenStream() returns cannot be read.
          * @throws System::ObjectDisposedException if this manager has been disposed.
          */
         template <typename T>

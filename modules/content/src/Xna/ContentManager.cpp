@@ -366,6 +366,19 @@ namespace Microsoft::Xna::Framework::Content
         }
     }
 
+    void ContentManager::RequireReadableStream(const System::IO::Stream& stream)
+    {
+        // Refresh ContentReader.PrepareStream IL_0000-0001 wraps the stream in a BinaryReader
+        // before reading anything, and mscorlib's BinaryReader..ctor(Stream, Encoding)
+        // IL_0022-0039 throws ArgumentException(Argument_StreamNotReadable) for a stream whose
+        // CanRead is false. PrepareStream catches only IOException, so ReadAsset<T> reports it
+        // unwrapped, after its finally has closed the stream (IL_0079-0082).
+        if (!stream.getCanReadProperty())
+        {
+            throw System::ArgumentException("Stream was not readable.");
+        }
+    }
+
     std::unique_ptr<System::IO::Stream> ContentManager::TryOpenCompiledStream(const std::string& assetName)
     {
         CompiledStreamAttempt attempt(this, assetName);
