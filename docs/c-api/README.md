@@ -8,8 +8,8 @@ or later; the ABI uses fixed-width C representations rather than exposing CNA's 
 adds value/query, graphics, schema-2 CNB, service/callback and reflective/shared-resource routes; see
 the [ABI addition listing](ABI_VERSIONING.md) and [0.60 owner-contract qualification boundary](CLOSURE_060.md).
 
-The generated coverage inventory currently accounts for **8,167** runtime-scope public C++
-declarations: **7,510 implemented**, **17 partially mapped**, **5 planned** and **635 not
+The generated coverage inventory currently accounts for **8,176** runtime-scope public C++
+declarations: **7,510 implemented**, **17 partially mapped**, **11 planned** and **638 not
 applicable**. The experimental release verdict is therefore **Not ready**: the only unmet release
 criterion covers the four Windows path declarations under **CBIND-117** that still need Windows
 qualification and the ordered `Keyboard::KeyDownEXT` event under **CBIND-127** that needs a

@@ -12,7 +12,7 @@ or renamed module stops this gate rather than inheriting a default. Paths whose 
 are `Internal` or `Detail` in any capitalization are excluded as implementation detail.
 No symbol counts as implemented merely because a related C operation exists.
 
-Snapshot: **467 headers**, **8167 symbols**, **7510 implemented**, **17 partial**, **5 planned**, **635 not applicable**. Explicitly excluded headers: **425**.
+Snapshot: **468 headers**, **8176 symbols**, **7510 implemented**, **17 partial**, **11 planned**, **638 not applicable**. Explicitly excluded headers: **426**.
 
 ## Planned coverage work
 
@@ -23,7 +23,7 @@ The mapping is the status record: an owner is open exactly while at least one sy
 | Owner | Symbols | Work | Completion rule |
 |---|---:|---|---|
 | `CBIND-117` | 4 | Decide the runtime C boundary for Model-v2 and CNB CPU APIs | Map the remaining runtime-adjacent Model-v2/CNB declarations through C-native routes, or record reviewed dispositions without exposing C++ RTTI, templates, filesystem objects or exceptions. |
-| `CBIND-127` | 1 | Bind newly added runtime-public surface, including Keyboard.KeyDownEXT | Map Keyboard.KeyDownEXT through a C-native subscription/callback registration with lifetime and ordered non-repeat delivery tests, or record a reviewed disposition. Snapshot key-state queries do not represent this event. |
+| `CBIND-127` | 7 | Bind newly added runtime-public surface, including Keyboard.KeyDownEXT | Map Keyboard.KeyDownEXT through a C-native subscription/callback registration with lifetime and ordered non-repeat delivery tests, or record a reviewed disposition. Snapshot key-state queries do not represent this event. |
 
 ## Out of runtime C API scope
 
@@ -50,12 +50,12 @@ not counted above, and their declarations are not missing C bindings.
 | `modules/graphics-ext` internal/detail paths | 2 | implementation detail: a path segment is `Internal` or `Detail` |
 | `modules/input` internal/detail paths | 5 | implementation detail: a path segment is `Internal` or `Detail` |
 | `modules/media` internal/detail paths | 13 | implementation detail: a path segment is `Internal` or `Detail` |
-| `modules/net` internal/detail paths | 7 | implementation detail: a path segment is `Internal` or `Detail` |
+| `modules/net` internal/detail paths | 8 | implementation detail: a path segment is `Internal` or `Detail` |
 | `modules/runtime` internal/detail paths | 2 | implementation detail: a path segment is `Internal` or `Detail` |
 | `modules/content/CNA/Content/Import` | 1 | CBIND-117, owner decision 2026-09-18: build-time asset importers |
 | `modules/content/CNA/Content/Pipeline` | 14 | CBIND-117, owner decision 2026-09-18: build-time content compilers and build configuration |
 
-Full inventory SHA-256: `86b2748171dac26767bbbb5bb39d49d1b3f5e388f3c76e7f2e762af16bb49c5e`.
+Full inventory SHA-256: `5629c1794ba3d6d870af759b36cf7e41c857edd713b3fceba201fcf49674e392`.
 
 The complete per-symbol Markdown is generated on demand into the ignored build tree so
 that a multi-megabyte derived file is not recommitted whenever one public declaration moves:
@@ -80,12 +80,12 @@ owner, hashes the complete matrix, and compares this summary. The CTest
 | `devices` | 20 | 217 | 189 | 0 | 0 | 28 |
 | `devices-ext` | 17 | 84 | 79 | 0 | 0 | 5 |
 | `gamer-services` | 52 | 692 | 640 | 0 | 0 | 52 |
-| `graphics` | 141 | 2946 | 2805 | 0 | 0 | 141 |
+| `graphics` | 141 | 2949 | 2805 | 0 | 0 | 144 |
 | `graphics-ext` | 11 | 106 | 104 | 0 | 0 | 2 |
 | `input` | 51 | 898 | 858 | 0 | 1 | 39 |
 | `math` | 24 | 960 | 929 | 0 | 0 | 31 |
 | `media` | 24 | 342 | 287 | 0 | 0 | 55 |
-| `net` | 23 | 292 | 262 | 1 | 0 | 29 |
+| `net` | 24 | 298 | 262 | 1 | 6 | 29 |
 | `runtime` | 22 | 319 | 251 | 6 | 0 | 62 |
 | `storage` | 3 | 44 | 42 | 0 | 0 | 2 |
 
