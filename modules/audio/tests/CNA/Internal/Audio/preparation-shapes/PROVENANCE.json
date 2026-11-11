@@ -8,6 +8,15 @@
   "no_wave_bank_refusals": 18,
   "probe": "tools/xna-oracle/XactPreparationShapeProbe.cpp",
   "probe_sha256": "8d31126cd31752457871daa174ee4463fa950150ed7bc030068dc632e2270613",
+  "probe_successors": [
+    {
+      "sha256": "a66079bf844a7237330d89e457c38a849fa00598122b48bc454ec10110664cf0",
+      "commit": "799d3df58",
+      "task": "HND-XACT-03",
+      "changed_modes": ["clone"],
+      "change": "The clone mode creates its second sound bank from an independent copy of shapes.xsb and logs a clone_input record. Every other mode issues the same calls and records."
+    }
+  ],
   "engine_dll_sha256": {
     "x86": "8a7e7c5ac2e6230f0249d46751522e7ecf85e7490cf7491ab73bf2e7e59e4c0f",
     "x64": "6e656d37eadec5acf8ca99f2df37768eaec1c919e616caf3805c0884b2af7c26"

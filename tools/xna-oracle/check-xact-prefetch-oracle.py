@@ -87,13 +87,14 @@ def check(matrix):
     require(digest(matrix) == provenance['matrix_sha256'], 'Matrix hash changed')
     keys = [(r['arch'], r['profile'], r['mode'], r['lookahead'], r['io'], r['repeat']) for r in rows]
     require(len(keys) == len(set(keys)) and set(keys) == expected_cells(), 'Require all88 unique native prefetch cells')
+    preparation.require_probe_source(rows, provenance)
     resident = REPO / 'modules/audio/tests/CNA/Internal/Audio/preparation-shapes/resident'
     for r in rows:
         check_row(r)
         if r['old_harness']:
             for k, v in provenance['retained_control_identities'][r['arch']].items(): require(r[k] == v, 'Retained control identity differs')
         else:
-            require(r['source_sha256'] == digest(REPO / provenance['probe']) == provenance['probe_sha256'], 'Probe source changed')
+            require(r['source_sha256'] == provenance['probe_sha256'], 'Probe source changed')
             require(r['exe_sha256'] == provenance['probe_exe_sha256'][r['arch']], 'Probe binary differs')
             require(set(r['banks_sha256']) == {'shapes.xgs', 'shapes.xsb', 'A.xwb', 'B.xwb'}, 'Missing fixture identities')
             for name, value in r['banks_sha256'].items():

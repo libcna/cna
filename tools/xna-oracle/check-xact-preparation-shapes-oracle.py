@@ -14,6 +14,20 @@ DLLS = {'x86': '8a7e7c5ac2e6230f0249d46751522e7ecf85e7490cf7491ab73bf2e7e59e4c0f
 
 
 def digest(path): return hashlib.sha256(path.read_bytes()).hexdigest()
+
+
+def require_probe_source(rows, provenance):
+    """Rows were captured by the pinned probe; the checked-in probe is it or a recorded successor.
+
+    A later task may edit the shared probe. Its successor entry names the modes the edit touches,
+    and an entry that touches a mode these rows ran invalidates the capture instead of excusing it.
+    """
+    modes = {r['mode'] for r in rows if not r['old_harness']}
+    accepted = {provenance['probe_sha256']}
+    for successor in provenance.get('probe_successors', []):
+        require(not modes & set(successor['changed_modes']), 'Probe successor ' + successor['commit'] + ' changes a captured mode')
+        accepted.add(successor['sha256'])
+    require(digest(REPO / provenance['probe']) in accepted, 'Probe source changed')
 def require(value, message):
     if not value: raise ValueError(message)
 
@@ -122,13 +136,14 @@ def check(matrix):
     rows = json.loads(matrix.read_text())['rows']; provenance = json.loads((CORPUS / 'PROVENANCE.json').read_text())
     keys = [(r['arch'], r['profile'], r['mode'], r['io'], r['repeat']) for r in rows]
     require(len(keys) == len(set(keys)) and set(keys) == expected_cells(), 'Require all104 unique preparation cells')
+    require_probe_source(rows, provenance)
     for row in rows:
         check_row(row)
         if row['old_harness']:
             for key, value in provenance['retained_control_identities'][row['arch']].items():
                 require(row[key] == value, 'Wrong retained control identity')
         else:
-            require(row['source_sha256'] == digest(REPO / provenance['probe']) == provenance['probe_sha256'], 'Wrong probe source')
+            require(row['source_sha256'] == provenance['probe_sha256'], 'Wrong probe source')
             require(row['exe_sha256'] == provenance['probe_exe_sha256'][row['arch']], 'Wrong probe binary')
             require(set(row['banks_sha256']) == {'shapes.xgs', 'shapes.xsb', 'A.xwb', 'B.xwb'}, 'Incomplete fixture identity')
             for name, value in row['banks_sha256'].items(): require(digest(CORPUS / row['profile'] / name) == value, 'Wrong fixture bytes')
