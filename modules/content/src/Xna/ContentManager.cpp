@@ -271,20 +271,30 @@ namespace Microsoft::Xna::Framework::Content
         }
     }
 
-    void ContentManager::CloseReadStream(System::IO::Stream& stream, std::exception_ptr readFailure)
+    void ContentManager::CloseReadStream(System::IO::Stream& stream, const int closes,
+                                         std::exception_ptr readFailure)
     {
         // Refresh ContentManager.ReadAsset<T> IL_0079-0082: the stream is disposed in a finally,
-        // and Stream.Dispose() is the virtual Close(). The owner decided (HND-TQ-35, 2026-11-09)
-        // that a throwing Close does not replace a read failure already propagating.
-        try
+        // and Stream.Dispose() is the virtual Close() (mscorlib Stream.Dispose IL_0001). Once
+        // ContentReader.Create has returned, the inner finally disposes the reader first
+        // (IL_006d-0076); for an uncompressed container that reader is a BinaryReader over the
+        // stream itself (PrepareStream IL_00ed), whose Dispose(true) closes it (IL_0003-0015), so
+        // the stream is closed twice. An LZX reader reads a DecompressStream, whose Dispose(bool)
+        // leaves its base stream open (IL_0000-002a). Each Close runs even when an earlier one
+        // threw, as both finallies do. The owner decided (HND-TQ-35, 2026-11-09) that a throwing
+        // Close does not replace a failure already propagating.
+        for (int close = 0; close < closes; ++close)
         {
-            stream.Close();
-        }
-        catch (...)
-        {
-            if (!readFailure)
+            try
             {
-                readFailure = std::current_exception();
+                stream.Close();
+            }
+            catch (...)
+            {
+                if (!readFailure)
+                {
+                    readFailure = std::current_exception();
+                }
             }
         }
         if (readFailure)

@@ -128,6 +128,8 @@ namespace Microsoft::Xna::Framework::Content
         const auto container = CNA::Internal::Xnb::DecodeXnbContainerBody(
             std::span<const std::uint8_t>(bytes.data(), bytes.size()), assetName,
             CNA::Internal::Xnb::DefaultXnbReadLimits(), state.canSeek);
+        state.readerClosesStream =
+            container.header.compression == CNA::Internal::Xnb::XnbCompression::None;
         (void)xnbPath; // Same logical-name diagnostics as typed LoadXnbAsset.
         const auto bodyStream = container.OpenBodyStream();
         ContentReader contentReader(

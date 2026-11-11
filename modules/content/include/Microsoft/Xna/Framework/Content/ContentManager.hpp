@@ -160,6 +160,11 @@ namespace Microsoft::Xna::Framework::Content
             /// The stream's CanSeek. Refresh's PrepareStream asks the stream's Length only when it
             /// can seek, and checks the declared size against it only then (IL_009f-00cd).
             bool canSeek = true;
+
+            /// Set once an uncompressed container is accepted. Refresh's ContentReader then reads
+            /// the stream itself (PrepareStream IL_00ed) and closes it when disposed, before
+            /// ReadAsset's finally closes it again (see CloseReadStream).
+            bool readerClosesStream = false;
         };
 
         /// Reads a stream OpenStream() produced to its end. A ContentManager asset is read whole --
@@ -172,9 +177,10 @@ namespace Microsoft::Xna::Framework::Content
 
         /// Reads @p stream to its end, hands the bytes to @p read, then closes the stream whether or
         /// not that succeeded: Refresh ContentManager.ReadAsset<T> disposes the OpenStream() result
-        /// in its outer finally (IL_0079-0082), and Stream.Dispose() is the virtual Close(). A Close
-        /// that throws does not replace an exception already propagating from the read, and
-        /// propagates when the read succeeded (owner decision HND-TQ-35, 2026-11-09).
+        /// in its outer finally (IL_0079-0082), and Stream.Dispose() is the virtual Close() --
+        /// twice for an uncompressed container, whose ContentReader closes it first. A Close that
+        /// throws does not replace an exception already propagating from the read, and propagates
+        /// when the read succeeded (owner decision HND-TQ-35, 2026-11-09).
         template <typename Read>
         static auto ReadThenCloseStream(System::IO::Stream& stream, const std::string& assetName,
                                         Read&& read)
@@ -196,13 +202,14 @@ namespace Microsoft::Xna::Framework::Content
             {
                 failure = std::current_exception();
             }
-            CloseReadStream(stream, std::move(failure));
+            CloseReadStream(stream, state.readerClosesStream ? 2 : 1, std::move(failure));
             return std::move(*result);
         }
 
-        /// The finally of ReadThenCloseStream: closes @p stream, then rethrows @p readFailure if the
-        /// read failed, or the exception Close threw if only Close failed.
-        static void CloseReadStream(System::IO::Stream& stream, std::exception_ptr readFailure);
+        /// The finallies of ReadThenCloseStream: closes @p stream @p closes times, then rethrows
+        /// @p readFailure if the read failed, or else the first exception a Close threw.
+        static void CloseReadStream(System::IO::Stream& stream, int closes,
+                                    std::exception_ptr readFailure);
 
         friend class ContentReader;
         void RecordDisposableObject(std::shared_ptr<System::IDisposable> disposable);
@@ -926,6 +933,8 @@ namespace Microsoft::Xna::Framework::Content
             const auto container = CNA::Internal::Xnb::DecodeXnbContainerBody(
                 std::span<const std::uint8_t>(bytes.data(), bytes.size()), assetName,
                 CNA::Internal::Xnb::DefaultXnbReadLimits(), state.canSeek);
+            state.readerClosesStream =
+                container.header.compression == CNA::Internal::Xnb::XnbCompression::None;
             (void)xnbPath; // Refresh PrepareStream uses logical assetName for BadXnb.
             const auto bodyStream = container.OpenBodyStream();
             ContentReader contentReader(
