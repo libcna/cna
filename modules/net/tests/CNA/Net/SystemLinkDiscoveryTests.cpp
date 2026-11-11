@@ -21,8 +21,10 @@
 #include <arpa/inet.h>
 #include <array>
 #include <cstring>
+#include <chrono>
 #include <future>
 #include <netinet/in.h>
+#include <optional>
 #include <sys/select.h>
 #include <sys/socket.h>
 #include <unistd.h>
@@ -30,6 +32,9 @@
 
 using CNA::Internal::Net::DiscoveryAnnounceMessage;
 using CNA::Internal::Net::DiscoveryMessageTag;
+using CNA::Internal::Net::DiscoveryQosProbeMessage;
+using CNA::Internal::Net::DiscoveryUpstreamInviteMessage;
+using CNA::Internal::Net::kQosProbeCount;
 using CNA::Internal::Net::ENetBackend;
 using CNA::Internal::Net::ENetDiscoveryService;
 using CNA::Internal::Net::NetDiscoveryProtocol;
@@ -117,13 +122,13 @@ namespace
     class FakeFarHost
     {
     public:
-        FakeFarHost()
+        explicit FakeFarHost(const char* ip = "127.0.0.1") : ip_(ip)
         {
             socket_ = ::socket(AF_INET, SOCK_DGRAM, 0);
             sockaddr_in address{};
             address.sin_family = AF_INET;
             address.sin_port = 0;
-            inet_pton(AF_INET, "127.0.0.1", &address.sin_addr);
+            inet_pton(AF_INET, ip, &address.sin_addr);
             bound_ = socket_ >= 0 && ::bind(socket_, reinterpret_cast<const sockaddr*>(&address), sizeof(address)) == 0;
             socklen_t length = sizeof(address);
             if (bound_ && ::getsockname(socket_, reinterpret_cast<sockaddr*>(&address), &length) == 0)
@@ -134,30 +139,50 @@ namespace
         FakeFarHost& operator=(const FakeFarHost&) = delete;
 
         [[nodiscard]] bool Ready() const { return bound_ && port_ != 0; }
-        [[nodiscard]] std::string SearchAddress() const { return "127.0.0.1:" + std::to_string(port_); }
+        [[nodiscard]] uint16_t Port() const { return port_; }
+        [[nodiscard]] std::string SearchAddress() const { return ip_ + ":" + std::to_string(port_); }
 
-        // Waits for one discovery query and answers it with announce; false when none arrives.
-        bool AnswerOneQuery(const DiscoveryAnnounceMessage& announce) const
+        // The next datagram within timeoutMs, with its sender.
+        std::optional<std::pair<std::vector<SharpRuntime::bytecs>, sockaddr_in>> Receive(int timeoutMs) const
         {
             fd_set readable;
             FD_ZERO(&readable);
             FD_SET(socket_, &readable);
-            timeval timeout{1, 0};
-            if (::select(socket_ + 1, &readable, nullptr, nullptr, &timeout) <= 0) return false;
+            timeval timeout{timeoutMs / 1000, (timeoutMs % 1000) * 1000};
+            if (::select(socket_ + 1, &readable, nullptr, nullptr, &timeout) <= 0) return std::nullopt;
             std::array<unsigned char, 1500> buffer{};
             sockaddr_in from{};
             socklen_t fromLength = sizeof(from);
             const ssize_t received = ::recvfrom(socket_, buffer.data(), buffer.size(), 0,
                                                 reinterpret_cast<sockaddr*>(&from), &fromLength);
-            if (received <= 0) return false;
-            const std::vector<SharpRuntime::bytecs> query(buffer.begin(), buffer.begin() + received);
-            if (NetDiscoveryProtocol::PeekTag(query) != DiscoveryMessageTag::Query) return false;
-            const auto reply = NetDiscoveryProtocol::Encode(announce);
-            return ::sendto(socket_, reply.data(), reply.size(), 0, reinterpret_cast<const sockaddr*>(&from), fromLength)
-                == static_cast<ssize_t>(reply.size());
+            if (received <= 0) return std::nullopt;
+            return std::make_pair(std::vector<SharpRuntime::bytecs>(buffer.begin(), buffer.begin() + received), from);
+        }
+
+        // Waits for one discovery query and returns where it came from.
+        std::optional<sockaddr_in> WaitForQuery() const
+        {
+            const auto datagram = Receive(1000);
+            if (!datagram || NetDiscoveryProtocol::PeekTag(datagram->first) != DiscoveryMessageTag::Query)
+                return std::nullopt;
+            return datagram->second;
+        }
+
+        bool Send(const sockaddr_in& to, const std::vector<SharpRuntime::bytecs>& bytes) const
+        {
+            return ::sendto(socket_, bytes.data(), bytes.size(), 0, reinterpret_cast<const sockaddr*>(&to), sizeof(to))
+                == static_cast<ssize_t>(bytes.size());
+        }
+
+        // Waits for one discovery query and answers it with announce; false when none arrives.
+        bool AnswerOneQuery(const DiscoveryAnnounceMessage& announce) const
+        {
+            const auto from = WaitForQuery();
+            return from && Send(*from, NetDiscoveryProtocol::Encode(announce));
         }
 
     private:
+        std::string ip_;
         int socket_ = -1;
         bool bound_ = false;
         uint16_t port_ = 0;
@@ -317,4 +342,87 @@ TEST_F(SystemLinkDiscoveryTest, ABusyFixedHostPortFailsCreate)
     EXPECT_NE(ENetBackend::GetBoundPort(session.get()), 0);
     session->Dispose();
 }
+
+// Two hosts on the same fixed connect port each invite this machine's upstream train to their own
+// responder; both get one. A duplicated query brings one host's invitation twice, and that host
+// still gets one train.
+TEST_F(SystemLinkDiscoveryTest, TwoHostsOnTheSameFixedPortEachGetAnUpstreamTrain)
+{
+    FakeFarHost first, second;
+    ASSERT_TRUE(first.Ready() && second.Ready());
+    SystemLinkDiscovery::setExtraSearchAddressesProperty({first.SearchAddress(), second.SearchAddress()});
+
+    const auto host = [](const FakeFarHost& fake, const char* gamertag, uint64_t instance, int invitations)
+    {
+        const auto from = fake.WaitForQuery();
+        if (!from || !fake.Send(*from, NetDiscoveryProtocol::Encode(FarAnnounce(gamertag, 40000, instance)))) return -1;
+        DiscoveryUpstreamInviteMessage invite;
+        invite.ConnectPort = 40000;
+        invite.ResponderPort = fake.Port();
+        for (int each = 0; each < invitations; ++each) fake.Send(*from, NetDiscoveryProtocol::Encode(invite));
+        int probes = 0;
+        while (const auto datagram = fake.Receive(500))
+            if (NetDiscoveryProtocol::PeekTag(datagram->first) == DiscoveryMessageTag::UpstreamProbe) ++probes;
+        return probes;
+    };
+    auto a = std::async(std::launch::async, host, std::cref(first), "FarFirst", 1, 1);
+    auto b = std::async(std::launch::async, host, std::cref(second), "FarSecond", 2, 2);
+    EXPECT_EQ(FoundFar(ENetDiscoveryService::FindSessions(NetworkSessionType::SystemLink)).size(), 2u);
+    EXPECT_EQ(a.get(), static_cast<int>(kQosProbeCount));
+    EXPECT_EQ(b.get(), static_cast<int>(kQosProbeCount));
+}
+
+#if defined(__linux__)
+namespace
+{
+    int Downstream(const std::vector<AvailableNetworkSession>& found, const std::string& gamertag)
+    {
+        for (const auto& session : found)
+            if (session.getHostGamertagProperty() == gamertag)
+                return session.getQualityOfServiceProperty().getBytesPerSecondDownstreamProperty();
+        ADD_FAILURE() << gamertag << " was not found";
+        return -1;
+    }
+
+    std::vector<SharpRuntime::bytecs> Probe(uint16_t connectPort, uint8_t index)
+    {
+        DiscoveryQosProbeMessage probe;
+        probe.ConnectPort = connectPort;
+        probe.Index = index;
+        return NetDiscoveryProtocol::Encode(probe);
+    }
+}
+
+// Two hosts on the same fixed connect port at different addresses (Linux answers on all of
+// 127.0.0.0/8): the second host's probes overtake its announce, and they time its path, not the
+// first host's.
+TEST_F(SystemLinkDiscoveryTest, ProbesAreTheirOwnHostsWhenTwoHostsShareAFixedPort)
+{
+    FakeFarHost first("127.0.0.1"), second("127.0.0.2");
+    ASSERT_TRUE(first.Ready() && second.Ready());
+    SystemLinkDiscovery::setExtraSearchAddressesProperty({first.SearchAddress(), second.SearchAddress()});
+
+    for (const bool firstAnnouncesBeforeTheProbes : {true, false})
+    {
+        SCOPED_TRACE(firstAnnouncesBeforeTheProbes ? "first host listed before the probes" : "probes before both announces");
+        auto hosts = std::async(std::launch::async, [&]
+        {
+            const auto toFirst = first.WaitForQuery();
+            const auto toSecond = second.WaitForQuery();
+            if (!toFirst || !toSecond) return false;
+            const auto firstAnnounce = NetDiscoveryProtocol::Encode(FarAnnounce("FarFirst", 40000, 1));
+            bool sent = true;
+            if (firstAnnouncesBeforeTheProbes) sent = first.Send(*toFirst, firstAnnounce) && sent;
+            for (uint8_t index = 0; index < kQosProbeCount; ++index) sent = second.Send(*toSecond, Probe(40000, index)) && sent;
+            if (!firstAnnouncesBeforeTheProbes) sent = first.Send(*toFirst, firstAnnounce) && sent;
+            return second.Send(*toSecond, NetDiscoveryProtocol::Encode(FarAnnounce("FarSecond", 40000, 2))) && sent;
+        });
+        const auto found = FoundFar(ENetDiscoveryService::FindSessions(NetworkSessionType::SystemLink));
+        ASSERT_TRUE(hosts.get());
+        ASSERT_EQ(found.size(), 2u);
+        EXPECT_EQ(Downstream(found, "FarFirst"), 0);
+        EXPECT_GT(Downstream(found, "FarSecond"), 0);
+    }
+}
+#endif
 #endif

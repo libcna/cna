@@ -67,8 +67,15 @@ namespace CNA::Internal::Net
         // Poll() (the passive host-side responder, called every NetworkSession::Update()) safely
         // ignores stray announces.
         std::vector<Found>* currentResults_ = nullptr;
-        // Probe arrivals for hosts whose announce has not arrived yet (UDP may reorder).
-        std::vector<std::pair<uint16_t, std::chrono::steady_clock::time_point>>* earlyProbes_ = nullptr;
+        // A probe arrival for a host whose announce has not arrived yet (UDP may reorder). Its
+        // source address is kept with the port, because two hosts can share a fixed port.
+        struct EarlyProbe
+        {
+            uint16_t ConnectPort = 0;
+            std::string Address;
+            std::chrono::steady_clock::time_point At;
+        };
+        std::vector<EarlyProbe>* earlyProbes_ = nullptr;
 
         // Records one probe of a host's first train; a repeated train (the host answered the
         // broadcast and the loopback copy of the query) is ignored.
@@ -216,8 +223,10 @@ namespace CNA::Internal::Net
             std::thread thread_;
         };
         std::unique_ptr<UpstreamResponder> responder_;
-        // Hosts this search already sent an upstream train to (a duplicated query brings two invitations).
-        std::vector<uint16_t> upstreamTrains_;
+        // Hosts this search already sent an upstream train to, by connect port and responder port:
+        // a duplicated query brings one host's invitation twice, while two hosts on the same fixed
+        // connect port have responders of their own.
+        std::vector<std::pair<uint16_t, uint16_t>> upstreamTrains_;
 
         // Task 4.2: when currentResults_ is set (a search is in progress), the wall-clock moment
         // FindSessions() sent its Query - used to measure a real round-trip time for each Announce
@@ -385,18 +394,24 @@ namespace CNA::Internal::Net
         }
 
         // The found host a probe or report belongs to: the one with its connect port that answered
-        // from the same address, else the first with that port. Two hosts can share a fixed port.
-        std::vector<Found>::iterator FoundHost(uint16_t connectPort, const ENetAddress& fromAddress)
+        // from the same address. Two hosts can share a fixed port, so a datagram from another
+        // address falls back to a listing by port only when portFallback allows it and exactly one
+        // listing has that port. A host's probes leave the socket its announce left, so they never
+        // need the fallback; its upstream report leaves its responder, toward whichever of this
+        // machine's addresses its invitation came in on, and does.
+        std::vector<Found>::iterator FoundHost(uint16_t connectPort, const ENetAddress& fromAddress, bool portFallback)
         {
             const std::string ip = HostIp(fromAddress);
             auto byPort = currentResults_->end();
+            int withPort = 0;
             for (auto it = currentResults_->begin(); it != currentResults_->end(); ++it)
             {
                 if (it->Announce.ConnectPort != connectPort) continue;
                 if (it->Address == ip) return it;
                 if (byPort == currentResults_->end()) byPort = it;
+                ++withPort;
             }
-            return byPort;
+            return portFallback && withPort == 1 ? byPort : currentResults_->end();
         }
 
         // Each extra search address that resolves, with its discovery port.
@@ -476,13 +491,13 @@ namespace CNA::Internal::Net
                                 found.Address = address;
                                 found.RoundtripMs = elapsed.count();
                                 // Probes that overtook the announce.
-                                for (const auto& [port, at] : *earlyProbes_)
-                                    if (port == announce.ConnectPort)
+                                for (const EarlyProbe& arrival : *earlyProbes_)
+                                    if (arrival.ConnectPort == announce.ConnectPort && arrival.Address == address)
                                     {
                                         DiscoveryQosProbeMessage early;
-                                        early.ConnectPort = port;
+                                        early.ConnectPort = arrival.ConnectPort;
                                         early.Index = static_cast<uint8_t>(found.FirstIndex < 0 ? 0 : found.LastIndex + 1);
-                                        RecordProbe(found, early, at);
+                                        RecordProbe(found, early, arrival.At);
                                     }
                                 currentResults_->push_back(std::move(found));
                             }
@@ -492,10 +507,11 @@ namespace CNA::Internal::Net
                         if (currentResults_ != nullptr)
                         {
                             const auto invite = NetDiscoveryProtocol::DecodeUpstreamInvite(data);
-                            if (std::find(upstreamTrains_.begin(), upstreamTrains_.end(), invite.ConnectPort) != upstreamTrains_.end()
+                            const std::pair<uint16_t, uint16_t> train{invite.ConnectPort, invite.ResponderPort};
+                            if (std::find(upstreamTrains_.begin(), upstreamTrains_.end(), train) != upstreamTrains_.end()
                                 || upstreamTrains_.size() >= 64)
                                 break;
-                            upstreamTrains_.push_back(invite.ConnectPort);
+                            upstreamTrains_.push_back(train);
                             ENetAddress responder = fromAddress;
                             responder.port = invite.ResponderPort;
                             DiscoveryQosProbeMessage probe;
@@ -511,7 +527,7 @@ namespace CNA::Internal::Net
                         if (currentResults_ != nullptr)
                         {
                             const auto report = NetDiscoveryProtocol::DecodeUpstreamReport(data);
-                            auto found = FoundHost(report.ConnectPort, fromAddress);
+                            auto found = FoundHost(report.ConnectPort, fromAddress, true);
                             if (found != currentResults_->end()) found->UpstreamBytesPerSecond = report.BytesPerSecond;
                         }
                         break;
@@ -520,9 +536,10 @@ namespace CNA::Internal::Net
                         {
                             const auto at = std::chrono::steady_clock::now();
                             const auto probe = NetDiscoveryProtocol::DecodeQosProbe(data);
-                            auto found = FoundHost(probe.ConnectPort, fromAddress);
+                            auto found = FoundHost(probe.ConnectPort, fromAddress, false);
                             if (found != currentResults_->end()) RecordProbe(*found, probe, at);
-                            else if (earlyProbes_->size() < 64) earlyProbes_->emplace_back(probe.ConnectPort, at);
+                            else if (earlyProbes_->size() < 64)
+                                earlyProbes_->push_back(EarlyProbe{probe.ConnectPort, HostIp(fromAddress), at});
                         }
                         break;
                 }
@@ -544,7 +561,7 @@ namespace CNA::Internal::Net
         class CurrentResultsGuard
         {
         public:
-            CurrentResultsGuard(std::vector<Found>* results, std::vector<std::pair<uint16_t, std::chrono::steady_clock::time_point>>* early)
+            CurrentResultsGuard(std::vector<Found>* results, std::vector<EarlyProbe>* early)
             {
                 earlyProbes_ = early;
                 currentResults_ = results;
@@ -723,7 +740,7 @@ namespace CNA::Internal::Net
         for (const ENetAddress& extra : extraAddresses) SendTo(replies, extra, bytes);
 
         std::vector<Found> found;
-        std::vector<std::pair<uint16_t, std::chrono::steady_clock::time_point>> early;
+        std::vector<EarlyProbe> early;
         CurrentResultsGuard resultsGuard(&found, &early);
         upstreamTrains_.clear();
 
