@@ -28,4 +28,4 @@ mcs -sdk:4 -platform:x86 -nologo -out:"$scratch/StockCloneShaderIndexOracle.exe"
 
 "$repo/tools/platform/run_gpu_tests_private.sh" --exec env \
     WINEPREFIX="$prefix" WINEDEBUG=-all WINEDLLOVERRIDES=winedbg.exe=d WAYLAND_DISPLAY= \
-    wine "$scratch/StockCloneShaderIndexOracle.exe" 2>&1 | tee "$output/observations.txt"
+    wine "$scratch/StockCloneShaderIndexOracle.exe" 2>&1 | tr -d '\r' | tee "$output/observations.txt"
