@@ -387,6 +387,75 @@ static int validate_texture_clone(
     return 1;
 }
 
+static int find_parameter(
+    const CNA_EffectHandle effect,
+    const char* const name,
+    CNA_EffectParameterHandle* const out_parameter)
+{
+    CNA_EffectParameterCollectionHandle parameters = CNA_INVALID_HANDLE;
+    CNA_Bool found = CNA_FALSE;
+    REQUIRE(cna_effect_get_parameters(effect, &parameters) == CNA_RESULT_SUCCESS &&
+            cna_effect_parameter_collection_find_name(
+                parameters, string_view(name), &found, out_parameter) == CNA_RESULT_SUCCESS &&
+            found == CNA_TRUE &&
+            cna_effect_parameter_collection_destroy(parameters) == CNA_RESULT_SUCCESS);
+    return 1;
+}
+
+/* A clone keeps every parameter value, textures included (XNA Effect::.ctor(Effect)
+   IL_0048-0085 clones the native effect), so its texture parameter points at the source's
+   texture. The C handle behind that pointer must read back from the clone and stay retained by
+   it once the source lets go, as an EffectMaterial's does (HND-TQ-25 D8) -- through a clone of
+   the clone too. */
+static int validate_clone_parameter_retention(const CNA_Handle device)
+{
+    const CNA_Texture2DCreateInfo texture_info = {
+        sizeof(CNA_Texture2DCreateInfo), UINT32_C(1), 1U, 1U,
+        CNA_FALSE, {0U, 0U, 0U}, CNA_SURFACE_FORMAT_COLOR};
+    CNA_EffectHandle source = CNA_INVALID_HANDLE;
+    CNA_EffectHandle clone = CNA_INVALID_HANDLE;
+    CNA_EffectHandle clone_of_clone = CNA_INVALID_HANDLE;
+    CNA_EffectParameterHandle source_parameter = CNA_INVALID_HANDLE;
+    CNA_EffectParameterHandle clone_parameter = CNA_INVALID_HANDLE;
+    CNA_EffectParameterHandle second_parameter = CNA_INVALID_HANDLE;
+    CNA_Handle texture = CNA_INVALID_HANDLE;
+    CNA_Handle read = CNA_INVALID_HANDLE;
+    REQUIRE(cna_basic_effect_create(device, &source) == CNA_RESULT_SUCCESS &&
+            cna_texture2d_create(device, &texture_info, &texture) == CNA_RESULT_SUCCESS &&
+            find_parameter(source, "Texture", &source_parameter) &&
+            cna_effect_parameter_set_value_texture(
+                source_parameter, CNA_EFFECT_TEXTURE_2D, texture) == CNA_RESULT_SUCCESS);
+    REQUIRE(cna_effect_clone(source, &clone) == CNA_RESULT_SUCCESS &&
+            find_parameter(clone, "Texture", &clone_parameter) &&
+            cna_effect_parameter_get_value_texture(
+                clone_parameter, CNA_EFFECT_TEXTURE_2D, &read) == CNA_RESULT_SUCCESS &&
+            read == texture);
+
+    /* The source releases its reference; the clone's keeps the texture from being destroyed. */
+    REQUIRE(cna_effect_parameter_set_value_texture(
+                source_parameter, CNA_EFFECT_TEXTURE_2D, CNA_INVALID_HANDLE) ==
+                CNA_RESULT_SUCCESS &&
+            cna_effect_parameter_destroy(source_parameter) == CNA_RESULT_SUCCESS &&
+            cna_effect_destroy(source) == CNA_RESULT_SUCCESS &&
+            cna_texture2d_destroy(texture) == CNA_RESULT_INVALID_STATE);
+
+    read = CNA_INVALID_HANDLE;
+    REQUIRE(cna_effect_clone(clone, &clone_of_clone) == CNA_RESULT_SUCCESS &&
+            find_parameter(clone_of_clone, "Texture", &second_parameter) &&
+            cna_effect_parameter_get_value_texture(
+                second_parameter, CNA_EFFECT_TEXTURE_2D, &read) == CNA_RESULT_SUCCESS &&
+            read == texture);
+    REQUIRE(cna_effect_parameter_destroy(clone_parameter) == CNA_RESULT_SUCCESS &&
+            cna_effect_destroy(clone) == CNA_RESULT_SUCCESS &&
+            cna_texture2d_destroy(texture) == CNA_RESULT_INVALID_STATE);
+
+    /* Only the last holder is gone now, and with it the retention. */
+    REQUIRE(cna_effect_parameter_destroy(second_parameter) == CNA_RESULT_SUCCESS &&
+            cna_effect_destroy(clone_of_clone) == CNA_RESULT_SUCCESS &&
+            cna_texture2d_destroy(texture) == CNA_RESULT_SUCCESS);
+    return 1;
+}
+
 static int validate_interfaces_and_failures(const CNA_Handle device)
 {
     CNA_EffectHandle empty = CNA_INVALID_HANDLE;
@@ -461,7 +530,8 @@ static CNA_Result on_load(
         return CNA_RESULT_INVALID_STATE;
     }
     state->stage = 4;
-    if (!validate_texture_clone(state->borrowed_device, basic)) {
+    if (!validate_texture_clone(state->borrowed_device, basic) ||
+        !validate_clone_parameter_retention(state->borrowed_device)) {
         return CNA_RESULT_INVALID_STATE;
     }
     state->stage = 5;

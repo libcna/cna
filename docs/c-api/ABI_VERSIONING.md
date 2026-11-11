@@ -53,7 +53,9 @@ experimental minor-version rule (owner decisions):
   at that moment -- the stock texture slots and each parameter's slots, through elements and
   structure members -- until the material replaces or clears it or is destroyed. Destroying such a
   texture while only the material holds it returns `CNA_RESULT_INVALID_STATE`, as for its source.
-  `cna_effect_clone` does not extend the source's C retention to the copy.
+  `cna_effect_clone` retains the same handles for the clone, whose parameters keep the source's
+  texture values; ShaderEffect sampler units are not carried, since a ShaderEffect clone starts
+  with none bound.
 - TQ-037: `cna_game_run_one_frame` only ticks, as XNA's RunOneFrame does: it does not initialize
   the game or begin a run, so a host that needs initialization calls `cna_game_run_frame_ext`.
   Disposing the graphics device manager removes only its graphics-device service. A changed graphics

@@ -2166,6 +2166,23 @@ void CopyParameterRetention(
     }
 }
 
+// The C texture handles a copy of an effect refers to through the same native state as its
+// source: the stock texture slots and every texture an effect parameter holds. Both the material
+// and the clone copy those values from the source, so both keep the handles behind them.
+void CopyStockAndParameterRetention(const EffectState& source, const EffectState& destination)
+{
+    const EffectLifetime& from = *source.lifetime;
+    EffectLifetime& to = *destination.lifetime;
+    CopyRetainedTextureSlot(from.basicTexture, to.basicTexture);
+    CopyRetainedTextureSlot(from.stockTexture0, to.stockTexture0);
+    CopyRetainedTextureSlot(from.stockTexture1, to.stockTexture1);
+    CopyRetainedTextureSlot(from.environmentMap, to.environmentMap);
+    for (std::size_t index = 0U; index < from.pbrTextures.size(); ++index) {
+        CopyRetainedTextureSlot(from.pbrTextures[index], to.pbrTextures[index]);
+    }
+    CopyParameterRetention(source.parameters, destination.parameters);
+}
+
 [[nodiscard]] CNA_Result EffectMaterialCreate(
     const std::shared_ptr<EffectResource>& source,
     CNA_EffectHandle* const outMaterial)
@@ -2182,19 +2199,10 @@ void CopyParameterRetention(
     }
     const std::shared_ptr<EffectState> sourceState = GetEffectState(source);
     const std::shared_ptr<EffectState> materialState = GetEffectState(material);
-    const std::shared_ptr<EffectLifetime>& from = sourceState->lifetime;
-    const std::shared_ptr<EffectLifetime>& to = materialState->lifetime;
-    for (const auto& [unit, slot] : from->shaderTextures) {
-        CopyRetainedTextureSlot(slot, to->shaderTextures[unit]);
+    for (const auto& [unit, slot] : sourceState->lifetime->shaderTextures) {
+        CopyRetainedTextureSlot(slot, materialState->lifetime->shaderTextures[unit]);
     }
-    CopyRetainedTextureSlot(from->basicTexture, to->basicTexture);
-    CopyRetainedTextureSlot(from->stockTexture0, to->stockTexture0);
-    CopyRetainedTextureSlot(from->stockTexture1, to->stockTexture1);
-    CopyRetainedTextureSlot(from->environmentMap, to->environmentMap);
-    for (std::size_t index = 0U; index < from->pbrTextures.size(); ++index) {
-        CopyRetainedTextureSlot(from->pbrTextures[index], to->pbrTextures[index]);
-    }
-    CopyParameterRetention(sourceState->parameters, materialState->parameters);
+    CopyStockAndParameterRetention(*sourceState, *materialState);
     return CNA_RESULT_SUCCESS;
 }
 
@@ -2221,29 +2229,10 @@ void CopyParameterRetention(
         result != CNA_RESULT_SUCCESS) {
         return result;
     }
-    const std::shared_ptr<EffectLifetime> sourceLifetime =
-        GetEffectState(effect)->lifetime;
-    const std::shared_ptr<EffectLifetime> cloneLifetime =
-        GetEffectState(clonedEffect)->lifetime;
-    const auto copyRetained = [](const RetainedTextureSlot& source,
-                                 RetainedTextureSlot& destination) {
-        if (source.handle != CNA_INVALID_HANDLE) {
-            destination.Set(
-                source.handle,
-                source.value,
-                source.owner,
-                source.referenceCount);
-        }
-    };
-    copyRetained(sourceLifetime->basicTexture, cloneLifetime->basicTexture);
-    copyRetained(sourceLifetime->stockTexture0, cloneLifetime->stockTexture0);
-    copyRetained(sourceLifetime->stockTexture1, cloneLifetime->stockTexture1);
-    copyRetained(sourceLifetime->environmentMap, cloneLifetime->environmentMap);
-    for (std::size_t index = 0U; index < sourceLifetime->pbrTextures.size(); ++index) {
-        copyRetained(
-            sourceLifetime->pbrTextures[index],
-            cloneLifetime->pbrTextures[index]);
-    }
+    // Effect::.ctor(Effect) IL_0048-0085 clones the native effect with every parameter value, so
+    // the clone's texture parameters refer to the source's textures. ShaderEffect sampler units
+    // are not copied: ShaderEffect::Clone builds a fresh effect renderer with no unit bound.
+    CopyStockAndParameterRetention(*GetEffectState(effect), *GetEffectState(clonedEffect));
     return CNA_RESULT_SUCCESS;
 }
 

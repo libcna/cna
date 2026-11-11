@@ -1422,6 +1422,10 @@ CNA_C_API CNA_Result cna_effect_destroy(CNA_EffectHandle effect);
  *        In particular, EffectMaterial inherits the base Effect clone and does not preserve
  *        the EffectMaterial wrapper type. A base-Effect clone of a stock effect's material keeps
  *        drawing with that stock effect's shaders and its own raw parameter values.
+ *        The clone retains every C texture handle the source retains in its stock texture slots
+ *        and parameters, through elements and structure members, so a texture a clone parameter
+ *        holds reads back and cannot be destroyed while the clone holds it. ShaderEffect sampler
+ *        units are not carried: a ShaderEffect clone starts with no unit bound.
  * @return A CNA result code.
  */
 CNA_C_API CNA_Result cna_effect_clone(
