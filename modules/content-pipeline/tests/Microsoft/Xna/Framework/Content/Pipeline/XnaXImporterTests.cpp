@@ -848,6 +848,31 @@ TEST(XnaXImporter, TwoCornersOfATriangleOnOneVertexExchangeTheirNormals)
     EXPECT_EQ(answerOf("x_corner_normals_one_vertex.x"), std::vector<std::string>{});
 }
 
+// KI-XVERT-WINDOW: the vertex a face corner ends on is d3dx9's loader's decision, and a
+// `VertexDuplicationIndices` map, a vertex named twice in a triangle and the colour or texture
+// coordinate a vertex carries all take part in it. Each file is a probe the genuine importer
+// answered before it was committed (cnaplan/evidence/rev002/ki-xvert-02); the expectations are
+// those answers, graph for graph. `x_vertex_duplication.x` keeps one of the two faces that name two
+// vertices of its group 3 -- six positions and nine indices, where reading the map as "one label is
+// one corner" answers four and six -- and `x_dup_face_order.x`, the same two faces the other way
+// round, keeps both.
+TEST(XnaXImporter, ACornerEndsOnTheVertexTheLoaderResolvesItTo)
+{
+    for (const std::string& fixture :
+         {"x_vertex_duplication.x", "x_vertex_duplication_identity.x", "x_dup_pair.x",
+          "x_dup_triple.x", "x_dup_absent_representative.x", "x_dup_face_order.x",
+          "x_dup_shared_split.x", "x_dup_group_of_four.x", "x_dup_ring_order.x",
+          "x_dup_split_source.x", "x_dup_first_corner_group.x", "x_dup_insertion_a.x",
+          "x_dup_insertion_b.x", "x_dup_four_middle_representative.x", "x_repeat_slot_third.x",
+          "x_repeat_slot_match.x", "x_dup_texcoords.x", "x_dup_texcoords_shared.x",
+          "x_dup_colours.x", "x_dup_quad.x", "x_dup_materials.x", "x_normal_lengths.x"})
+    {
+        ImporterContext context;
+        ExpectSame(SortAnimations(Import(fixture, context)),
+                   SortAnimations(Expected("x/" + fixture)), fixture);
+    }
+}
+
 // XNASWEEP-181: the sign of a zero in a `.x` normal, which the
 // committed oracle cannot carry -- .NET Framework's `ToString` writes a negative zero as `0`.
 // These are the bits the genuine importer answered for the same file, read with the oracle's
@@ -1052,7 +1077,11 @@ TEST(XnaXImporter, AnUnnamedFrameAndAnAbsentOneAreDifferentNames)
 TEST(XnaXImporter, RefusalsMatchXna)
 {
     for (const std::string& fixture :
-         {"empty.x", "not_x.x", "bad_version.x", "truncated.x", "index_out_of_range.x"})
+         {"empty.x", "not_x.x", "bad_version.x", "truncated.x", "index_out_of_range.x",
+          // A `VertexDuplicationIndices` map the loader refuses: a label past the last vertex and
+          // a map shorter than the vertex list are E_FAIL, a longer map and a label that is not
+          // its own label are D3DERR_INVALIDCALL (KI-XVERT-WINDOW).
+          "x_dup_label_out_of_range.x", "x_dup_short.x", "x_dup_long.x", "x_dup_not_representative.x"})
     {
         ImporterContext context;
         const std::string record = Expected("x/" + fixture);

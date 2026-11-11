@@ -810,6 +810,174 @@
    "generator": "tools/xna-pipeline-oracle/model/make_corner_normal_probes.py",
    "note": "A quad naming one vertex four times with four different normals: a triangle whose three corners name one vertex is discarded and the file answers no mesh (CNA-FIX-XVERT-01). Measured on these exact files; cnaplan/evidence/rev002/hnd-xvert-01/round3.",
    "thirdParty": false
+  },
+  {
+   "file": "x_dup_pair.x",
+   "origin": "generated",
+   "generator": "tools/xna-pipeline-oracle/model/make_vertex_duplication_probes.py",
+   "note": "Two corners of one triangle whose vertices share a duplication label: the first answers the second's normal, the second a zero normal (KI-XVERT-WINDOW). Measured on these exact files; cnaplan/evidence/rev002/ki-xvert-02.",
+   "thirdParty": false
+  },
+  {
+   "file": "x_dup_triple.x",
+   "origin": "generated",
+   "generator": "tools/xna-pipeline-oracle/model/make_vertex_duplication_probes.py",
+   "note": "Three corners of one triangle under one label: the first answers the last normal and the other two zero (KI-XVERT-WINDOW). Measured on these exact files; cnaplan/evidence/rev002/ki-xvert-02.",
+   "thirdParty": false
+  },
+  {
+   "file": "x_dup_absent_representative.x",
+   "origin": "generated",
+   "generator": "tools/xna-pipeline-oracle/model/make_vertex_duplication_probes.py",
+   "note": "A label whose own vertex no face names behaves as any other label (KI-XVERT-WINDOW). Measured on these exact files; cnaplan/evidence/rev002/ki-xvert-02.",
+   "thirdParty": false
+  },
+  {
+   "file": "x_dup_face_order.x",
+   "origin": "generated",
+   "generator": "tools/xna-pipeline-oracle/model/make_vertex_duplication_probes.py",
+   "note": "x_vertex_duplication.x's face naming vertices 3 and 4 before the face naming 4 and 5: both stay, where the fixture's own order drops the first (KI-XVERT-WINDOW). Measured on these exact files; cnaplan/evidence/rev002/ki-xvert-02.",
+   "thirdParty": false
+  },
+  {
+   "file": "x_dup_shared_split.x",
+   "origin": "generated",
+   "generator": "tools/xna-pipeline-oracle/model/make_vertex_duplication_probes.py",
+   "note": "A second face resolves its corner to the vertex the first face made, at another vertex's position (KI-XVERT-WINDOW). Measured on these exact files; cnaplan/evidence/rev002/ki-xvert-02.",
+   "thirdParty": false
+  },
+  {
+   "file": "x_dup_group_of_four.x",
+   "origin": "generated",
+   "generator": "tools/xna-pipeline-oracle/model/make_vertex_duplication_probes.py",
+   "note": "x_vertex_duplication.x's faces with vertices 3, 4 and 5 labelled 0 (KI-XVERT-WINDOW). Measured on these exact files; cnaplan/evidence/rev002/ki-xvert-02.",
+   "thirdParty": false
+  },
+  {
+   "file": "x_dup_ring_order.x",
+   "origin": "generated",
+   "generator": "tools/xna-pipeline-oracle/model/make_vertex_duplication_probes.py",
+   "note": "Two other vertices of the label hold the normal; the one round the ring from the anchor is found (KI-XVERT-WINDOW). Measured on these exact files; cnaplan/evidence/rev002/ki-xvert-02.",
+   "thirdParty": false
+  },
+  {
+   "file": "x_dup_split_source.x",
+   "origin": "generated",
+   "generator": "tools/xna-pipeline-oracle/model/make_vertex_duplication_probes.py",
+   "note": "A new vertex copies the vertex the earlier corner holds at that moment, not its file vertex (KI-XVERT-WINDOW). Measured on these exact files; cnaplan/evidence/rev002/ki-xvert-02.",
+   "thirdParty": false
+  },
+  {
+   "file": "x_dup_first_corner_group.x",
+   "origin": "generated",
+   "generator": "tools/xna-pipeline-oracle/model/make_vertex_duplication_probes.py",
+   "note": "A first-occurrence corner whose own vertex holds another normal finds the label's vertex holding its normal (KI-XVERT-WINDOW). Measured on these exact files; cnaplan/evidence/rev002/ki-xvert-02.",
+   "thirdParty": false
+  },
+  {
+   "file": "x_dup_insertion_a.x",
+   "origin": "generated",
+   "generator": "tools/xna-pipeline-oracle/model/make_vertex_duplication_probes.py",
+   "note": "Random mesh separating where a lookup starts: from the vertex the earlier corner holds, not its file vertex (KI-XVERT-WINDOW round 2, X14). Measured on these exact files; cnaplan/evidence/rev002/ki-xvert-02.",
+   "thirdParty": false
+  },
+  {
+   "file": "x_dup_insertion_b.x",
+   "origin": "generated",
+   "generator": "tools/xna-pipeline-oracle/model/make_vertex_duplication_probes.py",
+   "note": "Random mesh separating where a new vertex enters its label's ring: after the label's own vertex, not after the vertex it copies (KI-XVERT-WINDOW round 2, X16). Measured on these exact files; cnaplan/evidence/rev002/ki-xvert-02.",
+   "thirdParty": false
+  },
+  {
+   "file": "x_repeat_slot_third.x",
+   "origin": "generated",
+   "generator": "tools/xna-pipeline-oracle/model/make_vertex_duplication_probes.py",
+   "note": "No map: a vertex named twice in a triangle whose own vertex already holds a third normal answers that third normal (KI-XVERT-WINDOW). Measured on these exact files; cnaplan/evidence/rev002/ki-xvert-02.",
+   "thirdParty": false
+  },
+  {
+   "file": "x_repeat_slot_match.x",
+   "origin": "generated",
+   "generator": "tools/xna-pipeline-oracle/model/make_vertex_duplication_probes.py",
+   "note": "No map: the same where the second corner's normal is the one the vertex holds; the triangle is discarded (KI-XVERT-WINDOW). Measured on these exact files; cnaplan/evidence/rev002/ki-xvert-02.",
+   "thirdParty": false
+  },
+  {
+   "file": "x_dup_texcoords.x",
+   "origin": "generated",
+   "generator": "tools/xna-pipeline-oracle/model/make_vertex_duplication_probes.py",
+   "note": "The map with distinct texture coordinates: the face the plain fixture drops is kept, because the match compares texture coordinates (KI-XVERT-WINDOW). Measured on these exact files; cnaplan/evidence/rev002/ki-xvert-02.",
+   "thirdParty": false
+  },
+  {
+   "file": "x_dup_texcoords_shared.x",
+   "origin": "generated",
+   "generator": "tools/xna-pipeline-oracle/model/make_vertex_duplication_probes.py",
+   "note": "The same with the two vertices sharing a texture coordinate: dropped (KI-XVERT-WINDOW). Measured on these exact files; cnaplan/evidence/rev002/ki-xvert-02.",
+   "thirdParty": false
+  },
+  {
+   "file": "x_dup_colours.x",
+   "origin": "generated",
+   "generator": "tools/xna-pipeline-oracle/model/make_vertex_duplication_probes.py",
+   "note": "As x_dup_texcoords.x with vertex colours (KI-XVERT-WINDOW). Measured on these exact files; cnaplan/evidence/rev002/ki-xvert-02.",
+   "thirdParty": false
+  },
+  {
+   "file": "x_dup_quad.x",
+   "origin": "generated",
+   "generator": "tools/xna-pipeline-oracle/model/make_vertex_duplication_probes.py",
+   "note": "A quad with vertices 0 and 2 under one label: each fan triangle resolves separately (KI-XVERT-WINDOW). Measured on these exact files; cnaplan/evidence/rev002/ki-xvert-02.",
+   "thirdParty": false
+  },
+  {
+   "file": "x_dup_materials.x",
+   "origin": "generated",
+   "generator": "tools/xna-pipeline-oracle/model/make_vertex_duplication_probes.py",
+   "note": "x_vertex_duplication.x with two materials: corners resolve in file order, positions per batch (KI-XVERT-WINDOW). Measured on these exact files; cnaplan/evidence/rev002/ki-xvert-02.",
+   "thirdParty": false
+  },
+  {
+   "file": "x_dup_four_middle_representative.x",
+   "origin": "generated",
+   "generator": "tools/xna-pipeline-oracle/model/make_vertex_duplication_probes.py",
+   "note": "A four-vertex label whose representative is not its lowest vertex (KI-XVERT-WINDOW round 3). Measured on these exact files; cnaplan/evidence/rev002/ki-xvert-02.",
+   "thirdParty": false
+  },
+  {
+   "file": "x_normal_lengths.x",
+   "origin": "generated",
+   "generator": "tools/xna-pipeline-oracle/model/make_vertex_duplication_probes.py",
+   "note": "One vertex named twice with (0,0,1) and (0,0,2): two normals, compared by their declared values (KI-XVERT-WINDOW). Measured on these exact files; cnaplan/evidence/rev002/ki-xvert-02.",
+   "thirdParty": false
+  },
+  {
+   "file": "x_dup_label_out_of_range.x",
+   "origin": "generated",
+   "generator": "tools/xna-pipeline-oracle/model/make_vertex_duplication_probes.py",
+   "note": "A label past the last vertex: E_FAIL (KI-XVERT-WINDOW). Measured on these exact files; cnaplan/evidence/rev002/ki-xvert-02.",
+   "thirdParty": false
+  },
+  {
+   "file": "x_dup_short.x",
+   "origin": "generated",
+   "generator": "tools/xna-pipeline-oracle/model/make_vertex_duplication_probes.py",
+   "note": "Fewer map entries than vertices: E_FAIL (KI-XVERT-WINDOW). Measured on these exact files; cnaplan/evidence/rev002/ki-xvert-02.",
+   "thirdParty": false
+  },
+  {
+   "file": "x_dup_long.x",
+   "origin": "generated",
+   "generator": "tools/xna-pipeline-oracle/model/make_vertex_duplication_probes.py",
+   "note": "More map entries than vertices: D3DERR_INVALIDCALL (KI-XVERT-WINDOW). Measured on these exact files; cnaplan/evidence/rev002/ki-xvert-02.",
+   "thirdParty": false
+  },
+  {
+   "file": "x_dup_not_representative.x",
+   "origin": "generated",
+   "generator": "tools/xna-pipeline-oracle/model/make_vertex_duplication_probes.py",
+   "note": "A label that is not labelled with itself: D3DERR_INVALIDCALL (KI-XVERT-WINDOW). Measured on these exact files; cnaplan/evidence/rev002/ki-xvert-02.",
+   "thirdParty": false
   }
  ]
 }

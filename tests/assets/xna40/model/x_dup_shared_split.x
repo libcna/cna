@@ -1,0 +1,34 @@
+xof 0303txt 0032
+// Written by tools/xna-pipeline-oracle/model/make_vertex_duplication_probes.py (C00_2223_both).
+template VertexDuplicationIndices {
+ <b8d65549-d7c9-4995-89cf-53a9a8b031e3>
+ DWORD nIndices;
+ DWORD nOriginalVertices;
+ array DWORD indices[nIndices];
+}
+
+Mesh dup_shared_split {
+ 4;
+  1.000000;0.000000;0.000000;,
+  0.000000;2.000000;0.000000;,
+  3.000000;0.000000;0.000000;,
+  0.000000;0.000000;4.000000;;
+ 2;
+  3;0,2,3;,
+  3;1,2,3;;
+ MeshNormals {
+  4;
+  0.000000;1.000000;0.000000;,
+  1.000000;0.000000;0.000000;,
+  0.000000;0.000000;1.000000;,
+  -1.000000;0.000000;0.000000;;
+  2;
+  3;0,2,3;,
+  3;1,2,3;;
+ }
+ VertexDuplicationIndices {
+  4;
+  4;
+  2,2,2,3;
+ }
+}

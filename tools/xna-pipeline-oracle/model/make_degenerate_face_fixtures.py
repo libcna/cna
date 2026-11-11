@@ -8,8 +8,8 @@ declares 180 and XNA answers 170. The two are different rules and these fixtures
 A triangle two of whose corners are the **same corner** is discarded, and the rest of its polygon is
 not. What makes two corners the same is the vertex rather than the index, which is why
 `x_face_degenerate_normals.x` -- the same repeated index carrying two different normals -- keeps its
-face. `VertexDuplicationIndices` is the second rule: two corners whose vertices share an entry are
-one corner even where their positions and their normals differ.
+face. `VertexDuplicationIndices` takes part in the same decision, d3dx9's loader resolving each corner
+to a vertex; what it does is measured by make_vertex_duplication_probes.py (KI-XVERT-WINDOW).
 
     python3 tools/xna-pipeline-oracle/model/make_degenerate_face_fixtures.py <directory>
 """
@@ -114,8 +114,9 @@ def main(argv=None):
         "x_face_degenerate_materials.x": mesh(
             "face_degenerate_materials", [(0, 1, 2), (3, 4, 3), (1, 2, 4)],
             materials=3, materialPerFace=[0, 1, 2]),
-        # Vertices 4 and 5 are duplicates of 3, so a face naming two of the three is one corner
-        # twice even though its positions and its normals differ.
+        # Vertices 4 and 5 are duplicates of 3. The genuine importer keeps `(0,4,5)` and drops
+        # `(1,3,4)`, because the face before it gave vertex 4 its normal: six positions and nine
+        # indices (KI-XVERT-WINDOW, make_vertex_duplication_probes.py).
         "x_vertex_duplication.x": mesh(
             "vertex_duplication", [(0, 1, 2), (0, 4, 5), (1, 3, 4), (1, 2, 3)],
             duplication=[0, 1, 2, 3, 3, 3]),

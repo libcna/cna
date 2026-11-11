@@ -654,6 +654,9 @@ namespace Microsoft::Xna::Framework::Content::Pipeline
             // that cube has a different normal (`XNASWEEP-144`;
             // `XNASWEEP-112` is the same rule on the FBX route).
             std::vector<std::vector<std::size_t>> normalFaces;
+            // The declared values themselves, before the basis change and the normalization: they
+            // are what two normals are compared by (below).
+            std::vector<std::tuple<float, float, float>> declaredNormals;
             if (const Canon::DirectXFileObject* object2 = Find(object, "MeshNormals"); object2 != nullptr)
             {
                 std::size_t normalAt = 0u;
@@ -665,8 +668,10 @@ namespace Microsoft::Xna::Framework::Content::Pipeline
                     // `(0, 0, 2)` comes back `(0, 0, -1)` and `0.801785` comes back `0.801784`,
                     // while an `.fbx` mesh's normals are answered as the file's own floats bit for
                     // bit (`XNASWEEP-167`).
-                    normals.push_back(ConvertNormal(
-                        Vector3(At(*object2, normalAt), At(*object2, normalAt + 1), At(*object2, normalAt + 2))));
+                    const Vector3 declared(At(*object2, normalAt), At(*object2, normalAt + 1),
+                                           At(*object2, normalAt + 2));
+                    declaredNormals.emplace_back(declared.X, declared.Y, declared.Z);
+                    normals.push_back(ConvertNormal(declared));
                     normalAt += 3u;
                 }
                 const std::size_t normalFaceCount = Count(*object2, normalAt++);
@@ -688,15 +693,16 @@ namespace Microsoft::Xna::Framework::Content::Pipeline
             // index into the list, but what separates two vertices is the *value*: SAMPLE-057's
             // `cylinder.x` writes 418 normal entries over 21 distinct values, and XNA answers 135
             // vertices -- the distinct (position, normal value) pairs -- where keying on the index
-            // gives 418, one per entry (`XNASWEEP-148`).
+            // gives 418, one per entry (`XNASWEEP-148`). The numbers compared are the declared
+            // ones, not the normalized: `(0, 0, 1)` and `(0, 0, 2)` answer one direction and two
+            // vertices, and as two corners of one vertex in a triangle they do not make it
+            // degenerate (`x_normal_lengths.x`, KI-XVERT-WINDOW).
             std::vector<std::size_t> canonicalNormal(normals.size());
             {
                 std::map<std::tuple<float, float, float>, std::size_t> first;
                 for (std::size_t i = 0; i < normals.size(); ++i)
                 {
-                    const std::tuple<float, float, float> key{normals[i].X, normals[i].Y,
-                                                              normals[i].Z};
-                    canonicalNormal[i] = first.emplace(key, i).first->second;
+                    canonicalNormal[i] = first.emplace(declaredNormals[i], i).first->second;
                 }
             }
             const std::vector<Vector3> generated =
@@ -789,8 +795,12 @@ namespace Microsoft::Xna::Framework::Content::Pipeline
             // The other channels are grouped here into a class per file vertex so that the vertex
             // key stays three integers wide (`XNASWEEP-173`).
             std::vector<std::size_t> channelClassOf(vertexCount, 0u);
+            // The same without the bone weights: what a vertex of D3DX's vertex buffer carries
+            // beside its position and normal, and so what its corner resolution compares (below).
+            std::vector<std::size_t> vertexDataClassOf(vertexCount, 0u);
             {
                 std::map<std::string, std::size_t> classes;
+                std::map<std::string, std::size_t> dataClasses;
                 for (std::size_t i = 0; i < vertexCount; ++i)
                 {
                     std::string signature;
@@ -814,6 +824,8 @@ namespace Microsoft::Xna::Framework::Content::Pipeline
                         append(textureCoordinates[i].Y);
                     }
                     signature.push_back('\x1f');
+                    vertexDataClassOf[i] =
+                        dataClasses.emplace(signature, dataClasses.size()).first->second;
                     if (i < weights.size())
                     {
                         for (const BoneWeight& weight : weights[i])
@@ -868,46 +880,99 @@ namespace Microsoft::Xna::Framework::Content::Pipeline
                     throw InvalidContentException(Unreadable("E_FAIL"));
                 }
             }
-            // A triangle two of whose corners are the same corner is discarded, and the rest of
-            // its polygon is not: SAMPLE-141's `racer.x` declares 2,447 faces in its chassis and
-            // the genuine importer answers 2,445, the two it drops being `(1067,1068,1067)` and
-            // `(1077,1078,1077)` (`XNASWEEP-198`). What makes
-            // two corners the same is the *vertex* and not the index: `x_face_degenerate.x` names
-            // one vertex twice in a face and loses it, and `x_face_degenerate_normals.x` names the
-            // same vertex twice with two different normals and keeps it, because those are two
-            // vertices. An n-gon loses only the fan triangles that are degenerate
-            // (`x_face_degenerate_quad.x`), a material whose faces all go produces no geometry,
-            // and a position no surviving triangle names is not in the mesh's position list.
-            // `VertexDuplicationIndices` says which vertex each one was split from, and the
-            // genuine importer treats two corners whose vertices share an entry as one corner even
-            // where their positions and their normals differ. SAMPLE-141's `target.x` declares 180
-            // faces and XNA answers 170: the ten it drops are exactly the ten that name two
-            // vertices of one duplication group, and collapsing a single pair of that file's map
-            // drops exactly the faces naming both (`XNASWEEP-198`).
-            //
-            // The two conditions on it are measured rather than derived, and are stated as
-            // measurements: the same map is *inert* when the mesh declares no `MeshNormals`
-            // (`target.x`'s own data with that block removed answers all 180) and when it declares
-            // `MeshTextureCoords` (the genuine importer splits a vertex instead of dropping the
-            // face). What is behind that gate is not understood, so the rule is kept inside the
-            // window it was measured in rather than generalized past it; XNASWEEP-231
-            // records the probe families the window does not explain.
-            std::vector<std::size_t> originalOf;
+            // `VertexDuplicationIndices` labels every vertex with the vertex it was split from, and
+            // a label must be a vertex labelled with itself. The genuine importer refuses a map
+            // whatever else the mesh declares, with or without `MeshNormals`: more entries than
+            // vertices is D3DERR_INVALIDCALL before any label is read, fewer is E_FAIL, a label past
+            // the last vertex is E_FAIL, and only then is a label that is not its own label
+            // D3DERR_INVALIDCALL (`x_dup_long.x`, `x_dup_short.x`, `x_dup_label_out_of_range.x`,
+            // `x_dup_not_representative.x`; KI-XVERT-WINDOW). `nOriginalVertices` is not read:
+            // declaring it wrongly changes nothing (`XNASWEEP-198`).
+            std::vector<std::size_t> labelOf(vertexCount);
+            for (std::size_t i = 0; i < vertexCount; ++i) { labelOf[i] = i; }
             if (const Canon::DirectXFileObject* duplication = Find(object, "VertexDuplicationIndices");
-                duplication != nullptr && !normals.empty() && Find(object, "MeshTextureCoords") == nullptr)
+                duplication != nullptr)
             {
                 std::size_t duplicationAt = 0u;
                 const std::size_t count = Count(*duplication, duplicationAt++);
-                // `nOriginalVertices`: declaring it wrongly changes nothing the importer answers.
                 ++duplicationAt;
-                originalOf.resize(vertexCount);
-                for (std::size_t i = 0; i < vertexCount; ++i) { originalOf[i] = i; }
-                for (std::size_t i = 0; i < count && i < vertexCount; ++i)
+                if (count > vertexCount)
                 {
-                    originalOf[i] = Count(*duplication, duplicationAt + i);
+                    throw InvalidContentException(Unreadable("D3DERR_INVALIDCALL"));
+                }
+                if (count < vertexCount)
+                {
+                    throw InvalidContentException(Unreadable("E_FAIL"));
+                }
+                for (std::size_t i = 0; i < count; ++i)
+                {
+                    labelOf[i] = Count(*duplication, duplicationAt + i);
+                    if (labelOf[i] >= vertexCount)
+                    {
+                        throw InvalidContentException(Unreadable("E_FAIL"));
+                    }
+                }
+                for (std::size_t i = 0; i < count; ++i)
+                {
+                    if (labelOf[labelOf[i]] != labelOf[i])
+                    {
+                        throw InvalidContentException(Unreadable("D3DERR_INVALIDCALL"));
+                    }
                 }
             }
 
+            // Which vertex a face corner ends on is D3DX's decision: the importer loads the file
+            // with `D3DXLoadMeshHierarchyFromXW` and reads the loader's vertex and index buffers
+            // back, and with `MeshNormals` a corner names its vertex and its normal separately.
+            // Measured as a black box on d3dx9_41 9.26.952.2844 over 210 probes, the last 86 of
+            // them predicted before they were run (cnaplan/evidence/rev002/ki-xvert-02):
+            //
+            //  * Every label has a ring of D3DX vertices: the label's own vertex, then the file's
+            //    other vertices of that label in descending order; a vertex made later goes in
+            //    right after the label's own. A lookup from an anchor takes the anchor itself if no
+            //    corner has given it a normal yet (only where a label first occurs in a triangle),
+            //    else the first vertex round the ring from the anchor that holds a normal of the
+            //    same declared value and the anchor's colour and texture coordinate -- positions are
+            //    not compared -- else a new vertex, a copy of the anchor holding that normal.
+            //  * Fan triangles in file order, corners in order. A corner whose label no earlier
+            //    corner of its triangle has looks up from its own vertex and ends there. A corner
+            //    whose label an earlier corner has looks up from the vertex the first such corner
+            //    holds, and the answer replaces *that* corner's vertex; this corner keeps its own
+            //    file vertex and gives it no normal. A vertex no corner gave a normal answers zero.
+            //  * A triangle two of whose vertices end up one is discarded; the rest of its polygon
+            //    is not (`x_face_degenerate_quad.x`), a material whose faces all go produces no
+            //    geometry, and a position no kept triangle names is not in the mesh's list.
+            //
+            // With no map (every vertex its own label) that is what SAMPLE-141's `racer.x` (2,447
+            // faces, 2,445 kept, `XNASWEEP-198`), `x_face_degenerate*.x` and `x_corner_normals_*.x`
+            // measured -- one vertex named twice with one normal is discarded, with two the corners
+            // exchange them, three times always goes -- and a repeated vertex whose own vertex
+            // already holds a third normal answers that third one (`x_repeat_slot_third.x`). A map makes vertices of one label one vertex for this
+            // even where their positions differ: `x_vertex_duplication.x` keeps one of the two faces
+            // naming two of its group 3 and drops the other because a face before it gave vertex 4
+            // its normal (`x_dup_face_order.x` keeps both), and `x_dup_pair.x` answers its first
+            // corner with its second corner's normal and its second corner with a zero one.
+            // Without `MeshNormals` nothing is looked up and only a repeated file vertex is
+            // degenerate; the map is not inert there for generated normals, which is not modelled
+            // (KI-XVERT-WINDOW round 4).
+            constexpr std::size_t kNoNormal = static_cast<std::size_t>(-1);
+            std::vector<std::size_t> sourceOf(vertexCount);
+            std::vector<std::size_t> normalEntryOf(vertexCount, kNoNormal);
+            std::vector<std::size_t> ringNext(vertexCount);
+            for (std::size_t i = 0; i < vertexCount; ++i)
+            {
+                sourceOf[i] = i;
+                ringNext[i] = i;
+            }
+            for (std::size_t i = 0; i < vertexCount; ++i)
+            {
+                const std::size_t label = labelOf[i];
+                if (label != i)
+                {
+                    ringNext[i] = ringNext[label];
+                    ringNext[label] = i;
+                }
+            }
             const auto normalOfCorner = [&](const std::size_t face, const std::size_t corner)
             {
                 if (face < normalFaces.size() && corner < normalFaces[face].size())
@@ -916,50 +981,90 @@ namespace Microsoft::Xna::Framework::Content::Pipeline
                 }
                 return faces[face][corner];
             };
-            const auto sameCorner = [&](const std::size_t face, const std::size_t left,
-                                        const std::size_t right)
+            const auto normalKeyOf = [&](const std::size_t entry)
             {
-                const std::size_t leftVertex = faces[face][left];
-                const std::size_t rightVertex = faces[face][right];
-                if (!originalOf.empty() && originalOf[leftVertex] == originalOf[rightVertex])
-                {
-                    return true;
-                }
-                // The file's own vertex index, not the merged position: `x_position_merge.x`
-                // names vertices 7 and 0 in one face, they hold the same position *and* the same
-                // normal so they are one vertex in the geometry, and the genuine importer keeps
-                // the triangle -- a face with two corners at the same point is not the same thing
-                // as a face that names one corner twice.
-                if (leftVertex != rightVertex) { return false; }
-                const std::size_t leftNormal = normalOfCorner(face, left);
-                const std::size_t rightNormal = normalOfCorner(face, right);
-                const std::size_t leftKey =
-                    leftNormal < canonicalNormal.size() ? canonicalNormal[leftNormal] : leftNormal;
-                const std::size_t rightKey =
-                    rightNormal < canonicalNormal.size() ? canonicalNormal[rightNormal] : rightNormal;
-                return leftKey == rightKey;
+                return entry < canonicalNormal.size() ? canonicalNormal[entry]
+                                                      : canonicalNormal.size() + entry;
             };
+            const auto lookup = [&](const std::size_t anchor, const std::size_t entry,
+                                    const bool takeUnassigned)
+            {
+                if (takeUnassigned && normalEntryOf[anchor] == kNoNormal)
+                {
+                    normalEntryOf[anchor] = entry;
+                    return anchor;
+                }
+                const std::size_t key = normalKeyOf(entry);
+                const std::size_t data = vertexDataClassOf[sourceOf[anchor]];
+                std::size_t at = anchor;
+                do
+                {
+                    if (normalEntryOf[at] != kNoNormal && normalKeyOf(normalEntryOf[at]) == key &&
+                        vertexDataClassOf[sourceOf[at]] == data)
+                    {
+                        return at;
+                    }
+                    at = ringNext[at];
+                } while (at != anchor);
+                const std::size_t created = sourceOf.size();
+                const std::size_t label = labelOf[sourceOf[anchor]];
+                sourceOf.push_back(sourceOf[anchor]);
+                normalEntryOf.push_back(entry);
+                ringNext.push_back(ringNext[label]);
+                ringNext[label] = created;
+                return created;
+            };
+            // The D3DX vertices each kept fan triangle ends on.
             std::vector<std::vector<std::array<std::size_t, 3>>> keptTriangles(faces.size());
             for (std::size_t face = 0; face < faces.size(); ++face)
             {
                 for (std::size_t corner = 2; corner < faces[face].size(); ++corner)
                 {
-                    const std::array<std::size_t, 3> triangle{0u, corner - 1u, corner};
-                    // Three corners naming one file vertex are discarded whatever normals they
-                    // carry: a quad that names one vertex four times with four different normals
-                    // answers no mesh at all (CNA-FIX-XVERT-01).
-                    if (faces[face][triangle[0]] == faces[face][triangle[1]] &&
-                        faces[face][triangle[1]] == faces[face][triangle[2]])
+                    const std::array<std::size_t, 3> fan{0u, corner - 1u, corner};
+                    const std::array<std::size_t, 3> own{faces[face][fan[0]], faces[face][fan[1]],
+                                                         faces[face][fan[2]]};
+                    std::array<std::size_t, 3> vertex = own;
+                    if (!normals.empty())
+                    {
+                        for (std::size_t at = 0; at < 3u; ++at)
+                        {
+                            std::size_t first = at;
+                            for (std::size_t earlier = 0; earlier < at; ++earlier)
+                            {
+                                if (labelOf[own[earlier]] == labelOf[own[at]])
+                                {
+                                    first = earlier;
+                                    break;
+                                }
+                            }
+                            const std::size_t entry = normalOfCorner(face, fan[at]);
+                            if (first == at)
+                            {
+                                vertex[at] = lookup(own[at], entry, true);
+                            }
+                            else
+                            {
+                                vertex[first] = lookup(vertex[first], entry, false);
+                            }
+                        }
+                    }
+                    if (vertex[0] == vertex[1] || vertex[1] == vertex[2] || vertex[0] == vertex[2])
                     {
                         continue;
                     }
-                    if (sameCorner(face, triangle[0], triangle[1]) ||
-                        sameCorner(face, triangle[1], triangle[2]) ||
-                        sameCorner(face, triangle[0], triangle[2]))
-                    {
-                        continue;
-                    }
-                    keptTriangles[face].push_back(triangle);
+                    keptTriangles[face].push_back(vertex);
+                }
+            }
+            // An unassigned vertex holds the loader's zeroed normal, and the importer merges it with
+            // any other vertex at its position whose declared normal is zero.
+            std::size_t zeroNormalKey = static_cast<std::size_t>(-2);
+            for (std::size_t i = 0; i < declaredNormals.size(); ++i)
+            {
+                if (std::get<0>(declaredNormals[i]) == 0.0f && std::get<1>(declaredNormals[i]) == 0.0f &&
+                    std::get<2>(declaredNormals[i]) == 0.0f)
+                {
+                    zeroNormalKey = canonicalNormal[i];
+                    break;
                 }
             }
 
@@ -967,8 +1072,11 @@ namespace Microsoft::Xna::Framework::Content::Pipeline
 
             for (std::size_t batch = 0; batch < batches; ++batch)
             {
-                // The batch's positions come first, in ascending file order, because that is the
-                // order the genuine importer adds them in (`XNASWEEP-173`).
+                // The batch's positions come first, in the order of the D3DX vertices that hold
+                // them -- the file's own in ascending order, then the copies in the order they were
+                // made -- because that is the order the genuine importer adds them in
+                // (`XNASWEEP-173`). `x_vertex_duplication.x` answers its sixth vertex's position
+                // before its fifth's: only a copy of the fifth is used.
                 {
                     std::set<std::size_t> referenced;
                     for (std::size_t face = 0; face < faces.size(); ++face)
@@ -979,15 +1087,12 @@ namespace Microsoft::Xna::Framework::Content::Pipeline
                         }
                         for (const std::array<std::size_t, 3>& triangle : keptTriangles[face])
                         {
-                            for (const std::size_t corner : triangle)
-                            {
-                                referenced.insert(faces[face][corner]);
-                            }
+                            referenced.insert(triangle.begin(), triangle.end());
                         }
                     }
-                    for (const std::size_t vertex : referenced)
+                    for (const std::size_t loaded : referenced)
                     {
-                        placePosition(vertex);
+                        placePosition(sourceOf[loaded]);
                     }
                 }
                 // A batch's vertices are the mesh positions its own faces name, in first-use
@@ -996,75 +1101,52 @@ namespace Microsoft::Xna::Framework::Content::Pipeline
                 std::vector<std::size_t> usedNormals;
                 std::map<std::tuple<std::size_t, std::size_t, std::size_t>, SharpRuntime::intcs> local;
                 std::vector<SharpRuntime::intcs> indices;
+                // A polygon becomes a triangle fan, which is how every reader of this format turns
+                // an n-gon into triangles; the fan triangles discarded above are not emitted and
+                // their corners create no vertex (`XNASWEEP-198`).
+                const auto place = [&](const std::size_t loaded)
+                {
+                    const std::size_t vertex = sourceOf[loaded];
+                    // The key is the position *and* the normal, because a vertex is both
+                    // (`XNASWEEP-144`) -- and the position is the *merged* one, so two file
+                    // vertices that name the same position and the same normal are one vertex.
+                    // `x_position_merge.x` declares eight vertices over five positions and the
+                    // genuine importer answers six (`XNASWEEP-173`).
+                    const std::size_t normalIndex = normals.empty() ? vertex : normalEntryOf[loaded];
+                    // A *generated* normal belongs to the position rather than to the corner,
+                    // because that is what it is accumulated into -- so two file vertices at the
+                    // same position are one vertex, where two that name the same position and
+                    // different declared normals are two. `x_generated_normals_exact.x` is
+                    // twenty-four triangles sharing an origin: the genuine importer answers 49
+                    // vertices for its 49 positions, and keying on the corner answers 72
+                    // (`XNASWEEP-233`).
+                    const std::size_t normalKey = normals.empty()               ? positionOf[vertex]
+                                                  : normalIndex == kNoNormal ? zeroNormalKey
+                                                                             : normalKeyOf(normalIndex);
+                    const std::tuple<std::size_t, std::size_t, std::size_t> key{
+                        positionOf[vertex], normalKey, channelClassOf[vertex]};
+                    const auto found = local.find(key);
+                    if (found == local.end())
+                    {
+                        const auto assigned = static_cast<SharpRuntime::intcs>(used.size());
+                        local.emplace(key, assigned);
+                        used.push_back(vertex);
+                        usedNormals.push_back(normalIndex);
+                        return assigned;
+                    }
+                    return found->second;
+                };
                 for (std::size_t face = 0; face < faces.size(); ++face)
                 {
                     if (!materials.empty() && materialPerFace[face] != batch)
                     {
                         continue;
                     }
-                    // A polygon becomes a triangle fan, which is how every reader of this format
-                    // turns an n-gon into triangles; the fan triangles a corner test discarded are
-                    // not emitted and their corners create no vertex (`XNASWEEP-198`).
-                    const auto place = [&](const std::size_t corner, const std::size_t normalCorner)
-                    {
-                        const std::size_t vertex = faces[face][corner];
-                        // The key is the position *and* the normal the corner names, because a
-                        // vertex is both (`XNASWEEP-144`) -- and the position is the *merged* one,
-                        // so two file vertices that name the same position and the same normal are
-                        // one vertex. `x_position_merge.x` declares eight vertices over five
-                        // positions and the genuine importer answers six (`XNASWEEP-173`).
-                        std::size_t normalIndex = vertex;
-                        if (face < normalFaces.size() && normalCorner < normalFaces[face].size())
-                        {
-                            normalIndex = normalFaces[face][normalCorner];
-                        }
-                        // A *generated* normal belongs to the position rather than to the corner,
-                        // because that is what it is accumulated into -- so two file vertices at
-                        // the same position are one vertex, where two that name the same position
-                        // and different declared normals are two. `x_generated_normals_exact.x` is
-                        // twenty-four triangles sharing an origin: the genuine importer answers 49
-                        // vertices for its 49 positions, and keying on the corner answers 72
-                        // (`XNASWEEP-233`).
-                        const std::size_t normalKey =
-                            normals.empty()
-                                ? positionOf[vertex]
-                                : (normalIndex < canonicalNormal.size() ? canonicalNormal[normalIndex]
-                                                                        : normalIndex);
-                        const std::tuple<std::size_t, std::size_t, std::size_t> key{
-                            positionOf[vertex], normalKey, channelClassOf[vertex]};
-                        const auto found = local.find(key);
-                        if (found == local.end())
-                        {
-                            const auto assigned = static_cast<SharpRuntime::intcs>(used.size());
-                            local.emplace(key, assigned);
-                            used.push_back(vertex);
-                            usedNormals.push_back(normalIndex);
-                            return assigned;
-                        }
-                        return found->second;
-                    };
                     for (const std::array<std::size_t, 3>& triangle : keptTriangles[face])
                     {
-                        // Two corners of one triangle that name the same file vertex exchange
-                        // their declared normals. Genuine XNA answers that for the pair at every
-                        // corner position, over a quad and over each of a heptagon's five fan
-                        // triangles separately, and never across triangles or faces
-                        // (`x_corner_normals_*.x`, CNA-FIX-XVERT-01). Without `MeshNormals` a
-                        // corner's normal index is its vertex, so the exchange changes nothing.
-                        std::array<std::size_t, 3> normalCorner = triangle;
-                        for (std::size_t left = 0; left < 3u; ++left)
+                        for (const std::size_t loaded : triangle)
                         {
-                            for (std::size_t right = left + 1u; right < 3u; ++right)
-                            {
-                                if (faces[face][triangle[left]] == faces[face][triangle[right]])
-                                {
-                                    std::swap(normalCorner[left], normalCorner[right]);
-                                }
-                            }
-                        }
-                        for (std::size_t at = 0; at < 3u; ++at)
-                        {
-                            indices.push_back(place(triangle[at], normalCorner[at]));
+                            indices.push_back(place(loaded));
                         }
                     }
                 }
@@ -1123,9 +1205,14 @@ namespace Microsoft::Xna::Framework::Content::Pipeline
                         // x/generated_normals.x).
                         const std::size_t normalIndex = usedNormals[v];
                         const std::size_t vertex = used[v];
-                        channel.push_back(normalIndex < normals.size() ? normals[normalIndex]
-                                          : vertex < generated.size()  ? generated[vertex]
-                                                                       : Vector3(0.0f, 0.0f, -1.0f));
+                        // A vertex no corner gave a normal answers the loader's zeroed one,
+                        // `(+0, +0, +0)` (genuine bits for `x_vertex_duplication.x`, cnaplan
+                        // evidence rev002/hnd-xvert-01).
+                        channel.push_back(!normals.empty() && normalIndex == kNoNormal
+                                              ? Vector3(0.0f, 0.0f, 0.0f)
+                                          : normalIndex < normals.size() ? normals[normalIndex]
+                                          : vertex < generated.size()    ? generated[vertex]
+                                                                         : Vector3(0.0f, 0.0f, -1.0f));
                     }
                     geometry->getVerticesProperty().getChannelsProperty().Add<Vector3>(
                         VertexChannelNames::Normal(), channel);
