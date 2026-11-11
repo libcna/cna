@@ -424,11 +424,16 @@ namespace
         {
             // The graphics profile refusing a declaration or texture it cannot express, as XNA's
             // own profile validation does -- including a texture reader's SurfaceFormat outside
-            // the profile's list (HND-TQ-16); any other NotSupportedException is a finding.
+            // the profile's list (HND-TQ-16) and, since the readers construct the texture at XNA's
+            // point (KI-CONTENT-OVERSIZE/REACH3D), the texture constructors' own "XNA Framework
+            // <Reach|HiDef> profile ..." refusals; any other NotSupportedException is a finding.
             const std::string& message = refusal.getMessageProperty();
             const bool formatRefusal = message.find(": SurfaceFormat ") != std::string::npos &&
                                        message.find(" is not supported.") != std::string::npos;
-            if (loaded || (message.find("active graphics profile") == std::string::npos && !formatRefusal))
+            const bool constructorRefusal = message.rfind("XNA Framework Reach profile ", 0) == 0 ||
+                                            message.rfind("XNA Framework HiDef profile ", 0) == 0;
+            if (loaded || (message.find("active graphics profile") == std::string::npos && !formatRefusal
+                           && !constructorRefusal))
             {
                 throw;
             }
