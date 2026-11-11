@@ -33,19 +33,25 @@ namespace CNA::Internal::Xnb
     std::shared_ptr<Texture3D> Texture3DReader::Read(
         ContentReader& input, std::optional<std::shared_ptr<Texture3D>> existingInstance)
     {
-        const XnbTextureData decoded = DecodeTexture3DXnbData(input);
+        // Refresh Texture3DReader.Read reads the header, looks up the device and constructs the
+        // texture (IL_0025-0035) -- whose CreateTexture refuses a profile without volume textures,
+        // Reach, before anything else about the request (IL_0050-0074) -- and only then reads the
+        // levels (IL_003c-008a).
+        std::shared_ptr<Texture3D> texture = existingInstance.value_or(nullptr);
+        const XnbTextureData decoded = DecodeTexture3DXnbData(
+            input, [&](const XnbTextureData& header) {
+                if (!texture)
+                {
+                    texture = std::make_shared<Texture3D>(
+                        RequireGraphicsDevice(input), static_cast<int32_t>(header.width),
+                        static_cast<int32_t>(header.height), static_cast<int32_t>(header.depth),
+                        header.mipCount > 1, header.surfaceFormat);
+                }
+            });
         int32_t width = static_cast<int32_t>(decoded.width);
         int32_t height = static_cast<int32_t>(decoded.height);
         int32_t depth = static_cast<int32_t>(decoded.depth);
         const int32_t levelCount = static_cast<int32_t>(decoded.mipCount);
-
-        std::shared_ptr<Texture3D> texture = existingInstance.value_or(nullptr);
-        if (!texture)
-        {
-            texture = std::make_shared<Texture3D>(
-                RequireGraphicsDevice(input), width, height, depth, levelCount > 1,
-                decoded.surfaceFormat);
-        }
 
         for (int32_t level = 0; level < levelCount; ++level)
         {

@@ -503,10 +503,14 @@ namespace CNA::Internal::Xnb
      * @brief Reads and validates one Texture3D payload without constructing a GPU resource.
      *
      * @param input Content reader positioned at the first Texture3D field.
+     * @param atConstruction Optional call made with the header -- once its size is checked and
+     *        before its format is, as Refresh's Texture3D.CreateTexture checks the profile's volume
+     *        support first -- and before any level is read.
      * @return Canonical volume dimensions, mip count, and raw level bytes.
      */
     [[nodiscard]] XnbTextureData DecodeTexture3DXnbData(
-        Microsoft::Xna::Framework::Content::ContentReader& input);
+        Microsoft::Xna::Framework::Content::ContentReader& input,
+        const XnbTextureConstruction& atConstruction = {});
 
     /**
      * @brief Reads and validates one TextureCube payload without constructing a GPU resource.

@@ -297,7 +297,8 @@ namespace CNA::Internal::Xnb
         return data;
     }
 
-    XnbTextureData DecodeTexture3DXnbData(ContentReader& input)
+    XnbTextureData DecodeTexture3DXnbData(ContentReader& input,
+                                          const XnbTextureConstruction& atConstruction)
     {
         XnbTextureData data;
         data.kind = XnbTextureKind::Texture3D;
@@ -309,14 +310,21 @@ namespace CNA::Internal::Xnb
         data.width = PositiveDimension(width, "width");
         data.height = PositiveDimension(height, "height");
         data.depth = PositiveDimension(depth, "depth");
-        RequireTextureFormat("Texture3DReader", data.surfaceFormat, XnbTextureKind::Texture3D);
         data.faceCount = 1u;
+        data.mipCount = mipCount > 0 ? static_cast<std::uint32_t>(mipCount) : 0u;
+        data.platform = input.getPlatformProperty();
+        // Refresh Texture3DReader.Read IL_0025-0035 looks up the device and constructs the texture
+        // here; Texture3D.CreateTexture asks the profile for volume textures (MaxVolumeExtent,
+        // IL_0050-0074) before it checks the format (IL_0079-00a4), and no level is read yet.
+        if (atConstruction)
+        {
+            atConstruction(data);
+        }
+        RequireTextureFormat("Texture3DReader", data.surfaceFormat, XnbTextureKind::Texture3D);
         if (mipCount <= 0)
         {
             throw ContentLoadException("Texture3DReader: invalid mip level count.");
         }
-        data.mipCount = static_cast<std::uint32_t>(mipCount);
-        data.platform = input.getPlatformProperty();
         input.CheckDecodedByteSize(
             CheckedMultiplyOrThrow(
                 {data.width, data.height, data.depth,

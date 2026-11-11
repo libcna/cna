@@ -40,6 +40,7 @@ using namespace CNA::Testing::Renderers;
 #include "Microsoft/Xna/Framework/Graphics/Texture3D.hpp"
 #include "Microsoft/Xna/Framework/Graphics/TextureCube.hpp"
 #include "System/IO/BinaryWriter.hpp"
+#include "System/IO/EndOfStreamException.hpp"
 #include "System/IO/MemoryStream.hpp"
 #include "System/ArgumentOutOfRangeException.hpp"
 #include "System/NotSupportedException.hpp"
@@ -634,7 +635,11 @@ TEST_F(Texture3DTextureCubeContentTypeReaderTest, TextureCubeReaderRejectsByteCo
 // Texture2DReader's (width*height*depth*4 vs width*height*4), found to share the identical
 // signed-int64-overflow UB shape during that task's root-cause sweep. This is the exact adversarial
 // shape confirmed by UBSan pre-fix.
-TEST_F(Texture3DTextureCubeContentTypeReaderTest, Texture3DReaderAbsurdlyLargeDimensionsThrowContentLoadExceptionNotBadAlloc)
+// KI-CONTENT-REACH3D: the texture is now constructed from the header, where Refresh's
+// Texture3D.CreateTexture refuses an extent past the profile's MaxVolumeExtent (HiDef 256) with
+// ProfileCapabilities.ThrowNotSupportedException (IL_00a9-00d8); this used to expect CNA's own
+// ContentLoadException from its decoded-size bound, which came first.
+TEST_F(Texture3DTextureCubeContentTypeReaderTest, Texture3DReaderAbsurdlyLargeDimensionsThrowNotSupportedExceptionNotBadAlloc)
 {
     System::IO::MemoryStream ms;
     System::IO::BinaryWriter writer(&ms, true);
@@ -655,7 +660,7 @@ TEST_F(Texture3DTextureCubeContentTypeReaderTest, Texture3DReaderAbsurdlyLargeDi
 
     auto typeReader = ContentTypeReaderManager::CreateReader("Microsoft.Xna.Framework.Content.Texture3DReader");
     ASSERT_NE(typeReader, nullptr);
-    EXPECT_THROW(typeReader->ReadUntyped(reader, std::any{}), ContentLoadException);
+    EXPECT_THROW(typeReader->ReadUntyped(reader, std::any{}), System::NotSupportedException);
 }
 
 namespace
@@ -766,6 +771,49 @@ TEST_F(Texture3DTextureCubeContentTypeReaderTest, TextureCubeReaderAbsurdlyLarge
     auto typeReader = ContentTypeReaderManager::CreateReader("Microsoft.Xna.Framework.Content.TextureCubeReader");
     ASSERT_NE(typeReader, nullptr);
     EXPECT_THROW(typeReader->ReadUntyped(reader, std::any{}), ContentLoadException);
+}
+
+// KI-CONTENT-REACH3D: Refresh's Texture3DReader.Read reads its five header fields, looks up the device
+// and constructs the texture (IL_0025-0035) before reading any level; Texture3D.CreateTexture reads
+// the device's profile capabilities and refuses MaxVolumeExtent == 0 -- Reach -- with
+// ProfileCapabilities.ThrowNotSupportedException(ProfileFeatureNotSupported) (IL_0050-0074), after
+// the size (IL_0013-004f) and before the format (IL_0079-00a4).
+TEST_F(Texture3DTextureCubeContentTypeReaderTest, Texture3DReaderOnReachRefusesVolumeTexturesBeforeTheFormatAndTheLevels)
+{
+    GraphicsDevice reach{GraphicsAdapter::getDefaultAdapterProperty(), GraphicsProfile::Reach,
+                         PresentationParameters::CreateWindowedEXT(800, 480)};
+    const auto expectNoVolumeSupport = [](const std::exception_ptr& thrown) {
+        ASSERT_NE(thrown, nullptr);
+        try
+        {
+            std::rethrow_exception(thrown);
+        }
+        catch (const System::NotSupportedException& error)
+        {
+            EXPECT_EQ(error.getMessageProperty(), "XNA Framework Reach profile does not support Texture3D.");
+        }
+        catch (const std::exception& other)
+        {
+            ADD_FAILURE() << "expected NotSupportedException, got: " << other.what();
+        }
+    };
+    // No level bytes follow any of these headers: the refusal comes first.
+    expectNoVolumeSupport(ReadTextureHeaderOnly(reach, Texture3DReaderName, SurfaceFormat::Color, {4, 4, 4, 1}));
+    // Before the format: Dxt1 is no volume format, but the profile has no volume textures at all.
+    expectNoVolumeSupport(ReadTextureHeaderOnly(reach, Texture3DReaderName, SurfaceFormat::Dxt1, {4, 4, 4, 1}));
+    // Before CNA's own level-count refusal.
+    expectNoVolumeSupport(ReadTextureHeaderOnly(reach, Texture3DReaderName, SurfaceFormat::Color, {4, 4, 4, 0}));
+    // The size still comes first.
+    ExpectSizeRefusal(ReadTextureHeaderOnly(reach, Texture3DReaderName, SurfaceFormat::Color, {4, 0, 4, 1}), "height");
+    // HiDef has volume textures: the same header goes on to its levels, where a renderer with
+    // volume storage finds none (a renderer without it refuses at construction, as before).
+    if (gd.SupportsCapability(CNA::GraphicsCapability::Texture3D))
+    {
+        const std::exception_ptr hiDef =
+            ReadTextureHeaderOnly(gd, Texture3DReaderName, SurfaceFormat::Color, {4, 4, 4, 1});
+        ASSERT_NE(hiDef, nullptr);
+        EXPECT_THROW(std::rethrow_exception(hiDef), System::IO::EndOfStreamException);
+    }
 }
 
 // KI-CONTENT-TEXDIM: Refresh's TextureCubeReader.Read reads format, size and level count
