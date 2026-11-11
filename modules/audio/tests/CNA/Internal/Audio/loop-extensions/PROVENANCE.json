@@ -1,0 +1,472 @@
+{
+ "license": "CC0-1.0",
+ "task": "HND-XACT-06",
+ "probe": "tools/xna-oracle/XactLoopExtensionProbe.cpp",
+ "probe_sha256": "89652c4116dea0a4b329a865cf919b099250c9f9147e832c68d5fdea95b47eee",
+ "probe_exe_sha256": {
+  "x86": "7a6ef7d23561cba9809d6a7cb3d283df29fc21d3044b3a1a36fd2d7a8fe34c06",
+  "x64": "fda77b4a1922ab40daed46bcdc9be0e999523d334d688c7dc7dfabcdbff2f7fd"
+ },
+ "sdk_headers_sha256": {
+  "XAudio2.h": "57fb17715d055587b911f031e2d7a4a82e400f168648745425ae9443320f46a1",
+  "audiodefs.h": "3120bffe50b8e749a188657eddd72af230653faf70cf0c5ea7c248bfbaffc5cf",
+  "comdecl.h": "2521d18ee18d78d657a56876f80c8e84d907caa3bee8c82d8c94f0983c215a0f",
+  "xact3.h": "c86909358384350ed7e945bff8018db2a348c1778bf15a464513ab6c56b05b31",
+  "xact3wb.h": "4afdf0287913c109df6df5374eb27424631ee0352e0ce8987adbc0742e8880b2",
+  "xaudio2.h": "57fb17715d055587b911f031e2d7a4a82e400f168648745425ae9443320f46a1",
+  "xma2defs.h": "23d23fa54af925061875fe29e665e5e3d565a7a67b62d6d6fdbc8e5c68cdaca1"
+ },
+ "engine_dll_sha256": {
+  "x86": "8a7e7c5ac2e6230f0249d46751522e7ecf85e7490cf7491ab73bf2e7e59e4c0f",
+  "x64": "6e656d37eadec5acf8ca99f2df37768eaec1c919e616caf3805c0884b2af7c26"
+ },
+ "builder": {
+  "path": "/home/robertvokac/deps/dxsdk-jun10/extract/DXSDK/Utilities/bin/x86/XactBld3.exe",
+  "sha256": "a2ec2fd02e2456a53f26be5c9e5d654d0a2d5b75ab1010b83152baad711d9419"
+ },
+ "retained_control_identities": {
+  "x86": {
+   "source_sha256": "873827bce0ac4c89dc6a19ecc25d9307ef92244379630642f03a5f3275a6091c",
+   "exe_sha256": "347d3f6b2802c95670a03b67f7fbdbaac4fbf1b2e964da2a0a302eb69e743a4d",
+   "banks_sha256": {
+    "lifetime.xgs": "6622a801474143c7b3e9fe5558058dcd239cd663809651631a460d799a9375b8",
+    "lifetime.xsb": "3fd73e85e29b065374069a12df2c93b095a081c886aa463676d3170a8e7b0db9",
+    "A.xwb": "8b2808f1769a87c43026c24823e7449a8592781174d1a2a9eaa3517ab68bfda6",
+    "B.xwb": "5757ab053fcd1cc22bf3e2026771c4f669423c21572ed6e473a8cacd2c27f3eb"
+   }
+  },
+  "x64": {
+   "source_sha256": "873827bce0ac4c89dc6a19ecc25d9307ef92244379630642f03a5f3275a6091c",
+   "exe_sha256": "520c7c62f332039b67820ba62020c0e548b797ee835c5f07be03fa8877effe8c",
+   "banks_sha256": {
+    "lifetime.xgs": "6622a801474143c7b3e9fe5558058dcd239cd663809651631a460d799a9375b8",
+    "lifetime.xsb": "3fd73e85e29b065374069a12df2c93b095a081c886aa463676d3170a8e7b0db9",
+    "A.xwb": "8b2808f1769a87c43026c24823e7449a8592781174d1a2a9eaa3517ab68bfda6",
+    "B.xwb": "5757ab053fcd1cc22bf3e2026771c4f669423c21572ed6e473a8cacd2c27f3eb"
+   }
+  }
+ },
+ "matrix_archive": "cnaplan/evidence/rev002/hnd-xact-06-loop-extensions/matrix-<group>.json",
+ "matrices_sha256": {
+  "effect": "671f90d5cc5a83426c757dc98a0615f84c97ee7a85784bc096421b0a00ef892e",
+  "region": "a66872837ce50249473d6866c4ddd197f5af53db8381c20078c66ad8e664e679",
+  "random": "fd3176b9c32d30419906a1d68c062a0d38bcf2106a7e959dcd78c04b2a0a136c",
+  "raw": "5303240e77803ba09829be3a7e6a96ea3196b97219faf371398424c25950ade5",
+  "pitch": "10b24dcbddea847d4d20899a5d25f0c80a7de313e9255379c0ca4377f2143d02"
+ },
+ "cells": 136,
+ "cell_id": "hnd06-<group>-<arch>-<variant>-<repeat>-cell<k>",
+ "driver": "cnaplan/evidence/rev002/hnd-xact-06-loop-extensions/HND_XACT_06.py",
+ "driver_sha256": "bb4220195b35933dfc5d362e3e40fd5f848726dfb4b742277c43f1fa0be6e3f9",
+ "wrapper": "cnaplan/evidence/rev002/hnd-xact-06-loop-extensions/run-native.sh",
+ "wrapper_sha256": "e493dd8db7bfd116fe7d5031f3c42e1b1633cc2eed3df7b0b15f5df37adde589",
+ "effect_capture_driver": "driver-at-effect-capture.py",
+ "effect_capture_driver_sha256": "5fb63d3110623aa08f16f26d8657b843ebe524152112922e6c89d4f4b8cc2d67",
+ "effect_capture_wrapper": "run-native.at-effect-capture.sh",
+ "effect_capture_wrapper_sha256": "42f836607a386faafb99457eb3271392d6f0fdbf321ebab19362c5b90e1832ed",
+ "driver_note": "The effect group ran before the pitch group (type4/type4nol raw100, three repeats) was added; the later driver differs only by that group, its repeats and a once-per-run identity hash.",
+ "hnd_xact_05_driver_sha256": "e9c31535f16dba1394c5a9d127634b337701d905db35c2eea87e8fb325656e58",
+ "wine_prefix": "/home/robertvokac/.wine (existing WoW64; ~/.wine-cna-xna40 is win32-only)",
+ "refresh_clsid": "248D8A3B-6256-44D3-A018-2AC96C459F47",
+ "engine_iid": "B1EE676A-D9CD-4D2A-89A8-FA53EB9E480B",
+ "selection_reference": "Refresh XACT3CreateEngine IL_0070-0083; managed execution not performed",
+ "shared_banks": "Non-region variants use finite-cardinality/shared/ (base/raw3 XGS/XWB): every variant's own XGS/XWB differ from them only in the build FILETIME. region/ holds baseregion/raw3's A.xwb and the smpl-looped A WAVs; it differs from shared/A.xwb only in the build time and the two A entries' loop regions.",
+ "authored_banks": {
+  "base/raw100": {
+   "shapes.xgs": "9b77a1509d41e85257b0d59c7d73ac2b3cb509b17fca1e396431d0aa66b8134b",
+   "shapes.xsb": "41f83e784349d1d10ce83b8c2febc94ba9d0e98dc5430b744f4fadb8ef3e74d0",
+   "A.xwb": "73541d6adfad23288e3ab80eb9fa15b6b33c8d4af5a96f94aad0f67245f37fa0",
+   "B.xwb": "33ab9208d9f8226f79f0701350839c3da43f999a50bd72a5e0cea2f6806bd2e7"
+  },
+  "base/raw254": {
+   "shapes.xgs": "35eeb02d6934512da958c7d9ce63f5b4789ff788e8efecf94830cbd35e8d1970",
+   "shapes.xsb": "0055510d178d2270dc77c2d579aedbc6ae7619d949edf99f35a13f9013ec3ab8",
+   "A.xwb": "eb57c9508080e9daf34037a76c29aed845a5be3dac81bad78bf4891c9bc3ba0f",
+   "B.xwb": "eec6f414ae5ec337c7582e43f2686552aa11db29ca90fc23c4c85fabb95bd386"
+  },
+  "base/raw3": {
+   "shapes.xgs": "c72b8ee0dbf6b95f115828bb53e02fca13cc3637c61e779d1024993f7d0e7de2",
+   "shapes.xsb": "1521b662b40147c7683b1c46bc178837ae918546895571dfb76ffd15be9a7b71",
+   "A.xwb": "c524dd80b7eb1176ba21db2b083842d3aeb4886a835274ac86fd364f7ce24b18",
+   "B.xwb": "11943988829572131e337e5d1729c19e91c714421a8d76b753afbe5c09a401d6"
+  },
+  "base/raw5": {
+   "shapes.xgs": "116b6d53b898e865f6ee6d179907147c0fa1f50ef0918eac9b8d689a412df4e1",
+   "shapes.xsb": "797a85b33713153f6fd31a653689167b5cfefa1da07c701cd04cb01d3aa3ad47",
+   "A.xwb": "5db08b4faebe6f103fbb95560a818a339dc7e6b5e4b3182f8161a6ca7f6b7a16",
+   "B.xwb": "5c6e5081022dc40867dab3dcd5375a1df0bcded947ce6092dafb6d66f242e4ee"
+  },
+  "baseregion/raw0": {
+   "shapes.xgs": "76539c445efcff79c9daec344af2eec3cc164dbddaf344612dccf60215c5c98b",
+   "shapes.xsb": "9f2964a109398b049a3077e19a0482109b985402eb95df8f3d22a26784b01b6c",
+   "A.xwb": "151bc0c76c2455800f452a61baf885d8921b3310772137a420bafc933361126e",
+   "B.xwb": "68bb7d53ef61c5094ac642065f23de389e2e56d14f82f84ad5eefad1c735960a"
+  },
+  "baseregion/raw1": {
+   "shapes.xgs": "40070a5b98497c6f4f1e15b37e074251868d2da4fef1f28b2c63055bd51b4434",
+   "shapes.xsb": "a43c165fb7e4912ddaaa7ec07a3cd0a0f7aee8aa404f8f0340de5e54c5bfff7e",
+   "A.xwb": "378f3b1d7d9690ee0da5a4a0e18cda1ed7167e566f83ab1a678b92c1341aa224",
+   "B.xwb": "73d15730f826749af463d27772bdff7563947d513a09570423f59df094637aed"
+  },
+  "baseregion/raw2": {
+   "shapes.xgs": "4bdae5001e7b43c774418fb050f6a9a97cb6d1ae197749dd48595609e14e4934",
+   "shapes.xsb": "48b6c25a305eee6e5cd3197750ef1f187746534fbc164302118f13a3f78228bb",
+   "A.xwb": "a8667f039e516de35cf9fd2ca1aa0276521e33131d294187286a9376c82c8adb",
+   "B.xwb": "46562144f1474b08235bee51c85e5dc94c7dc1b642f4761ca9207bf7737488a6"
+  },
+  "baseregion/raw3": {
+   "shapes.xgs": "1b962aa7ddffb8b3b7a40ac5d90d1db92f016842330ba51c9a8a5ac03e98895b",
+   "shapes.xsb": "bea0a969cb7109d9caa4a55047a91af4e69f2328c5a0de4064ad52953a0af5ef",
+   "A.xwb": "7247c7e3faf003f2a57951d64f42c83599554f03eb022268fa018804d305b5e6",
+   "B.xwb": "0ecde3b641ffe29f829f4df30a5991a6a70eba27b78d8115b2eb7d3e30068c6b"
+  },
+  "baseregion/raw4": {
+   "shapes.xgs": "e2d0db1fafaaa5834cc147244ea32731f99c339744b2527e346cdc112a6be900",
+   "shapes.xsb": "3ec9f4dd5da94c206521b387fe36938caced04f8d67e7166c2794750e49a8fa0",
+   "A.xwb": "99cac63d79a71392a93bbf227553fba0603a993f4e1c6ba3c40f0b3ed9b9cdc6",
+   "B.xwb": "031b35ad39577097bebd24587a983d9457ddd924752d7faf1c9cc9dcd6206161"
+  },
+  "nol0/raw100": {
+   "shapes.xgs": "9025e1530a50e86e6a455b74908dc52930dad26fb634d30cd908eb0d7519b6c2",
+   "shapes.xsb": "9f78800086eadbd922d8237632960c28ad0431a8f98529912d2426a2fc25080d",
+   "A.xwb": "8b3a70c7acedbfb94d43382669962a248ee4f5392f9544b484af7965757d01b4",
+   "B.xwb": "cd0df33d63724d9d3cb6e131e6aa70ce4581342662ea09f7b2cd6ee320d3cd95"
+  },
+  "nol0/raw254": {
+   "shapes.xgs": "29d6249d7dc3022b629691eb9c56bd00e8624d4418b5c7a2b31bf2299e4f53f4",
+   "shapes.xsb": "8e6ac1f2d35a80cf08a8665049b9129829b4669b1d132cb45db49a1db377f907",
+   "A.xwb": "b263ff2627290c1427f0c300981a7e76455d37892c8c4408d5983c6af6271c10",
+   "B.xwb": "d0fdcb74d44465a422573f4825b57046f8716d3ff374ba16cf9b72593f7a7cd5"
+  },
+  "nol0/raw3": {
+   "shapes.xgs": "78339463f02d3419560bf2037d12461bc1335a4d4695db1374982a0fb51ab123",
+   "shapes.xsb": "0e71c36e7377dbf253390aa7537561bb2d6a0021e4926f5ac87a08c9ae778236",
+   "A.xwb": "45617a43303f8c9c0740d808d6a917ab2e40420c64496e3894afa1428bf65436",
+   "B.xwb": "d3b5d05fc589db5d1d9c2ce27b7f41914fc7d9c1015943df36c75999ca278009"
+  },
+  "nol0/raw5": {
+   "shapes.xgs": "e5398a527edcc618a0d4e35cc336f8bd8023327a098c1d98ec7a4419507cb7f4",
+   "shapes.xsb": "7bb1e61111551fea977269b44b5db50540d1f882a437dee8b7843fba4fcd10a2",
+   "A.xwb": "109a96a4cc8337b9698d743c36a985cc091a9bad45487d47b56b7d289d1ed547",
+   "B.xwb": "2dd557c078f64dea7a4c1458fb14ff67ed5b81991b60792110c8550c94a2d703"
+  },
+  "random/raw1": {
+   "shapes.xgs": "a5b660b8138bf24c52e511355e3b79aaf0d83114633b517f35def55aad582793",
+   "shapes.xsb": "d2caaa3914d6eac9afe66fc3f1244df706182c979ea7ce78a096ddd013015faf",
+   "A.xwb": "8b6e375e19d586a219acf3c9a5501814c360be7e271aaf17ed092f77807862a6",
+   "B.xwb": "f6703f004f1faaa1427b027d98b983ee3d3013272a2d5440eb3849c7cbabea4e"
+  },
+  "random/raw3": {
+   "shapes.xgs": "3939e460905fa5fb8ae18e392f332ae2a690a3051506169b1a2cbd83c4ffe6e0",
+   "shapes.xsb": "a0a20d1514b6e3d7934644cbc6648a923538fffb2210cef62ed0b898e76a284b",
+   "A.xwb": "9cc2d132adecacfa0032b23d75f2d0267f7a9e92e7b3c8603bcbdde6901f1d8d",
+   "B.xwb": "96298f9f42b534472c900d40805b4283a0f4a1a8ca3c0cabc3b68a615318c4d2"
+  },
+  "randomnol0/raw1": {
+   "shapes.xgs": "c6e94b3f49b3d1639092c76310a9efe8915788cf2c3dbdf532acdfa8b96784ce",
+   "shapes.xsb": "6c10889240a70f0360d2e8d2899c716f689063e86d688bc2eafa1423f1927f72",
+   "A.xwb": "700839527bb6b1e32d3981f467589068b61176f18120fc789e99f7b0bf35244e",
+   "B.xwb": "bb8d53cfc30fc3d8b9c20dc2169ff18025499eab61cc1a4918a339271f089caa"
+  },
+  "randomnol0/raw3": {
+   "shapes.xgs": "088c58dcbca2eb1a1745b091484aea9d5da0b45c1a35d6870fdd7f59d829c604",
+   "shapes.xsb": "559529764507209983be3f9d63617bf7ee599b1c299a02285695b24af6c74e33",
+   "A.xwb": "92a989ae72ee125f4e125dae69e860e153d01edee4c981a3808c69efc46a8873",
+   "B.xwb": "0bd1503f9f951347e33b1034f48c709548b52da95ecab5481d0323ce6f355a65"
+  },
+  "shuffle/raw1": {
+   "shapes.xgs": "099bd1dc2438d5df4c73bdee507893af4cf3c85e09be65258764fa2934619fbc",
+   "shapes.xsb": "eb856b2bebaa59549b2aface5a65578ff3fee2a5ba13f8eda3f06c893d370c6c",
+   "A.xwb": "dbb97a64c2647ba60b921aa01210b5a65ca39ecea04f629c6a725e07d98dc71a",
+   "B.xwb": "67be8e39a9b5dbee4d75cd356db408aa480d0f93c8cf174d6d521d0b2c7d4663"
+  },
+  "shuffle/raw3": {
+   "shapes.xgs": "eba3bf8f88c64a0e7a7000b55a69db387ede1b02a876095e15b7fc07dafa872b",
+   "shapes.xsb": "5652799d2255d551a4eb6f710990dcc706e882d6a48505ad629ee75db2a2cf5f",
+   "A.xwb": "ce15cc728deefbea909daaf0b819cff9fb880681f70eb5202bc2bf0e67bf2caa",
+   "B.xwb": "17858344ea65ebabb72116bffd6e71f4b4f8e9737e25604e3950bdb391228924"
+  },
+  "shufflenol0/raw1": {
+   "shapes.xgs": "99edd741f044d9e9cd890dabeb866113cc67f5a890fc819708fc084a64ad57f7",
+   "shapes.xsb": "7fbc9f1a0156416e1431c65d1544344acd480e38cf71fd41a888dcd3986cbe6b",
+   "A.xwb": "1ae65cf958feb5e664229f31483fa553aadb2a9b0b1bb3ebe7fdc428d633c88a",
+   "B.xwb": "f5bce18b037d9db854b858b082e7e7898aad82f6ccd473ca1375338fa170232e"
+  },
+  "shufflenol0/raw3": {
+   "shapes.xgs": "146f5002e3f23fd8b200cc00a160b2548e926012da1737399808b880cf3e1c7d",
+   "shapes.xsb": "c64146b301cde9e8d8598f6be2851d6089faf47c174e212b758802c963dada3a",
+   "A.xwb": "72b791c12852009c3eae59b8fe463e889796ed13a541f0a0858b4de227641b9b",
+   "B.xwb": "9077e1adb4510e0019803440127b3b604e3a2859d8b12d89b89b89e894d5f9da"
+  },
+  "type1/raw3": {
+   "shapes.xgs": "2f9932d31f1add8ea6a825c84ae5a7845d413c16eba7c39b96c80c7e5168b6c6",
+   "shapes.xsb": "0e89b329dd548c1ae7ca660a1c57ecc55381a9eca6af9faef237dc362cd20d52",
+   "A.xwb": "8b3ede26b631554b74b0f812dd8d8e2a9a41ea1f29bf4a26b2f662a4d4c1bc71",
+   "B.xwb": "d24e6df7d9527f191dffff4ff252d38aa24abafc01670bb85956818fe5b4a90c"
+  },
+  "type1region/raw0": {
+   "shapes.xgs": "e32a7bacc193518ea2f653fb531bb919f4764b1d816154267feae03d910913e8",
+   "shapes.xsb": "f25893150a1b883859f0b0d6e3d9f8c859570222e0afbf06dc29fc09e1a067e8",
+   "A.xwb": "d84605b9f98b9a4db615888a81a9db57a07b5a2d0858fff7e3bd8c2c33cacfdd",
+   "B.xwb": "aa66614da0d359be901f443f7edbb32314b09bec7ecfff1d55f700cdb3fce996"
+  },
+  "type1region/raw1": {
+   "shapes.xgs": "d8784ecd84d5f556e2c005c2e0253190c75fad3a2a5bd231addcd8e6b72b8bae",
+   "shapes.xsb": "ba94db2d5f730c7ada671db48dae9ffd20528d3f11d84b5dda40761ab4eb9b7e",
+   "A.xwb": "646314abcc528d1d1406d19abfba64dbd983d2e8891778548f20d2400df9f446",
+   "B.xwb": "7d227499f2b7e9777fbda45634db4783a089b6d71f4ea7d86d76d07237493021"
+  },
+  "type1region/raw2": {
+   "shapes.xgs": "7d9ce893e1e39943960f59b4274009ba4091b128984ee1d2db79dbfafc53b13b",
+   "shapes.xsb": "4932d77b23a68cdc307b14f669b5886bb38828a6a21654f8609585728f37150d",
+   "A.xwb": "675a9ef2ec86375a8d2134933de5f6060d7023115b3ccf4fcaaab76ccf183f39",
+   "B.xwb": "d54847e46f105c093edf8305403992258b89f164293b7f79818c0d8538fce1a9"
+  },
+  "type1region/raw3": {
+   "shapes.xgs": "9aa38760db5a3f0c8c39222ae26b3d0aeb396ea6fee0d713b1dd3219b5cc3cd2",
+   "shapes.xsb": "11409232bd44da0e5b511583d24afb0f615ca40bf07b9071c275e4d221c49752",
+   "A.xwb": "20183a8dfbf89c135a7ea18a000d4678da3ad14d4ad181dcb8dff06047c904a6",
+   "B.xwb": "04ca01e10b29676b5940c25c387e9cdf92fb1afcab008317cbc0d79f1a30b454"
+  },
+  "type1region/raw4": {
+   "shapes.xgs": "863b4e2e98064d0af1f18fe7f43c2f471c0b9772f4eceaeab9520c33316b2ec1",
+   "shapes.xsb": "374561d09ee6698cb88b310d7d70bf552a72a3c744a55caf97af055693e19c2b",
+   "A.xwb": "4cd88b7feb1db05f3f284b119c1fab5fb9f4c54a821597fcbfb809bf37f8490e",
+   "B.xwb": "9caedc218209aa6906c7fcf0ae96e977ef578d44b10f97cc89ce0398b62b10b7"
+  },
+  "type4/raw0": {
+   "shapes.xgs": "36c48e2d058003ac65c7c573605d287d93fbcf40c3526e06079da767d9b4e2a7",
+   "shapes.xsb": "69f1e8ae5348b4d1f79f7350cdbb837eeba961de36ace17033869cf01a77a8e1",
+   "A.xwb": "8bd822dd8e4f40b515f2ec1195c6d24171d68f462426cccb18b0176f44fd37d3",
+   "B.xwb": "23efa25696a05afa17a3592166be9c0d5ee8bd677beef7b46e93db04c11b0755"
+  },
+  "type4/raw1": {
+   "shapes.xgs": "5aab2e6bd10a010016dba7364b6a99116170b0828afd1a8857bee799c9a29aa4",
+   "shapes.xsb": "077e1c494e32171e5901c046ea4cc99e692e4055247471fc55ba6e0ac8992312",
+   "A.xwb": "8e74441a9762d590c8fd7ab74f2616236a8e69ae2a8c4760c5ab6b9cc8042f9f",
+   "B.xwb": "6a4f222c4c52f86f2ce1c7d8f41e50071ed2f7f9361a013c47110a676a208edf"
+  },
+  "type4/raw100": {
+   "shapes.xgs": "7b87745ddb4c841c2f3ae3353310f5c6a77c5d3f06b548421b7a8347a52d7a49",
+   "shapes.xsb": "effdc171aea58e22be22ee79408c31bd396ab0a7f0d766b1ac23b40901c2dab8",
+   "A.xwb": "417338822bcc75fe6dbffdc27d4a9eeca41b35803b01f1b9db6d48f6324a7c05",
+   "B.xwb": "3bb615b86b040d2014365bb72e82b01b4fd5dac1df5b593fdd487d4f81be4733"
+  },
+  "type4/raw2": {
+   "shapes.xgs": "06358cd8a9b551c3b347918cced7ed1a6bd504ea8b71f0ae823985b0470e0b9d",
+   "shapes.xsb": "2b7c7e62321486d19d3f075f7a3a555ebc96d9e6ee6bcb22f42cea809e828f2e",
+   "A.xwb": "db0fd6b9b41590b43601d50bff373f8c7180ff5fbb76d18c521259eb0296d9ac",
+   "B.xwb": "459cc6b038ddea228057a5ae3a64dcde3d2618d77735434e64d99aa19a63a5d8"
+  },
+  "type4/raw3": {
+   "shapes.xgs": "738be8381cbd38dab3ba1564fbf14ebdc3f008f1507ff3b76a6080121e1460a4",
+   "shapes.xsb": "d7e6e4ec388eec705aa18cc59cc9322745cac5e7e15e2ced204dc347c0f5c8a5",
+   "A.xwb": "2ead0f7034fea5c25184736a46dbea764aefebc52612db5e26351a65bdabc6f3",
+   "B.xwb": "62ad7b9aee02a00520cdfd4fd6db89dd74dbc2879e210833f480b480649065ca"
+  },
+  "type4/raw4": {
+   "shapes.xgs": "3ff95ea1cc1174c49f02ef9a87c908d20982a45aa813fb2617bdc02f47ae8f5d",
+   "shapes.xsb": "07f3c747737fd4f0e31cf505182213c0443efe4b142e3a4aa619c50c9b5d860d",
+   "A.xwb": "3e2bcbfd4eb7609bccc2532e8277d0fed4963f26e8fd442e7e5db668fd7fcc95",
+   "B.xwb": "e290b484113aa4ee831cfb5acbdcfb3660fdd91fdad9e05bf00adf2b8bd9071e"
+  },
+  "type4nol/raw0": {
+   "shapes.xgs": "b4302d2ada53f3dee5d77e75a2e62e9b5ea792071d2b63c4eb12b5cafd22b250",
+   "shapes.xsb": "b65fb108d84e67fbabfdb8481bf78edbf3ac7acedb45fe0be283cbbf4f852edd",
+   "A.xwb": "b9636af6fab1b8be1a7021a5ad1b835df65f412b2fbb11b478560890c20071bd",
+   "B.xwb": "e5aa503b8197fe71f1beae689da964c0232f71a0390f046d79d404523dbafc28"
+  },
+  "type4nol/raw1": {
+   "shapes.xgs": "29fd592b19a4fd0c005a1e6870be9198013800dbcaef51ce35f449fdd5e6e657",
+   "shapes.xsb": "6be3530bd025f0e7c99fcf2a7abe3e28d068aa403f68862a1e5a0b19f0ff2bd7",
+   "A.xwb": "494645b13f775a0b09468689abb48f6ad7e0af8c3f99e9f51dbc1ce6aea7f645",
+   "B.xwb": "5704a5fb08be6fa593ef7901cf6f30fb12bbf795536559346dbdf58bdf777fdf"
+  },
+  "type4nol/raw100": {
+   "shapes.xgs": "8fb29d457a27d9aec9b1d2f50702360e2a1b28fa8651a6175d3229522cf0e7f8",
+   "shapes.xsb": "5529ab48707d785a2456e921eef4cfdfd00c16eb729a082503d561e48a52d2a2",
+   "A.xwb": "08ff4cbd05ecf33281193fe261e0273f1fa957aba260e4015f19dd0dd8ecce7d",
+   "B.xwb": "6f9a65e305b90543c6d0a6cdfafe73d07acbd5d3c6dcc49857b01e1bbfa16388"
+  },
+  "type4nol/raw2": {
+   "shapes.xgs": "ed04a6944d5d9dbc3df992b0eb977ae86b1f6f5bc7ab65d844a4dedc9caa9349",
+   "shapes.xsb": "2cdd58d6b7bfe06b9b08e4eae73194ee010057ed6e8568f4b62449f1a91df4ba",
+   "A.xwb": "65fd1a13fd1fe41b7ba5126cb06ee017ccb1dc13ae54702c5a06a47ed30db253",
+   "B.xwb": "4d4be3ccb51b5a9807c07152924e3d4a789ee6350ba1bc43de5e3065f67830da"
+  },
+  "type4nol/raw3": {
+   "shapes.xgs": "c006093cecb1ca488d233af02bef3fee833960fa272236337de2ef5960944734",
+   "shapes.xsb": "8a640362c20f2d54e37d711c9b293045120a18e70c5669b45022265c2576b799",
+   "A.xwb": "6ee5df50933768a41981d48f3e37ec060424ea0814f4cb79a923623635be7d88",
+   "B.xwb": "668e734747f8f9f5ee94adf865b17fdd68bbb3e038c9ce750a077304f2a990bf"
+  },
+  "type4nol/raw4": {
+   "shapes.xgs": "7ed29774506764acf5c4f3174377e7bccdf5281385427fcc6e8c1dcf0f10ccef",
+   "shapes.xsb": "7b967a0d893cc4d238d48be3ad069975fd5fc1655b25b33e2b97052f3884da91",
+   "A.xwb": "c189fbfb4dc1c33beac65c06c91da2fe80e94d3357c73fa779c51a2a9a46f1f9",
+   "B.xwb": "b2ba4a00a8d742ff75bf34d5656ad744a1e748127b75361f0a2a2cec91630f15"
+  },
+  "type6/raw0": {
+   "shapes.xgs": "e9340c32267a6012be9ba8b9b37783958c4e89d08a77ee6b2495f977e8541b54",
+   "shapes.xsb": "12911e57539cb3d04c50a2342bbf3e599b181d6a55e3e1963f870c8e468d3940",
+   "A.xwb": "83b88286913b1798a0404d4799a0dedd26ac7796fa9694d8a32a2de6f5537b36",
+   "B.xwb": "8cd6e89d4a928689b4fa7eaa5f45f2d4831a53203e0659f726426b32c74d4a80"
+  },
+  "type6/raw1": {
+   "shapes.xgs": "759fbfb0a6bb5c10ed18808e5e22766c6a38c395d86e35ac109bba402d0520e9",
+   "shapes.xsb": "9dc61fee97761d220a94a5fa0f7ef4d576f5e435bc3751fde4902d35bfa9f684",
+   "A.xwb": "34a664343dafca3762d510de77dea98dc0f9ad11064e3fe8ab8ee3e92bd1112f",
+   "B.xwb": "bb773fbc38759c7657281c170ce935feb044943c9c9778d41f4b004a841d776d"
+  },
+  "type6/raw2": {
+   "shapes.xgs": "87bcc3efe244064d64317e84831f8b4a8ae7995ad329056791d5e86e34621c06",
+   "shapes.xsb": "719c826c2e75c0a2f3e06e02079cbf206fd21e63aca48bd0e2be62c95a3dd1e8",
+   "A.xwb": "906462a30a8d83b83ba2dbb7ab2a7b0daed4e41c81d46873084f2e63a763efb8",
+   "B.xwb": "4aab3b8f673adfb76baa40a5cc40c15a7b32d6d14640303a9c1065ef2bc4fceb"
+  },
+  "type6/raw3": {
+   "shapes.xgs": "6152dc5d5610253e481c4755d05f0e9a2100464c46d7cb6d88197021872a8148",
+   "shapes.xsb": "6d83f2cacf69753cebb70f54eae8030fa056d795f2b716023902aca3bc7a722b",
+   "A.xwb": "1827340fd9bf513237a91f8efaf212ef50795a258f1eac30e07c4cad7da618fa",
+   "B.xwb": "4b90c34b05c5d510df974f19b694109dea385c4ca3ee1e49db09a23a30f41f6b"
+  },
+  "type6/raw4": {
+   "shapes.xgs": "ed07ea4650b63f39cb757d9c1620cbed1d64cf3a8a2eee60199a23f7ff33c32f",
+   "shapes.xsb": "35085519b5bf5b4c16c6b3ce1ff61e837f1c728e91b9748c5042f91f416fddc9",
+   "A.xwb": "d1724d151680875d1395bc369d1c234c9b8dbf846bc1dc5f52f48d61bcfe9439",
+   "B.xwb": "ebd41b1dce965e19d29d2c3a39e2da78a941ad14f9748fa11502f80c69ad24ac"
+  },
+  "type6nol0/raw0": {
+   "shapes.xgs": "c2eecc827637159bbfe24b82d740589035d8c999ea49e5b927c3ad8fa98a1dbe",
+   "shapes.xsb": "522ccd07b4df9a7da6e77554e614b66d2e37fd3757707b77ae3e0885721192e5",
+   "A.xwb": "d36df531489c358ba22efd0a1cf64b6ef24af2bc253e28d7b8ca0a59553934db",
+   "B.xwb": "7b53765b57cacc5f7427ce93bf33f2cb1dc6df5231fe52ca3c8ad22070704db2"
+  },
+  "type6nol0/raw1": {
+   "shapes.xgs": "1d652282a4a6d9e6ab834ac4b8a18f02325e671318bf241d67f88acf99133895",
+   "shapes.xsb": "96976bef19722389537fbea1df4b4510be48733cd2caffb4a88334d6ea725d84",
+   "A.xwb": "9eedc8ec33deeb8144ee2f4ae8ae445987870ae18ea4c70ec7dd01acacee0a0a",
+   "B.xwb": "2ce7adad499f192175e185dabef66adb8b47ed56b3cff82003ce6d8a97f93380"
+  },
+  "type6nol0/raw2": {
+   "shapes.xgs": "30519794d5d9cdde7c70cde78e6963155f0a22eb2f4958fcef96cb949477068e",
+   "shapes.xsb": "02c25b6b0ecb97e8a1117207d34022df66c549cbe6b11e32f2031332ad77fa10",
+   "A.xwb": "3c05ad60203d9706cd29c7a77a2de5c9e5302e7390dc5063e8a83e04fbcd479c",
+   "B.xwb": "f515d7be42b914271dc024a2e38767ed2cc7ad922e7d84d9ab5f8faa644646ca"
+  },
+  "type6nol0/raw3": {
+   "shapes.xgs": "26990f0f105d438a98485284a3d9b910861bc02c8121a474787481750877dff9",
+   "shapes.xsb": "870136df629953e182e145cb8c58c6bc01a6180aa365148142fab8147dbe1bbc",
+   "A.xwb": "aec97fe8b4ed02ddfec348520296dbfebe5c9cc5897337f761be0581234f5250",
+   "B.xwb": "23cd7be8e301c34d9010b772193621db840757a8fc9a5882e1b0d2b535cf06af"
+  },
+  "type6nol0/raw4": {
+   "shapes.xgs": "e631e735a47e70f36d0ca67fa06d8689bbb049013681798bec1d3a395227d747",
+   "shapes.xsb": "4046ec6a7a924c5e17291bc39b06d4e8392d3e038fd7fececed2386acd324408",
+   "A.xwb": "e804e67c0ef65ea382f3bab9fb3335b48c3e1f6b52a6f2c0d4b140909aaed65c",
+   "B.xwb": "35f1a5ede62de49c6c4797e6b57bf8034a5cea9fe13e9fff24cb1e62de2745c7"
+  }
+ },
+ "files_sha256": {
+  "base/raw100/shapes.xap": "4fda9da8cfbde4af0aaf0c39016862131b4a7072565b310e92d8e0c8d14c0dd5",
+  "base/raw100/shapes.xsb": "41f83e784349d1d10ce83b8c2febc94ba9d0e98dc5430b744f4fadb8ef3e74d0",
+  "base/raw254/shapes.xap": "5e2f487223b0e3011e6c33f469aed49586a2ba429c1f781f4bf8601e13bb4064",
+  "base/raw254/shapes.xsb": "0055510d178d2270dc77c2d579aedbc6ae7619d949edf99f35a13f9013ec3ab8",
+  "base/raw5/shapes.xap": "79802a17ac19c83ca631168c3caef2cd29736425c4f67c48761837f609f401c9",
+  "base/raw5/shapes.xsb": "797a85b33713153f6fd31a653689167b5cfefa1da07c701cd04cb01d3aa3ad47",
+  "baseregion/raw0/shapes.xap": "058e82b5f5cf69818b3b297be35d5706d44a524876387dc2907ae19b0e293283",
+  "baseregion/raw0/shapes.xsb": "9f2964a109398b049a3077e19a0482109b985402eb95df8f3d22a26784b01b6c",
+  "baseregion/raw1/shapes.xap": "3aff354b76978b21d7fcecc1860992478268c60a01a309975c0130f78dbd677f",
+  "baseregion/raw1/shapes.xsb": "a43c165fb7e4912ddaaa7ec07a3cd0a0f7aee8aa404f8f0340de5e54c5bfff7e",
+  "baseregion/raw2/shapes.xap": "4ef206d927565097cc7a8d60b072a5578f8a849bd805c7d7097aed813f6b5be7",
+  "baseregion/raw2/shapes.xsb": "48b6c25a305eee6e5cd3197750ef1f187746534fbc164302118f13a3f78228bb",
+  "baseregion/raw3/shapes.xap": "22165ba5978bcd4d37bd6d87f3ba9d80808ffa4bcd948ce93b26677349ddd642",
+  "baseregion/raw3/shapes.xsb": "bea0a969cb7109d9caa4a55047a91af4e69f2328c5a0de4064ad52953a0af5ef",
+  "baseregion/raw4/shapes.xap": "5461fda39ab0f328526b0a837a23af419007a2877155f2b2e487bafdb47f5aa8",
+  "baseregion/raw4/shapes.xsb": "3ec9f4dd5da94c206521b387fe36938caced04f8d67e7166c2794750e49a8fa0",
+  "nol0/raw100/shapes.xap": "cff0bc08a4952f590755474161019e925cf4c33883d29371ff838bb895931ebb",
+  "nol0/raw100/shapes.xsb": "9f78800086eadbd922d8237632960c28ad0431a8f98529912d2426a2fc25080d",
+  "nol0/raw254/shapes.xap": "588cf16ef1c6aa9fe389309c39a0abebae793a0af1c74d8d6aa4d7cc0f7ae871",
+  "nol0/raw254/shapes.xsb": "8e6ac1f2d35a80cf08a8665049b9129829b4669b1d132cb45db49a1db377f907",
+  "nol0/raw5/shapes.xap": "1f2d8fba02be59538b55172ad81c98ca6bcf4b16bac92f381408b8b9fec7d6e4",
+  "nol0/raw5/shapes.xsb": "7bb1e61111551fea977269b44b5db50540d1f882a437dee8b7843fba4fcd10a2",
+  "random/raw1/shapes.xap": "f7f733c60f929516b1dacad6c8109a9cda7aca99843df84af5d724b4094bf580",
+  "random/raw1/shapes.xsb": "d2caaa3914d6eac9afe66fc3f1244df706182c979ea7ce78a096ddd013015faf",
+  "random/raw3/shapes.xap": "ff79e02e0490ceabdd3d058dc4dddbd1a3e6cdadb6a2c379d13c33f46bfc0b77",
+  "random/raw3/shapes.xsb": "a0a20d1514b6e3d7934644cbc6648a923538fffb2210cef62ed0b898e76a284b",
+  "randomnol0/raw1/shapes.xap": "f9e7b99b7e710aeb12de87f050f1010592bd9a2ba655c848ce85af44c09b1f5a",
+  "randomnol0/raw1/shapes.xsb": "6c10889240a70f0360d2e8d2899c716f689063e86d688bc2eafa1423f1927f72",
+  "randomnol0/raw3/shapes.xap": "19e941993078a55f7eed69bf12447a357d8db0a834ccaea7e230411fc0d54989",
+  "randomnol0/raw3/shapes.xsb": "559529764507209983be3f9d63617bf7ee599b1c299a02285695b24af6c74e33",
+  "region/A.xwb": "7247c7e3faf003f2a57951d64f42c83599554f03eb022268fa018804d305b5e6",
+  "region/a0.wav": "3321472db9bcfa6ae1b241042572ac76e01c934607a1055dba5e608c00015bb5",
+  "region/a1.wav": "a3122ec7e5233f876c56980f36c782801490438c3d8dfab154a60ca3d942b800",
+  "shuffle/raw1/shapes.xap": "0cbf2ffc0b3e9b5e5a918105b7ce03b51173bff2a40b9d084224bd138ade7008",
+  "shuffle/raw1/shapes.xsb": "eb856b2bebaa59549b2aface5a65578ff3fee2a5ba13f8eda3f06c893d370c6c",
+  "shuffle/raw3/shapes.xap": "3705d9ce99511155b1720f000e3f4ed3c7317e71fa6bdd72fb6b72f53fab7869",
+  "shuffle/raw3/shapes.xsb": "5652799d2255d551a4eb6f710990dcc706e882d6a48505ad629ee75db2a2cf5f",
+  "shufflenol0/raw1/shapes.xap": "8fc3b2f74b70180fe94dce69fbca79d737d173e72b33a4bbc033126dc2a9330a",
+  "shufflenol0/raw1/shapes.xsb": "7fbc9f1a0156416e1431c65d1544344acd480e38cf71fd41a888dcd3986cbe6b",
+  "shufflenol0/raw3/shapes.xap": "97ce22c47f10aeb5cf50dcd45070ca66046011d93892ba080415722b56e8c084",
+  "shufflenol0/raw3/shapes.xsb": "c64146b301cde9e8d8598f6be2851d6089faf47c174e212b758802c963dada3a",
+  "type1region/raw0/shapes.xap": "ee730f28403d0d518d966336cf30c2085492c1435f7f020b440d296fad274ff0",
+  "type1region/raw0/shapes.xsb": "f25893150a1b883859f0b0d6e3d9f8c859570222e0afbf06dc29fc09e1a067e8",
+  "type1region/raw1/shapes.xap": "336e4fc922e1c560544764881bb544bf029aba4afa2481da4464cd02ae664d9f",
+  "type1region/raw1/shapes.xsb": "ba94db2d5f730c7ada671db48dae9ffd20528d3f11d84b5dda40761ab4eb9b7e",
+  "type1region/raw2/shapes.xap": "846bec059a976f6dc47b13d78b6acef12b665c9f4f744bf96d99137710735652",
+  "type1region/raw2/shapes.xsb": "4932d77b23a68cdc307b14f669b5886bb38828a6a21654f8609585728f37150d",
+  "type1region/raw3/shapes.xap": "cf55282dd12a15703eb130dbfac700797c6019918a07f04ae87eadb8a0a19c41",
+  "type1region/raw3/shapes.xsb": "11409232bd44da0e5b511583d24afb0f615ca40bf07b9071c275e4d221c49752",
+  "type1region/raw4/shapes.xap": "54b81cba58a3eb9aa630cefcefcd245e09e3fc2bc3264e0c86d14e6edb842062",
+  "type1region/raw4/shapes.xsb": "374561d09ee6698cb88b310d7d70bf552a72a3c744a55caf97af055693e19c2b",
+  "type4/raw0/shapes.xap": "cbd7a215ed5345895f1b827ec414ac129cdbe1ad08d715cf3813b11fc75971d7",
+  "type4/raw0/shapes.xsb": "69f1e8ae5348b4d1f79f7350cdbb837eeba961de36ace17033869cf01a77a8e1",
+  "type4/raw1/shapes.xap": "542242d6c8cf05178a095e1eaf33ee2377e82c435d89f92a37806298d47e8fb6",
+  "type4/raw1/shapes.xsb": "077e1c494e32171e5901c046ea4cc99e692e4055247471fc55ba6e0ac8992312",
+  "type4/raw100/shapes.xap": "11ba959ded47108cecaf2662cb3473e085a782bd2703c9ed48ee5e168829c5dc",
+  "type4/raw100/shapes.xsb": "effdc171aea58e22be22ee79408c31bd396ab0a7f0d766b1ac23b40901c2dab8",
+  "type4/raw2/shapes.xap": "2e026094f166602280a142b7581406b0b93e2edddaebacbf0f8c7ffac0a9612b",
+  "type4/raw2/shapes.xsb": "2b7c7e62321486d19d3f075f7a3a555ebc96d9e6ee6bcb22f42cea809e828f2e",
+  "type4/raw3/shapes.xap": "c1ae61d51ad6cb19e082a5c924bf3161e385a8f8c9a8f24fabe39837e672658e",
+  "type4/raw3/shapes.xsb": "d7e6e4ec388eec705aa18cc59cc9322745cac5e7e15e2ced204dc347c0f5c8a5",
+  "type4/raw4/shapes.xap": "b430026f2bbf33edcb15e5d924258a66c3c1eb13340594264812066ade4594d9",
+  "type4/raw4/shapes.xsb": "07f3c747737fd4f0e31cf505182213c0443efe4b142e3a4aa619c50c9b5d860d",
+  "type4nol/raw0/shapes.xap": "cd8f92f1bd80fbd6320e5606bb820ffda83679aba00db03c3c83a4d06569321e",
+  "type4nol/raw0/shapes.xsb": "b65fb108d84e67fbabfdb8481bf78edbf3ac7acedb45fe0be283cbbf4f852edd",
+  "type4nol/raw1/shapes.xap": "24096c556786121f01cf11586997d3501834cb2b3d1a1042d7f1f3a698d3342f",
+  "type4nol/raw1/shapes.xsb": "6be3530bd025f0e7c99fcf2a7abe3e28d068aa403f68862a1e5a0b19f0ff2bd7",
+  "type4nol/raw100/shapes.xap": "f94c9c6334cc337beb20f375b7c9a312a4e74ccbfdafb3a195ffebcdec13954e",
+  "type4nol/raw100/shapes.xsb": "5529ab48707d785a2456e921eef4cfdfd00c16eb729a082503d561e48a52d2a2",
+  "type4nol/raw2/shapes.xap": "344c3f66e22f831c75f353806d3f345c74322784f2fd4795533986a25c4cc7cc",
+  "type4nol/raw2/shapes.xsb": "2cdd58d6b7bfe06b9b08e4eae73194ee010057ed6e8568f4b62449f1a91df4ba",
+  "type4nol/raw3/shapes.xap": "37395b3130c033ed2b32537ef0259767cfae4adafe4403805901b65133ef82c4",
+  "type4nol/raw3/shapes.xsb": "8a640362c20f2d54e37d711c9b293045120a18e70c5669b45022265c2576b799",
+  "type4nol/raw4/shapes.xap": "0ef190a04f627ac0f023821f4335baae29d1edf3af40bfe1e48fcc2ab1f58f12",
+  "type4nol/raw4/shapes.xsb": "7b967a0d893cc4d238d48be3ad069975fd5fc1655b25b33e2b97052f3884da91",
+  "type6/raw0/shapes.xap": "802a2409745073c484d577b31677762e7ff5381afc74b7b9309078454551f3c9",
+  "type6/raw0/shapes.xsb": "12911e57539cb3d04c50a2342bbf3e599b181d6a55e3e1963f870c8e468d3940",
+  "type6/raw1/shapes.xap": "d4cd13e2ba5a9a069b2d048d75558f647bf35e33572e44ce788498744e9df727",
+  "type6/raw1/shapes.xsb": "9dc61fee97761d220a94a5fa0f7ef4d576f5e435bc3751fde4902d35bfa9f684",
+  "type6/raw2/shapes.xap": "024b100cdc913c079887f81aa12d0a5624a72a249279c1545bf6634dea0629a7",
+  "type6/raw2/shapes.xsb": "719c826c2e75c0a2f3e06e02079cbf206fd21e63aca48bd0e2be62c95a3dd1e8",
+  "type6/raw3/shapes.xap": "92bda4b02d72e4a9b847c15aecd3422c417ddc486cec4a58315ef59ad3e536fe",
+  "type6/raw3/shapes.xsb": "6d83f2cacf69753cebb70f54eae8030fa056d795f2b716023902aca3bc7a722b",
+  "type6/raw4/shapes.xap": "7b11fb515da9852d168bab62749ac74f268019c048ca71c0866f20dff5a1507a",
+  "type6/raw4/shapes.xsb": "35085519b5bf5b4c16c6b3ce1ff61e837f1c728e91b9748c5042f91f416fddc9",
+  "type6nol0/raw0/shapes.xap": "1a2efd9c373122d1d6abde8bdb577ce4ae537cf7c5b60e454f186166e303ce63",
+  "type6nol0/raw0/shapes.xsb": "522ccd07b4df9a7da6e77554e614b66d2e37fd3757707b77ae3e0885721192e5",
+  "type6nol0/raw1/shapes.xap": "ed9034ec3a21652c423a6a1a90d17002b144588f6996e053e9364dbcd1dd66e3",
+  "type6nol0/raw1/shapes.xsb": "96976bef19722389537fbea1df4b4510be48733cd2caffb4a88334d6ea725d84",
+  "type6nol0/raw2/shapes.xap": "02388d5de425434f36f19d5e5e23e7fa66832b52b341536a7bcf6b0a01413fd2",
+  "type6nol0/raw2/shapes.xsb": "02c25b6b0ecb97e8a1117207d34022df66c549cbe6b11e32f2031332ad77fa10",
+  "type6nol0/raw3/shapes.xap": "6043d303fe7e13915f2a075ede965ca32a95258cb909b9bb038745d620870b7e",
+  "type6nol0/raw3/shapes.xsb": "870136df629953e182e145cb8c58c6bc01a6180aa365148142fab8147dbe1bbc",
+  "type6nol0/raw4/shapes.xap": "08716c8f5376f27275c71a77b334004c7d4ce4eb66dccf6b022b9a41a48a5eab",
+  "type6nol0/raw4/shapes.xsb": "4046ec6a7a924c5e17291bc39b06d4e8392d3e038fd7fececed2386acd324408"
+ },
+ "limits": [
+  "Callback delivery and polled XACT_TRACK_PROPERTIES, not native PCM or an exact internal clock.",
+  "A pass count is a hold divided by the one-wave control hold (quantized ~20 ms under Wine); held 101/255-pass counts are exact only to that resolution, separate-wave counts are exact.",
+  "The per-pass pitch verdict is statistical (six cells per variant)."
+ ]
+}

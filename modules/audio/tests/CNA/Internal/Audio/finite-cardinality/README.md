@@ -36,6 +36,7 @@ resident control and a rerun of the HND-XACT-02 samebank bytes, two repeats of t
 
 A pass is the hold of the same architecture's one-wave control (660-700 ms under Wine's
 XAudio2); the captures bound callback delivery and polled properties, not native PCM.
-Not measured: effect families4/6 and their effect NEW_ON_LOOP bits, waves with a loop region,
-random/shuffle variations, raw bytes above4, streaming or cross-bank candidates. Effect and
-loop-region banks were authored (archive `banks/`) but never captured.
+Not measured here: effect families4/6 and their effect NEW_ON_LOOP bits, waves with a loop region,
+random/shuffle variations, raw bytes above4, streaming or cross-bank candidates. HND-XACT-06
+captured the archived effect and loop-region banks and the other extensions
+(`../loop-extensions/`).
