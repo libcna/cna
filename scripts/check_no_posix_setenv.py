@@ -5,8 +5,12 @@
 `setenv`/`unsetenv` are POSIX. MinGW-w64 does not have them, so a single call site anywhere in a
 translation unit that reaches a Windows cross-build stops `CnaTests.exe` compiling -- which is how
 the Direct3D renderers once went years without a test binary. Every call site uses
-`System::Environment::SetEnvironmentVariable(name, value)` instead (empty value means unset), and
-new POSIX calls kept reappearing until this check existed.
+`System::Environment::SetEnvironmentVariable(name, value)` instead (`std::nullopt` removes the
+variable), and new POSIX calls kept reappearing until this check existed. Test-support code that
+links nothing uses `CNA::TestSupport::SetProcessEnvironmentVariable`, the one allowed header.
+
+It runs as the `NoPosixSetenv` ctest (cmake/Tests/ModuleProbes.cmake) and as a
+general-tests-ci step.
 
 A rule nothing enforces is a rule that decays, so this enforces it. It is a text check, deliberately:
 the point is to fail on a Linux build long before anyone tries a Windows one.
@@ -20,8 +24,14 @@ from pathlib import Path
 
 CALL = re.compile(r"(?<![_A-Za-z:])(?:::)?(?:un)?setenv\s*\(")
 
-# Third-party trees CNA does not own, and the file that documents the rule.
-SKIP_PARTS = ("third_party", "vendor", "cmake-build", "_deps")
+# Third-party trees CNA does not own, and build trees.
+SKIP_PARTS = ("third_party", "vendor", "_deps")
+
+# Test-support targets link nothing, sharp-runtime included, so they cannot use
+# System::Environment. This header is their one portable setter, with its own _WIN32 branch.
+ALLOWED = {"tests/support/CNA/TestSupport/TestScratchEnvironment.hpp"}
+
+SUFFIXES = (".cpp", ".hpp", ".c", ".h")
 
 
 def main() -> int:
@@ -32,8 +42,11 @@ def main() -> int:
         base = root / directory
         if not base.is_dir():
             continue
-        for path in sorted(list(base.rglob("*.cpp")) + list(base.rglob("*.hpp"))):
-            if any(part in str(path) for part in SKIP_PARTS):
+        for path in sorted(p for p in base.rglob("*") if p.suffix in SUFFIXES and p.is_file()):
+            relative = path.relative_to(root)
+            if relative.as_posix() in ALLOWED:
+                continue
+            if any(part in SKIP_PARTS or part.startswith("cmake-build") for part in relative.parts):
                 continue
             scanned += 1
             for number, line in enumerate(path.read_text(encoding="utf-8").split("\n"), start=1):
@@ -41,15 +54,16 @@ def main() -> int:
                 if stripped.startswith(("//", "*", "/*")):
                     continue
                 if CALL.search(line):
-                    problems.append(f"{path.relative_to(root)}:{number}: {stripped}")
+                    problems.append(f"{relative}:{number}: {stripped}")
 
     if problems:
         print("POSIX setenv/unsetenv found -- MinGW-w64 has neither, so this breaks every Windows "
               "cross-build's CnaTests.exe:")
         for problem in problems:
             print(f"  {problem}")
-        print("\nUse System::Environment::SetEnvironmentVariable(name, value) instead; an empty "
-              "value means unset.")
+        print("\nUse System::Environment::SetEnvironmentVariable(name, value) instead; "
+              "std::nullopt removes the variable. Test-support code that links nothing uses "
+              "CNA::TestSupport::SetProcessEnvironmentVariable.")
         return 1
 
     print(f"{scanned} sources, no POSIX setenv/unsetenv outside third-party trees.")

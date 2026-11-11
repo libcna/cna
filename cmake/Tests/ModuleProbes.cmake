@@ -297,6 +297,14 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT ANDROID)
             COMMAND Python3::Interpreter
                 "${CMAKE_CURRENT_SOURCE_DIR}/scripts/check_renderer_identities.py")
 
+        # MinGW-w64 has no setenv/unsetenv, so one call site stops every Windows cross-build's
+        # test binaries compiling. This fails the Linux build instead of a Windows one.
+        add_test(NAME NoPosixSetenv
+            COMMAND Python3::Interpreter
+                "${CMAKE_CURRENT_SOURCE_DIR}/scripts/check_no_posix_setenv.py"
+                "${CMAKE_CURRENT_SOURCE_DIR}")
+        set_tests_properties(NoPosixSetenv PROPERTIES LABELS "configuration;windows")
+
         # RRC-009/RRC-010: the two API decisions
         # the 25-identity curation forced, held in opposite directions -- the removed 2D mesh entry
         # point stays removed, and the retained surface-presenter flag stays retained only while the

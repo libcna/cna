@@ -69,6 +69,9 @@ jobs:
       - name: Check build-performance policy
         run: python3 tools/build/check_build_performance_policy.py
 
+      - name: Check for POSIX setenv/unsetenv (MinGW-w64 has neither)
+        run: python3 scripts/check_no_posix_setenv.py
+
       - name: Check coverage collector and threshold validation
         run: python3 -m unittest discover -s tools/coverage -v
 

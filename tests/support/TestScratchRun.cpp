@@ -11,7 +11,7 @@ int main(int argc, char** argv)
     if (argc < 2) return 2;
     const auto& root = CNA::TestSupport::FixtureRoot();
     CNA::TestSupport::UseProcessTempRoot();
-    if (::setenv("CNA_TEST_SCRATCH_ROOT", root.c_str(), 1) != 0) return 2;
+    if (!CNA::TestSupport::SetProcessEnvironmentVariable("CNA_TEST_SCRATCH_ROOT", root.string())) return 2;
     const auto child = ::fork();
     if (child < 0) return 2;
     if (child == 0)

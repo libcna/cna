@@ -16,6 +16,7 @@
 #include "CNA/Internal/PathUtf8.hpp"
 #include "Microsoft/Xna/Framework/Storage/StorageDevice.hpp"
 #include "System/ArgumentException.hpp"
+#include "System/Environment.hpp"
 #include "System/ObjectDisposedException.hpp"
 
 // Desktop storage honors XDG_DATA_HOME. No test fixture writes to the real save root.
@@ -35,11 +36,8 @@ protected:
     std::unique_ptr<StorageContainer> container;
     void SetEnvironment(const char* value)
     {
-#if defined(_WIN32)
-        ASSERT_EQ(_putenv_s("XDG_DATA_HOME", value ? value : ""), 0);
-#else
-        ASSERT_EQ(value ? setenv("XDG_DATA_HOME", value, 1) : unsetenv("XDG_DATA_HOME"), 0);
-#endif
+        System::Environment::SetEnvironmentVariable(
+            "XDG_DATA_HOME", value ? std::optional<std::string>(value) : std::nullopt);
     }
     void SetUp() override
     {

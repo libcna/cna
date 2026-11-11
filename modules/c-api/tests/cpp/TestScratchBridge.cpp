@@ -25,11 +25,8 @@ namespace
     }
     void SetEnvironment(const char* name, const std::string& value)
     {
-#if defined(_WIN32)
-        if (::_putenv_s(name, value.c_str()) != 0) throw std::runtime_error("set scratch environment");
-#else
-        if (::setenv(name, value.c_str(), 1) != 0) throw std::runtime_error("set scratch environment");
-#endif
+        if (!CNA::TestSupport::SetProcessEnvironmentVariable(name, value))
+            throw std::runtime_error("set scratch environment");
     }
     std::string QuotedFolder(const char* value)
     {

@@ -19,6 +19,7 @@
 
 #include "Microsoft/Xna/Framework/Storage/StorageDevice.hpp"
 #include "Microsoft/Xna/Framework/Storage/StorageDeviceNotConnectedException.hpp"
+#include "System/Environment.hpp"
 #include "System/IO/IOException.hpp"
 #include "System/UnauthorizedAccessException.hpp"
 
@@ -47,11 +48,8 @@ class StorageResidualPathsTest : public ::testing::Test
 protected:
     void SetEnvironment(const char* value)
     {
-#if defined(_WIN32)
-        ASSERT_EQ(_putenv_s("XDG_DATA_HOME", value ? value : ""), 0);
-#else
-        ASSERT_EQ(value ? setenv("XDG_DATA_HOME", value, 1) : unsetenv("XDG_DATA_HOME"), 0);
-#endif
+        System::Environment::SetEnvironmentVariable(
+            "XDG_DATA_HOME", value ? std::optional<std::string>(value) : std::nullopt);
     }
 
     void SetUp() override
@@ -189,7 +187,7 @@ TEST_F(StorageResidualPathsTest, AnUnresolvableRootIsADisconnectedDevice)
     {
         const char* value = std::getenv(name);
         saved.push_back({name, value ? std::optional<std::string>(value) : std::nullopt});
-        ASSERT_EQ(unsetenv(name), 0);
+        System::Environment::SetEnvironmentVariable(name, std::nullopt);
     }
     SetEnvironment(nullptr);
     const fs::path previous = fs::current_path();
@@ -207,7 +205,7 @@ TEST_F(StorageResidualPathsTest, AnUnresolvableRootIsADisconnectedDevice)
 
     ASSERT_EQ(::chdir(previous.c_str()), 0);
     for (const Variable& variable : saved)
-        if (variable.value) ASSERT_EQ(setenv(variable.name, variable.value->c_str(), 1), 0);
+        if (variable.value) System::Environment::SetEnvironmentVariable(variable.name, variable.value);
 }
 
 TEST_F(StorageResidualPathsTest, DeleteContainerReportsAnUndeletableFileAsUnauthorizedAccess)

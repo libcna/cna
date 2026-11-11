@@ -26,6 +26,7 @@
 #include "Microsoft/Xna/Framework/Graphics/RenderTarget2D.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
 #include "RetroGraphicsTestSupport.hpp"
+#include "System/Environment.hpp"
 
 using CNA::Graphics::AsciiPostProcessEffect;
 using CNA::Graphics::AsciiQuantizeMode;
@@ -138,21 +139,10 @@ namespace
 
         static void Set(const char* value)
         {
-#if defined(_WIN32)
-            _putenv_s("CNA_ASCII_MODE", value);
-#else
-            ::setenv("CNA_ASCII_MODE", value, 1);
-#endif
+            System::Environment::SetEnvironmentVariable("CNA_ASCII_MODE", std::string(value));
         }
 
-        static void Unset()
-        {
-#if defined(_WIN32)
-            _putenv_s("CNA_ASCII_MODE", "");
-#else
-            ::unsetenv("CNA_ASCII_MODE");
-#endif
-        }
+        static void Unset() { System::Environment::SetEnvironmentVariable("CNA_ASCII_MODE", std::nullopt); }
 
     private:
         std::optional<std::string> previous_;

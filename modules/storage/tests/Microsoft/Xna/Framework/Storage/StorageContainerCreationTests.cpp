@@ -18,6 +18,7 @@
 #endif
 
 #include "Microsoft/Xna/Framework/Storage/StorageDevice.hpp"
+#include "System/Environment.hpp"
 #include "System/InvalidOperationException.hpp"
 #include "System/IO/IOException.hpp"
 #include "System/UnauthorizedAccessException.hpp"
@@ -53,11 +54,8 @@ class StorageContainerCreationTest : public ::testing::Test
 protected:
     void SetEnvironment(const char* value)
     {
-#if defined(_WIN32)
-        ASSERT_EQ(_putenv_s("XDG_DATA_HOME", value ? value : ""), 0);
-#else
-        ASSERT_EQ(value ? setenv("XDG_DATA_HOME", value, 1) : unsetenv("XDG_DATA_HOME"), 0);
-#endif
+        System::Environment::SetEnvironmentVariable(
+            "XDG_DATA_HOME", value ? std::optional<std::string>(value) : std::nullopt);
     }
 
     void SetUp() override

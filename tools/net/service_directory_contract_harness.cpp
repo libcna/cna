@@ -4,6 +4,7 @@
 #include "../../modules/gamer-services/src/Internal/ServiceBackendTestTransport.hpp"
 #include "../../modules/net/src/Internal/OnlineSessionPreparation.hpp"
 #include "../../modules/gamer-services/src/Internal/Protocol/CnaService/Protocol.hpp"
+#include "System/Environment.hpp"
 #include <spawn.h>
 #include <sys/wait.h>
 #include <unistd.h>
@@ -159,7 +160,7 @@ void legacySession(Fixture& f) {
 int main(int argc,char** argv) {
     try {
         check(argc==3||argc==4,"service fixture executable + database prefix [case]");
-        setenv("CNA_GAMER_SERVICES_CREDENTIALS_DIR","0",1);
+        System::Environment::SetEnvironmentVariable("CNA_GAMER_SERVICES_CREDENTIALS_DIR","0");
         const auto selected=[&](const std::string& name){return argc==3||std::string(argv[3])==name;};
         int ran=0;
         for(const auto kind:{GS::ServiceSessionKind::PlayerMatch,GS::ServiceSessionKind::Ranked})for(bool old:{false,true}) {

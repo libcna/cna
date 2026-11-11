@@ -16,6 +16,7 @@
 #include <cstdlib>
 #include <filesystem>
 #include <memory>
+#include <optional>
 #include <random>
 #include <string>
 #include <vector>
@@ -24,6 +25,7 @@
 #include "Microsoft/Xna/Framework/PlayerIndex.hpp"
 #include "Microsoft/Xna/Framework/Storage/StorageContainer.hpp"
 #include "Microsoft/Xna/Framework/Storage/StorageDevice.hpp"
+#include "System/Environment.hpp"
 #include "System/EventArgs.hpp"
 #include "System/EventHandler.hpp"
 #include "System/IO/Stream.hpp"
@@ -199,23 +201,22 @@ TEST_F(StorageDeviceChangedTest, AVolumeArrivingOrLeavingAtTheRootRaisesItAtTheN
     struct Cleanup
     {
         std::vector<fs::path> paths;
-        std::string xdg;
-        bool hadXdg = false;
+        std::optional<std::string> xdg;
         ~Cleanup()
         {
-            if (hadXdg) ::setenv("XDG_DATA_HOME", xdg.c_str(), 1); else ::unsetenv("XDG_DATA_HOME");
+            System::Environment::SetEnvironmentVariable("XDG_DATA_HOME", xdg);
             std::error_code error;
             for (const fs::path& path : paths)
                 if (path.filename().string().find("cna-volume-") == 0) fs::remove_all(path, error);
         }
     } cleanup{{disk, memory, base}};
-    if (const char* xdg = std::getenv("XDG_DATA_HOME")) { cleanup.xdg = xdg; cleanup.hadXdg = true; }
+    if (const char* xdg = std::getenv("XDG_DATA_HOME")) cleanup.xdg = xdg;
     if (DeviceOf(disk) == DeviceOf(memory) || DeviceOf(disk) == 0)
         GTEST_SKIP() << "/dev/shm and the working directory are one filesystem here";
 
     const fs::path link = base / "volume";
     PointAt(link, memory);
-    ::setenv("XDG_DATA_HOME", link.c_str(), 1);
+    System::Environment::SetEnvironmentVariable("XDG_DATA_HOME", link.string());
     StorageDevice::SetAppNameEXT(name_ + "-volume");
     const fs::path root = StorageDevice::GetStorageRootEXT();
     ASSERT_EQ(root.parent_path(), link);
