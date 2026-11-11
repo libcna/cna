@@ -83,9 +83,10 @@ TEST(XactLoopVariation, PitchAndVolumeAddNewAndHoldReachEverySpawnedVoice)
     // FACT_internal.c:309-374. Pitch300->600->900 for ADD; NEW stays300.
     // Volume byte90 gives c=-1194.093444090611; total gainB*10^(n*c/2000).
     // B=10^(3*(3969*log10(180/28240)+8715)/2000), defined in value cases.
+    // Raw2 authors the three track NEW_ON_LOOP waves (n+1, HND-XACT-06 type6).
     for (const uint16_t mode : {uint16_t(0x0005),uint16_t(0x0300),uint16_t(0x0305)})
     {
-        AuthoredTracks tracks{{VariedAt(0,3,XsbTrackVariationType::Ordered,0x3000|mode)}};
+        AuthoredTracks tracks{{VariedAt(0,2,XsbTrackVariationType::Ordered,0x3000|mode)}};
         ScheduledBanks b(tracks,0,false,{},false,VariationSound(tracks));
         std::vector<uint32_t> bounds;
         InjectVariation(*b.engine,{},bounds,std::vector<float>(6,0));
@@ -111,9 +112,10 @@ TEST(XactLoopVariation, FilterNewAndHoldReachFreshVoiceWithoutChangingPitchOrVol
 {
     // FACT_internal.c:381-424. FirstQ4 ->.25, f4000; nextQ2 ->.5,f2000.
     // Normalized f=2*sin(pi*Hz/44100): .5622222267 and .2839886359.
+    // Raw1 authors the two track NEW_ON_LOOP waves (n+1, HND-XACT-06 type6).
     for (const uint16_t mode : {uint16_t(0),uint16_t(0x0400),uint16_t(0x0800),uint16_t(0x0c50)})
     {
-        AuthoredTracks tracks{{VariedAt(0,2,XsbTrackVariationType::Ordered,0xc000|mode)}};
+        AuthoredTracks tracks{{VariedAt(0,1,XsbTrackVariationType::Ordered,0xc000|mode)}};
         ScheduledBanks b(tracks,0,false,{},false,VariationSound(tracks,true));
         std::vector<uint32_t> bounds;
         InjectVariation(*b.engine,{},bounds,{.5f,.75f,0,.25f});
@@ -329,7 +331,9 @@ TEST(XactLoopVariation, CategoryAndValueChangesRecombineWithRetainedLoopOffsets)
 
 TEST(XactLoopVariation, EffectOnlyEventsUseLoopFlagsWithoutAnyCandidateTable)
 {
-    // FACT simple-wave path:253-257 plus pitch/volume branches:309-374.
+    // FACT simple-wave path:253-257 plus pitch/volume branches:309-374. HND-XACT-06 type4: with
+    // an effect NEW_ON_LOOP every further pass is a new activation that draws again (CNA's
+    // rendering of the native held wave); without one (0x0005) the one wave holds all passes.
     for (uint16_t mode : {uint16_t(0x0005),uint16_t(0x0300),uint16_t(0x0305)})
     {
         auto event=VariedAt(0,2,XsbTrackVariationType::Ordered,0x3000|mode);
@@ -344,7 +348,7 @@ TEST(XactLoopVariation, EffectOnlyEventsUseLoopFlagsWithoutAnyCandidateTable)
         (void)manualDevice->Render(1024); b.Tick(10);
         ExpectEventVoice(*cue,0,0,mode==0x0305 ? .06411334986f : .2535100559f,
                                    mode==0x0305 ? 1.414213562f : 1.189207115f);
-        EXPECT_EQ(draws,4); //two enabled axes draw on each finite event activation, also HOLD
+        EXPECT_EQ(draws,mode&0x0300 ? 4 : 2); //two enabled axes draw on each finite event activation
     }
 }
 

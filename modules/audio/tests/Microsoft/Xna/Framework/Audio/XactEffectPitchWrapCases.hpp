@@ -24,12 +24,14 @@ float WrapPitchRatio(int cents)
 
 TEST(XactEffectPitchWrap, FiniteAddWrapsTheCombinedBaseAndKeepsNewHoldControls)
 {
+    // HND-XACT-06 type4: raw n plays n+1 passes; with the pitch NEW_ON_LOOP each is a new
+    // activation (raw253 authors 254, raw3 four), without it (0x1004) one wave holds them all.
     for(int sign:{-1,1})for(uint16_t flags:{uint16_t(0x1104),uint16_t(0x1100),uint16_t(0x1004)})
     {
         SCOPED_TRACE(sign);
         SCOPED_TRACE(flags);
-        const unsigned waves=flags==0x1104?254:4;
-        const AuthoredTracks tracks{{WrapEffectAt(static_cast<uint8_t>(waves),sign*300,flags)}};
+        const unsigned waves=flags==0x1104?254:flags==0x1100?4:1;
+        const AuthoredTracks tracks{{WrapEffectAt(static_cast<uint8_t>(flags&0x0100?waves-1:3),sign*300,flags)}};
         ScheduledBanks banks(tracks,0,false,{},false,PitchSound(tracks,sign*900));
         unsigned draws=0;
         AudioEngineTestAccess::SetPreparationVariationRandom(*banks.engine,{
@@ -67,7 +69,7 @@ TEST(XactEffectPitchWrap, LongEffectStateKeepsIntegerPrecisionWhenARealNextVoice
     for(int sign:{-1,1})
     {
         SCOPED_TRACE(sign);
-        const AuthoredTracks tracks{{WrapEffectAt(2,sign*301,0x1104)}};
+        const AuthoredTracks tracks{{WrapEffectAt(1,sign*301,0x1104)}}; // two activations (n+1)
         ScheduledBanks banks(tracks,0,false,{},false,PitchSound(tracks,sign*900));
         unsigned draws=0;
         AudioEngineTestAccess::SetPreparationVariationRandom(*banks.engine,{

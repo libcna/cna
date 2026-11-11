@@ -43,7 +43,7 @@ protected:
         if (factoryCalls == 0) manualDeviceRate = 22050;
         ASSERT_EQ(manualDeviceRate, 22050u)
             << "the device is already open at another rate; run HndXactPrefetch.*, "
-               "HndXactCrossBank.* and HndXactCardinality.* in their own process";
+               "HndXactCrossBank.*, HndXactCardinality.* and HndXactLoopExtension.* in their own process";
     }
 };
 class HndXactPrefetch : public NativeRateXact {};

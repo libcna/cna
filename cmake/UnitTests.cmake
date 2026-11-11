@@ -96,7 +96,7 @@ if(CNA_BUILD_TESTS)
             -Wl,--wrap=_ZN3CNA8Internal5Audio27SetMixerTrackFrequencyRatioEPNS1_10MixerTrackEf)
         # The harness opens one device per process; the native 22050 Hz captures run in their
         # own process at that rate (XactPrefetchCases.hpp NativeRateXact).
-        set(_cna_xact_native_rate_suites "HndXactPrefetch.*:HndXactCrossBank.*:HndXactCardinality.*")
+        set(_cna_xact_native_rate_suites "HndXactPrefetch.*:HndXactCrossBank.*:HndXactCardinality.*:HndXactLoopExtension.*")
         add_test(NAME CnaXactFiniteLoopTests COMMAND CnaXactFiniteLoopTests
             "--gtest_filter=-${_cna_xact_native_rate_suites}")
         add_test(NAME CnaXactFiniteLoopNativeRateTests COMMAND CnaXactFiniteLoopTests

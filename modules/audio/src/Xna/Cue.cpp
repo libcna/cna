@@ -1226,29 +1226,33 @@ namespace Microsoft::Xna::Framework::Audio
                 {
                     const uint8_t count = play->wave.loopCount;
                     const bool trackNewOnLoop = (play->variationInfo & 0x00400000u) != 0;
-                    const bool newEffects = (play->wave.effectVariationFlags & 0x0f00) != 0;
+                    // Only the effect families carry effect variation (a synthetic simple-sound
+                    // event is a PlayWave).
+                    const bool newEffects = (event.authored.type == XsbEventType::PlayWaveEffectVariation
+                        || event.authored.type == XsbEventType::PlayWaveTrackEffectVariation)
+                        && (play->wave.effectVariationFlags & 0x0f00) != 0;
                     // Refresh Cue.Play IL_0006 reaches native IXACT3Cue::Play (UnsafeNativeMethods/
-                    // Cue::Play IL_0032-0036), so the count is Microsoft XACT3.6 behaviour. HND-XACT-05
-                    // measured it on x86/x64 (docs/xact-looping.md, finite-cardinality/ORACLE.json):
-                    // PlayWave and PlayWaveTrackVariation play the wave n+1 times for a positive
-                    // byte n, whatever the play-wave flags byte. With track NEW_ON_LOOP every
-                    // pass is a new complete wave; without it one wave loops n times, as
-                    // FACT_internal.c:271-278 already delegates 255. FAudio plays max(n,1) waves.
-                    const bool measured = event.authored.type == XsbEventType::PlayWave
-                        || event.authored.type == XsbEventType::PlayWaveTrackVariation;
-                    // The effect families were not measured: keep FAudio's budget for them.
-                    const bool delegated = measured ? !trackNewOnLoop
-                        : count == 255 && !trackNewOnLoop && !newEffects;
+                    // Cue::Play IL_0032-0036), so the count is Microsoft XACT3.6 behaviour, measured
+                    // on x86/x64 (docs/xact-looping.md; finite-cardinality/ and loop-extensions/
+                    // ORACLE.json): every play-wave family (1, 3, 4, 6), ordered, random or shuffle,
+                    // plays a finite byte n (0..5, 100, 254) as n+1 passes, whatever the flags byte.
+                    // Track NEW_ON_LOOP makes every pass a new complete wave; without it one wave
+                    // loops n times, repeating its loop region when one is authored. FAudio plays
+                    // max(n,1) waves. An effect NEW_ON_LOOP bit alone natively also holds one wave,
+                    // whose effect varies over its passes (HND-XACT-06 pitch cells); a CNA voice
+                    // has no per-pass update, so CNA renders each pass as a complete wave with
+                    // re-drawn effects and the measured count. 255 keeps FAudio's delegation
+                    // (FACT_internal.c:271-278) under the owner's unbounded policy.
+                    const bool delegated = !trackNewOnLoop && !newEffects;
                     event.managedLoops = count > 0 && !delegated;
 #ifndef SOUND_ENABLED
                     // NULL audio has no completion-producing voice. Preserve its
                     // existing one-shot/property behavior instead of inventing loops.
                     event.managedLoops = false;
 #endif
-                    // Measured: the first wave is not part of n. FAudio's initial GetNextWave
-                    // consumes one finite count. 255 stays the unbounded sentinel.
-                    event.loopsRemaining = !event.managedLoops ? 0 : count == 255 || measured
-                        ? count : count - 1;
+                    // The first wave is not part of n (FAudio's initial GetNextWave consumes
+                    // one finite count instead). 255 stays the unbounded sentinel.
+                    event.loopsRemaining = event.managedLoops ? count : 0;
                     StartWave(play->wave, t, e, &event);
                 }
                 else if (const auto* stop = std::get_if<XsbStopEvent>(&event.authored.payload))
@@ -1312,7 +1316,15 @@ namespace Microsoft::Xna::Framework::Audio
         auto& variation = loopEvent ? loopEvent->variation : localVariation;
         const auto random = VariationRandom();
         const bool prepared = loopEvent && std::exchange(loopEvent->wavePrepared, false);
-        if (!prepared) CNA::Internal::Audio::SelectXactVariationCandidate(waveRef, variation, random);
+        // A finite event without track NEW_ON_LOOP natively holds its first candidate for every
+        // pass (HND-XACT-05 nol0, HND-XACT-06 type6nol0/randomnol0/shufflenol0); a pass CNA
+        // renders as a separate wave for an effect NEW_ON_LOOP must not reselect it. FAudio
+        // reselects regardless (FACT_internal.c:193-247); 255 keeps that.
+        const bool holdCandidate = loopEvent && variation.started && waveRef.loopCount != 255
+            && !(std::get<CNA::Internal::Audio::XsbPlayWaveEvent>(loopEvent->authored.payload).variationInfo
+                 & 0x00400000u);
+        if (!prepared && !holdCandidate)
+            CNA::Internal::Audio::SelectXactVariationCandidate(waveRef, variation, random);
         uint8_t  effectiveWavebankIndex = waveRef.wavebankIndex;
         uint16_t effectiveWaveIndex     = waveRef.waveIndex;
         if (!waveRef.trackVariationEntries.empty())
