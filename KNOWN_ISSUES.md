@@ -26,10 +26,12 @@ page under `docs/` (index: `docs/README.md`), deliberate divergences from FNA an
   MojoShader fork 6f1e91b; their CNA patches and open defects are in
   `docs/fna3d-dependency-defects.md`. SDL 86296ac8 with five CNA patches (`cmake/patches/`).
   sharp-runtime (CNA's `System.*`) is the sibling repository.
-- **Tests.** The last full run, sweep 17 on 2026-11-09, built seven configurations (multi, sdlgpu,
-  webgpu, fna3d, software, headless and opengl33; about 102,000 CTest cases). Its only failures
-  were two regressions from that day, both fixed and rerun green. GPU and window tests must run
-  through `tools/platform/run_gpu_tests_private.sh`, never on the live desktop.
+- **Tests.** The last full run, sweep 18 on 2026-11-11 (837b687c3), built seven configurations (multi,
+  sdlgpu, webgpu, fna3d, software, headless and opengl33; about 102,900 CTest cases). Its failures were a
+  reference file's line endings (fixed in 4ef67873b) and `GamerServices_DirectoryServiceContract`, whose
+  server fixture build had been deleted (rebuilt, it passes). The thirteen consumer repositories were
+  rechecked on 4ef67873b the same day; none needed a code change. GPU and window tests must run through
+  `tools/platform/run_gpu_tests_private.sh`, never on the live desktop.
 
 ## Defects
 
