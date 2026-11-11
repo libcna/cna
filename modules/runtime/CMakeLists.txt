@@ -6,3 +6,7 @@ cna_link_sharp_runtime(cna_runtime PUBLIC Core.Base Globalization IO)
 cna_link_sharp_runtime(cna_runtime PRIVATE Uri)
 # docs/platform-abstraction.md: cna_platform owns every native service used by Runtime.
 target_link_libraries(cna_runtime PUBLIC cna_platform)
+# CMakeLists.txt (CNA_DEBUG_CONTEXT_HOTKEYS): whether Game::PollEvents maps F9/F10 to a simulated
+# context loss and restore.
+target_compile_definitions(cna_runtime PRIVATE
+        "CNA_DEBUG_CONTEXT_HOTKEYS=${CNA_DEBUG_CONTEXT_HOTKEYS_VALUE}")

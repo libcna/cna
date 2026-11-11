@@ -669,6 +669,13 @@ if(CNA_BUILD_TESTS)
         set_property(SOURCE "${CMAKE_CURRENT_SOURCE_DIR}/tests/HarnessRuntimeDefaults.cpp"
             APPEND PROPERTY COMPILE_DEFINITIONS CNA_TEST_ALSA_DEFAULTS=1)
     endif()
+    # The configured mode and configuration, so the test restates the AUTO/ON/OFF rule itself
+    # instead of reading back the runtime's own definition.
+    set_property(SOURCE
+        "${CMAKE_CURRENT_SOURCE_DIR}/modules/runtime/tests/CNA/Internal/Runtime/DebugContextHotkeysTests.cpp"
+        APPEND PROPERTY COMPILE_DEFINITIONS
+            CNA_TEST_DEBUG_CONTEXT_HOTKEYS_MODE="${CNA_DEBUG_CONTEXT_HOTKEYS}"
+            "CNA_TEST_CONFIG_IS_DEBUG=$<CONFIG:Debug>")
 
     # CnaTests historically compiled through the CNA umbrella and therefore saw every public
     # module include root. A few contract tests intentionally include a second subsystem's public

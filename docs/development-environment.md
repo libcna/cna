@@ -248,6 +248,11 @@ sudo apt-get install -y mesa-utils vulkan-tools vulkan-validationlayers apitrace
   in its configured trixie index; that is not an assertion about every Debian suite/repository.
   Run GPU capture commands through the private runner as well.
 - Mesa's own `MESA_DEBUG=1` and `LIBGL_DEBUG=verbose` environment variables need no package.
+- Context-loss hotkeys: in a Debug configuration a running `Game` turns F9 into
+  `DebugSimulateContextLoss()` and F10 into `DebugRestoreContext()` on its renderer (EasyGL
+  recreates its context; WebGL stays lost until F10). `-DCNA_DEBUG_CONTEXT_HOTKEYS=ON` keeps them in
+  every configuration, `OFF` removes them; the default `AUTO` leaves release builds' F9/F10 to the
+  game.
 
 ## Other targets
 

@@ -224,6 +224,30 @@ endif()
 set(CNA_ENABLE_WAVEBANK_CODECS "${_cna_wavebank_codecs_normalized}" CACHE STRING
     "Enable FFmpeg XACT WaveBank codecs (OFF, AUTO, or ON)" FORCE)
 unset(_cna_wavebank_codecs_normalized)
+# Game::PollEvents turns F9 into IGraphicsRenderer::DebugSimulateContextLoss() and F10 into
+# DebugRestoreContext(). A shipped game must not lose its graphics context -- on the web, stay black
+# until F10 -- because a player pressed one of those keys, so AUTO compiles the hotkeys into the
+# Debug configuration only; ON and OFF force them in every configuration. The two renderer methods
+# stay callable from tests and examples whatever this says. The value reaches the runtime as the
+# compile definition CNA_DEBUG_CONTEXT_HOTKEYS=0|1 (modules/runtime/CMakeLists.txt).
+set(CNA_DEBUG_CONTEXT_HOTKEYS "AUTO" CACHE STRING
+    "React to F9/F10 by simulating and restoring a graphics context loss (OFF, AUTO = Debug configuration only, or ON)")
+set_property(CACHE CNA_DEBUG_CONTEXT_HOTKEYS PROPERTY STRINGS OFF AUTO ON)
+string(TOUPPER "${CNA_DEBUG_CONTEXT_HOTKEYS}" _cna_debug_context_hotkeys_normalized)
+if(NOT _cna_debug_context_hotkeys_normalized MATCHES "^(OFF|AUTO|ON)$")
+    message(FATAL_ERROR
+        "CNA_DEBUG_CONTEXT_HOTKEYS must be OFF, AUTO, or ON (received '${CNA_DEBUG_CONTEXT_HOTKEYS}').")
+endif()
+set(CNA_DEBUG_CONTEXT_HOTKEYS "${_cna_debug_context_hotkeys_normalized}" CACHE STRING
+    "React to F9/F10 by simulating and restoring a graphics context loss (OFF, AUTO = Debug configuration only, or ON)" FORCE)
+unset(_cna_debug_context_hotkeys_normalized)
+if(CNA_DEBUG_CONTEXT_HOTKEYS STREQUAL "AUTO")
+    set(CNA_DEBUG_CONTEXT_HOTKEYS_VALUE "$<CONFIG:Debug>")
+elseif(CNA_DEBUG_CONTEXT_HOTKEYS STREQUAL "ON")
+    set(CNA_DEBUG_CONTEXT_HOTKEYS_VALUE 1)
+else()
+    set(CNA_DEBUG_CONTEXT_HOTKEYS_VALUE 0)
+endif()
 # DISPLAY used by every GPU/window-creating ctest. Empty by default -- tests inherit the caller's --
 # and the live desktop is opt-in; see cmake/TestDisplayPolicy.cmake (GTI-0001).
 include(cmake/TestDisplayPolicy.cmake)

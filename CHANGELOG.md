@@ -20,6 +20,12 @@ The experimental C ABI goes from `0.50.0` to `0.52.0`.
 
 ### Changed
 
+- **F9 and F10 no longer touch the graphics context in a release build.** `Game` turned every
+  F9 press into `DebugSimulateContextLoss()` and F10 into `DebugRestoreContext()` in every build,
+  so a player's F9 recreated a shipped game's GL context, and on the web left the canvas black
+  until F10. The new CMake option `CNA_DEBUG_CONTEXT_HOTKEYS` decides: `AUTO` (the default)
+  compiles the hotkeys into the Debug configuration only, `ON` and `OFF` force them in every
+  configuration. The renderer methods stay callable from tests and examples.
 - **The public renderer identity `SDL_GPU` is now `SDLGPU`.** The CMake selector, runtime name,
   compile definitions, build options, test/CI selectors and C constant use the new spelling;
   `CNA_GRAPHICS_RENDERER_SDLGPU` keeps value 31. The old spelling is not an alias. This took the

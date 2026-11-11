@@ -3,6 +3,7 @@
 #include "Microsoft/Xna/Framework/Game.hpp"
 #include "CNA/Platform/Input/KeyboardAccelerometer.hpp"
 #include "CNA/Platform/Input/KeyboardGamepad.hpp"
+#include "CNA/Internal/Runtime/DebugContextHotkeys.hpp"
 #include "CNA/Internal/Runtime/IGameOverlay.hpp"
 #include "CNA/Internal/Runtime/IModalFrames.hpp"
 
@@ -1477,12 +1478,18 @@ namespace Microsoft::Xna::Framework
                 }
                 else if constexpr (std::is_same_v<Event, CNA::Platform::KeyEvent>)
                 {
-                    if (platformEvent.pressed && !platformEvent.repeat)
+                    // A debugging aid, compiled in by CNA_DEBUG_CONTEXT_HOTKEYS (Debug only by
+                    // default); a build without it leaves F9/F10 to the game alone.
+                    switch (CNA::Internal::Runtime::ClassifyDebugContextHotkey(platformEvent))
                     {
-                        if (platformEvent.keycode == CNA::Platform::KeyCode::F9)
-                            getGraphicsDeviceProperty().GetRenderer().DebugSimulateContextLoss();
-                        else if (platformEvent.keycode == CNA::Platform::KeyCode::F10)
-                            getGraphicsDeviceProperty().GetRenderer().DebugRestoreContext();
+                    case CNA::Internal::Runtime::DebugContextHotkey::SimulateLoss:
+                        getGraphicsDeviceProperty().GetRenderer().DebugSimulateContextLoss();
+                        break;
+                    case CNA::Internal::Runtime::DebugContextHotkey::Restore:
+                        getGraphicsDeviceProperty().GetRenderer().DebugRestoreContext();
+                        break;
+                    case CNA::Internal::Runtime::DebugContextHotkey::None:
+                        break;
                     }
                 }
                 else if constexpr (std::is_same_v<Event, CNA::Platform::WindowEvent>)
