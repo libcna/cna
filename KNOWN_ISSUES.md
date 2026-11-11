@@ -2,7 +2,7 @@
 
 This file lists what is broken or limited in CNA now. Subsystem behaviour is in each subsystem's
 page under `docs/` (index: `docs/README.md`), deliberate divergences from FNA and XNA are in
-`docs/xna-fna-behavior-decisions.md`, and finished work is Git history. State of 2026-11-09.
+`docs/xna-fna-behavior-decisions.md`, and finished work is Git history. State of 2026-11-11.
 
 ## Current state
 
@@ -67,6 +67,18 @@ page under `docs/` (index: `docs/README.md`), deliberate divergences from FNA an
   hardware run exists. Keep the pixel assertions strict: no matrix transpose, no native opcode refusal (TEXBEM
   is a real ps_1_1-1_3 instruction), and no environment skip counted as a corpus pass. The compiled-effect
   qualification per family is `docs/fx-compiled-effects.md` §16.
+- **`SoundBankTest.PlayCueThreeArgAppliesRealAttenuationToActiveInstance` depends on timing
+  (2026-11-10, not fixed).** PlayCue checks IsStopped after playback starts, and the test reads the
+  cue's attenuation afterwards; with the 2 ms fixture wave the cue had sometimes finished, failing
+  general-tests-ci once. The wave is now 0.5 s (d04009afe), which is a margin, not lifetime
+  control: a test thread descheduled for longer still fails. The deterministic form holds the
+  playback active until the attenuation is inspected and tests natural completion separately.
+- **X11 foreign-window import does not correlate the refusing BadWindow by request serial**
+  (`AdoptNativeWindowHandle`, CNA-DEMOS-ISSUE-158). The refusal matches BadWindow, the
+  GetWindowAttributes request, the pending id and SDL's own display, and refuses when more displays
+  report than it records (e28fea5bf). A same-id GetWindowAttributes from another thread on SDL's
+  private connection during the import is not told apart, so it can refuse a valid import, never
+  accept an invalid one. The concurrent cases are argued from source, not covered by a test.
 
 ### Divergences from XNA found on 2026-11-09, not fixed
 
