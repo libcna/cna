@@ -97,7 +97,8 @@ namespace CNA::Internal::Net
         /**
          * @brief Starts hosting a real ENet host for session, if not already hosting.
          *
-         * Binds to an OS-assigned ephemeral UDP port. No-op if
+         * Binds to an OS-assigned ephemeral UDP port, or, for a session this machine creates, to
+         * CNA::Net::SystemLinkDiscovery's host port when one is set. No-op if
          * RealNetworkingEnabled(session's type) is false, or if a host is already registered
          * for this session.
          *

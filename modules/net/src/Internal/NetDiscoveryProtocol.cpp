@@ -110,6 +110,7 @@ namespace CNA::Internal::Net
         writer.Write(message.OpenPublicSlots);
         writer.Write(message.HostGamertag);
         WriteProperties(writer, message.Properties);
+        writer.Write(message.HostInstance);
         return NetPacketCodec::ExtractBytes(writer);
     }
 
@@ -129,6 +130,8 @@ namespace CNA::Internal::Net
         message.OpenPublicSlots = reader.ReadInt32();
         message.HostGamertag = reader.ReadString();
         message.Properties = ReadProperties(reader);
+        if (reader.getLengthProperty() - reader.getPositionProperty() >= 8)
+            message.HostInstance = reader.ReadUInt64();
         return message;
     }
 

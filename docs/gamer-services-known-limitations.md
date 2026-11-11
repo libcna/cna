@@ -47,6 +47,19 @@ The optional wire extension retains the old Lobby message layout. Correct state
 on a late join requires both host and client to carry the welcome-state extension;
 older hosts do not send state and older clients ignore the extension.
 
+SystemLink beyond one broadcast domain is a CNA extension (`CNA::Net::SystemLinkDiscovery`,
+`modules/net/include/CNA/Net/SystemLinkDiscovery.hpp`): XNA finds SystemLink sessions by LAN
+broadcast only. `setExtraSearchAddressesProperty` names hosts (`host` or `host:port`, IPv4 or a
+name resolved at each search) that `Find`/`BeginFind` also query by unicast, for a port forward or
+a virtual network whose broadcasts take another interface; a name that does not resolve is skipped
+and logged. Their sessions are listed with the address the reply came from, so `Join` is
+unchanged. `setHostPortProperty` binds a session this machine creates to a fixed UDP game port
+(0, the default, is ephemeral), so a router can forward it with discovery port 61190; a joining
+session stays ephemeral. Announces carry a random host instance id after the older fields, so a
+searcher lists two hosts on the same fixed port apart; a host without it is still identified by its
+port. The extension has no C route yet (planned under CBIND-127) and no effect in the browser, which
+has no SystemLink discovery.
+
 Listed so that nobody reads an older document as saying they are missing. Achievements (service
 and offline catalogs), leaderboards (LocalWithLeaderboards, PlayerMatch, Ranked, Stream columns),
 PlayerMatch and Ranked sessions, SystemLink, the authenticated TLS/WSS relay, invitations and

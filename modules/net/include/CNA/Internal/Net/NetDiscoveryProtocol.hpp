@@ -95,6 +95,10 @@ namespace CNA::Internal::Net
         int32_t OpenPublicSlots{0};
         std::string HostGamertag;
         NetworkSessionProperties Properties;
+        // Random per hosted session, so a searcher merges one host's replies that arrived by
+        // several paths without merging two hosts that bound the same fixed port. Appended after
+        // the fields above, which older decoders read alone; 0 from a host that sends none.
+        uint64_t HostInstance{0};
     };
 
     /**

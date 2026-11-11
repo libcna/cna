@@ -3,6 +3,9 @@
 #include "CNA/Internal/Net/ENetDiscoveryService.hpp"
 #include "CNA/Internal/Net/ENetLibrary.hpp"
 #include "CNA/Internal/Net/NetDiscoveryProtocol.hpp"
+#include "CNA/Internal/Net/SearchAddress.hpp"
+#include "CNA/Logger.hpp"
+#include "CNA/Net/SystemLinkDiscovery.hpp"
 #include "Microsoft/Xna/Framework/GamerServices/SignedInGamer.hpp"
 #include "Microsoft/Xna/Framework/GamerServices/NetworkNotAvailableException.hpp"
 #include "Microsoft/Xna/Framework/Net/LocalNetworkGamer.hpp"
@@ -16,6 +19,7 @@
 #include <chrono>
 #include <enet/enet.h>
 #include <memory>
+#include <random>
 #include <stdexcept>
 #include <thread>
 
@@ -37,11 +41,12 @@ namespace CNA::Internal::Net
 
     namespace
     {
-        constexpr uint16_t kDiscoveryPort = 61190;
+        constexpr uint16_t kDiscoveryPort = CNA::Net::SystemLinkDiscovery::DiscoveryPort;
         constexpr uint32_t kSearchWindowMs = 150;
 
         NetworkSession* registeredHost_ = nullptr;
         uint16_t registeredHostPort_ = 0;
+        uint64_t registeredHostInstance_ = 0;
         ENetSocket socket_ = ENET_SOCKET_NULL;
 
         // One host found by a search: its announce, round trip, and the arrivals of its QoS probe
@@ -334,6 +339,7 @@ namespace CNA::Internal::Net
 
             DiscoveryAnnounceMessage announce;
             announce.ConnectPort = registeredHostPort_;
+            announce.HostInstance = registeredHostInstance_;
             announce.CurrentGamerCount = registeredHost_->getAllGamersProperty().getCountProperty();
             announce.MaxGamers = registeredHost_->getMaxGamersProperty();
             announce.OpenPrivateSlots = registeredHost_->getPrivateGamerSlotsProperty();
@@ -365,6 +371,49 @@ namespace CNA::Internal::Net
             }
         }
 
+        std::string HostIp(const ENetAddress& address)
+        {
+            std::array<char, 64> ip{};
+            enet_address_get_host_ip(&address, ip.data(), ip.size());
+            return std::string(ip.data());
+        }
+
+        // The found host a probe or report belongs to: the one with its connect port that answered
+        // from the same address, else the first with that port. Two hosts can share a fixed port.
+        std::vector<Found>::iterator FoundHost(uint16_t connectPort, const ENetAddress& fromAddress)
+        {
+            const std::string ip = HostIp(fromAddress);
+            auto byPort = currentResults_->end();
+            for (auto it = currentResults_->begin(); it != currentResults_->end(); ++it)
+            {
+                if (it->Announce.ConnectPort != connectPort) continue;
+                if (it->Address == ip) return it;
+                if (byPort == currentResults_->end()) byPort = it;
+            }
+            return byPort;
+        }
+
+        // Each extra search address that resolves, with its discovery port.
+        std::vector<ENetAddress> ResolveExtraSearchAddresses()
+        {
+            std::vector<ENetAddress> resolved;
+            for (const auto& entry : CNA::Net::SystemLinkDiscovery::getExtraSearchAddressesProperty())
+            {
+                const auto parsed = ParseSearchAddress(entry, kDiscoveryPort);
+                ENetAddress address{};
+                if (!parsed || enet_address_set_host(&address, parsed->Host.c_str()) != 0)
+                {
+                    CNA::Logger::Warn("[ENetDiscoveryService] SystemLink search address \"" + entry
+                            + "\" does not resolve; it is skipped in this search.",
+                        CNA::LogCategory::APPLICATION);
+                    continue;
+                }
+                address.port = parsed->Port;
+                resolved.push_back(address);
+            }
+            return resolved;
+        }
+
         void HandleReceived(ENetSocket sock, const ENetAddress& fromAddress, const std::vector<SharpRuntime::bytecs>& data)
         {
             if (data.empty())
@@ -388,9 +437,7 @@ namespace CNA::Internal::Net
                         if (currentResults_ != nullptr)
                         {
                             DiscoveryAnnounceMessage announce = NetDiscoveryProtocol::DecodeAnnounce(data);
-                            std::array<char, 64> ip{};
-                            enet_address_get_host_ip(&fromAddress, ip.data(), ip.size());
-                            std::string address(ip.data());
+                            std::string address = HostIp(fromAddress);
 
                             // Dedup by connect port alone: the same query goes out via both broadcast
                             // and an explicit loopback copy, and on this machine a broadcast send can
@@ -399,9 +446,16 @@ namespace CNA::Internal::Net
                             // arrive more than once. A given ephemeral ENet connect port uniquely
                             // identifies one hosted session, regardless of which local path its
                             // announce happened to take.
+                            // A host's instance id also tells apart two hosts that bound the same
+                            // fixed port (CNA::Net::SystemLinkDiscovery::setHostPortProperty); a host
+                            // that sends none (0) is identified by its port alone, as before.
                             bool alreadyKnown = std::any_of(
                                 currentResults_->begin(), currentResults_->end(),
-                                [&](const Found& existing) { return existing.Announce.ConnectPort == announce.ConnectPort; }
+                                [&](const Found& existing)
+                                {
+                                    return existing.Announce.ConnectPort == announce.ConnectPort
+                                        && existing.Announce.HostInstance == announce.HostInstance;
+                                }
                             );
                             if (!alreadyKnown)
                             {
@@ -451,8 +505,7 @@ namespace CNA::Internal::Net
                         if (currentResults_ != nullptr)
                         {
                             const auto report = NetDiscoveryProtocol::DecodeUpstreamReport(data);
-                            auto found = std::find_if(currentResults_->begin(), currentResults_->end(),
-                                [&](const Found& existing) { return existing.Announce.ConnectPort == report.ConnectPort; });
+                            auto found = FoundHost(report.ConnectPort, fromAddress);
                             if (found != currentResults_->end()) found->UpstreamBytesPerSecond = report.BytesPerSecond;
                         }
                         break;
@@ -461,8 +514,7 @@ namespace CNA::Internal::Net
                         {
                             const auto at = std::chrono::steady_clock::now();
                             const auto probe = NetDiscoveryProtocol::DecodeQosProbe(data);
-                            auto found = std::find_if(currentResults_->begin(), currentResults_->end(),
-                                [&](const Found& existing) { return existing.Announce.ConnectPort == probe.ConnectPort; });
+                            auto found = FoundHost(probe.ConnectPort, fromAddress);
                             if (found != currentResults_->end()) RecordProbe(*found, probe, at);
                             else if (earlyProbes_->size() < 64) earlyProbes_->emplace_back(probe.ConnectPort, at);
                         }
@@ -597,6 +649,8 @@ namespace CNA::Internal::Net
         EnsureSocket();
         registeredHost_ = session;
         registeredHostPort_ = connectPort;
+        static std::mt19937_64 instances{std::random_device{}()};
+        do { registeredHostInstance_ = instances(); } while (registeredHostInstance_ == 0);
         responder_ = std::make_unique<UpstreamResponder>(connectPort);
     }
 
@@ -606,6 +660,7 @@ namespace CNA::Internal::Net
         {
             registeredHost_ = nullptr;
             registeredHostPort_ = 0;
+            registeredHostInstance_ = 0;
             responder_.reset();
         }
     }
@@ -638,6 +693,8 @@ namespace CNA::Internal::Net
         DiscoveryQueryMessage query;
         query.SessionTypeFilter = sessionTypeFilter;
         auto bytes = NetDiscoveryProtocol::Encode(query);
+        // Resolved before the clock starts, so a slow name lookup is not a host's round trip.
+        const std::vector<ENetAddress> extraAddresses = ResolveExtraSearchAddresses();
 
         queryStartTime_ = std::chrono::steady_clock::now(); // Task 4.2
 
@@ -657,6 +714,7 @@ namespace CNA::Internal::Net
         enet_address_set_host_ip(&loopbackAddress, "127.0.0.1");
         loopbackAddress.port = kDiscoveryPort;
         SendTo(replies, loopbackAddress, bytes);
+        for (const ENetAddress& extra : extraAddresses) SendTo(replies, extra, bytes);
 
         std::vector<Found> found;
         std::vector<std::pair<uint16_t, std::chrono::steady_clock::time_point>> early;

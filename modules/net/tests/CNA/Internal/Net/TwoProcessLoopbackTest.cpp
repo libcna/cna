@@ -19,10 +19,13 @@
 #include <cerrno>
 #include <chrono>
 #include <cstring>
+#include <arpa/inet.h>
 #include <fcntl.h>
+#include <netinet/in.h>
 #include <poll.h>
 #include <spawn.h>
 #include <string>
+#include <sys/socket.h>
 #include <sys/wait.h>
 #include <thread>
 #include <unistd.h>
@@ -182,6 +185,50 @@ static void RunHostAndClient(const std::string& hostRole, const std::string& cli
 
 TEST(TwoProcessLoopbackTest, HostAndClientJoinAndExchangeAppDataAcrossRealProcesses) {
     RunHostAndClient("host", "client");
+}
+
+// CNA::Net::SystemLinkDiscovery's fixed host port binds the creating machine only: a client on the
+// same machine with the same setting joins through an ephemeral port of its own.
+TEST(TwoProcessLoopbackTest, AFixedHostPortBindsOnlyTheSessionTheMachineCreates) {
+    uint16_t fixedPort = 0;
+    {
+        const int probe = socket(AF_INET, SOCK_DGRAM, 0);
+        ASSERT_GE(probe, 0);
+        sockaddr_in address{};
+        address.sin_family = AF_INET;
+        address.sin_addr.s_addr = htonl(INADDR_ANY);
+        ASSERT_EQ(bind(probe, reinterpret_cast<const sockaddr*>(&address), sizeof(address)), 0);
+        socklen_t length = sizeof(address);
+        ASSERT_EQ(getsockname(probe, reinterpret_cast<sockaddr*>(&address), &length), 0);
+        fixedPort = ntohs(address.sin_port);
+        close(probe);
+    }
+    const std::string fixed = "--fixed-host-port=" + std::to_string(fixedPort);
+    const std::string timeoutArg = "--timeout=" + std::to_string(kHarnessInternalTimeoutSeconds);
+    const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(kOuterWatchdogSeconds);
+
+    SpawnedProcess host = SpawnHarness({"--role=host", timeoutArg, fixed});
+    ASSERT_NE(host.pid, -1);
+    std::string hostOutput;
+    ASSERT_TRUE(ReadLineWithDeadline(host.readFd, deadline, &hostOutput)) << hostOutput;
+    const auto portPos = hostOutput.find("PORT=");
+    ASSERT_NE(portPos, std::string::npos) << hostOutput;
+    EXPECT_EQ(std::stoi(hostOutput.substr(portPos + 5)), fixedPort) << hostOutput;
+
+    SpawnedProcess client = SpawnHarness({"--role=client", "--port=" + std::to_string(fixedPort), timeoutArg, fixed});
+    ASSERT_NE(client.pid, -1);
+    int hostCode = -1, clientCode = -1;
+    const bool hostFinished = WaitWithWatchdog(host.pid, deadline, &hostCode);
+    const bool clientFinished = WaitWithWatchdog(client.pid, deadline, &clientCode);
+    DrainRemaining(host.readFd, &hostOutput);
+    std::string clientOutput;
+    DrainRemaining(client.readFd, &clientOutput);
+    close(host.readFd);
+    close(client.readFd);
+    EXPECT_TRUE(hostFinished) << hostOutput;
+    EXPECT_TRUE(clientFinished) << clientOutput;
+    EXPECT_EQ(hostCode, 0) << hostOutput;
+    EXPECT_EQ(clientCode, 0) << clientOutput;
 }
 
 // CNA-DEMOS-ISSUE-026: search replies must reach the same client regardless of which process

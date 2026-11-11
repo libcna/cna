@@ -6,6 +6,8 @@
 #include "CNA/Internal/Net/NetPacketCodec.hpp"
 #include "TrafficRate.hpp"
 #include "CNA/Logger.hpp"
+#include "CNA/Net/SystemLinkDiscovery.hpp"
+#include "Microsoft/Xna/Framework/GamerServices/NetworkNotAvailableException.hpp"
 #include "Microsoft/Xna/Framework/GamerServices/SignedInGamer.hpp"
 #include "Microsoft/Xna/Framework/Net/AvailableNetworkSession.hpp"
 #include "Microsoft/Xna/Framework/Net/LocalNetworkGamer.hpp"
@@ -20,6 +22,7 @@
 #include <memory>
 #include <optional>
 #include <stdexcept>
+#include <string>
 #include <unordered_map>
 #include <vector>
 
@@ -1611,9 +1614,22 @@ namespace CNA::Internal::Net
             SessionState{ENetHostHandle::CreateHost(kEmscriptenHostPort, kMaxPeers, kChannelLimit)}
         );
 #else
-        auto state = std::make_unique<SessionState>(
-            SessionState{ENetHostHandle::CreateHost(0, kMaxPeers, kChannelLimit)}
-        );
+        // CNA::Net::SystemLinkDiscovery's fixed port binds only a session this machine creates; a
+        // joining session's own host stays ephemeral, so it never competes with a local host for it.
+        const uint16_t fixedPort = session->getIsHostProperty() ? CNA::Net::SystemLinkDiscovery::getHostPortProperty() : 0;
+        std::unique_ptr<SessionState> state;
+        try
+        {
+            state = std::make_unique<SessionState>(
+                SessionState{ENetHostHandle::CreateHost(fixedPort, kMaxPeers, kChannelLimit)}
+            );
+        }
+        catch (const Microsoft::Xna::Framework::GamerServices::NetworkNotAvailableException&)
+        {
+            if (fixedPort == 0) throw;
+            throw Microsoft::Xna::Framework::GamerServices::NetworkNotAvailableException("Failed to bind the SystemLink host to UDP port "
+                + std::to_string(fixedPort) + " (CNA::Net::SystemLinkDiscovery::setHostPortProperty).");
+        }
 #endif
         uint16_t boundPort = state->Host.getBoundPortProperty();
         state->LastPublishedSessionProperties = session->getSessionPropertiesProperty();

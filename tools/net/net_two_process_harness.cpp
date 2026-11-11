@@ -26,6 +26,7 @@
 #include "CNA/Internal/Net/ENetBackend.hpp"
 #include "CNA/Internal/Net/ENetHostHandle.hpp"
 #include "CNA/Internal/Net/VoiceChat.hpp"
+#include "CNA/Net/SystemLinkDiscovery.hpp"
 #include "../../modules/gamer-services/src/Internal/Guide/GuideScreen.hpp"
 #include "Microsoft/Xna/Framework/GamerServices/SignedInGamer.hpp"
 #include "Microsoft/Xna/Framework/GamerServices/NetworkNotAvailableException.hpp"
@@ -1349,6 +1350,9 @@ int main(int argc, char** argv) {
             searchFirst = true;
         } else if (arg.rfind("--failure=", 0) == 0) {
             failureOperation = arg.substr(10);
+        } else if (arg.rfind("--fixed-host-port=", 0) == 0) {
+            // Every role: only a session this process creates may bind it.
+            CNA::Net::SystemLinkDiscovery::setHostPortProperty(static_cast<uint16_t>(std::stoi(arg.substr(18))));
         } else if (arg.rfind("--host-locals=", 0) == 0) {
             hostLocals = std::stoi(arg.substr(14));
             if (hostLocals != 1 && hostLocals != 2) return 64;

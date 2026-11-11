@@ -54,6 +54,25 @@ TEST(NetDiscoveryProtocolTest, AnnounceRoundtripWithNoProperties) {
     EXPECT_EQ(decoded.Properties.getCountProperty(), 8);
 }
 
+TEST(NetDiscoveryProtocolTest, AnnounceCarriesTheHostInstanceAfterTheOlderFields) {
+    DiscoveryAnnounceMessage message;
+    message.ConnectPort = 40000;
+    message.HostGamertag = "hostplayer";
+    message.HostInstance = 0x0123456789abcdefULL;
+
+    auto bytes = NetDiscoveryProtocol::Encode(message);
+    EXPECT_EQ(NetDiscoveryProtocol::DecodeAnnounce(bytes).HostInstance, 0x0123456789abcdefULL);
+
+    // A host that predates the field sends the announce without its last eight bytes; it decodes
+    // with instance 0, and an older decoder reads the longer form's leading fields unchanged.
+    bytes.resize(bytes.size() - 8);
+    const auto older = NetDiscoveryProtocol::DecodeAnnounce(bytes);
+    EXPECT_EQ(older.HostInstance, 0u);
+    EXPECT_EQ(older.ConnectPort, 40000);
+    EXPECT_EQ(older.HostGamertag, "hostplayer");
+    EXPECT_EQ(older.Properties.getCountProperty(), 8);
+}
+
 TEST(NetDiscoveryProtocolTest, AnnounceRoundtripWithSparseProperties) {
     DiscoveryAnnounceMessage message;
     message.ConnectPort = 999;
