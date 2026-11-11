@@ -53,6 +53,7 @@
 #include "Microsoft/Xna/Framework/Graphics/RasterizerState.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SamplerState.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SkinnedEffect.hpp"
+#include "Microsoft/Xna/Framework/Graphics/SpriteEffect.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SpriteBatch.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SpriteEffects.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SpriteSortMode.hpp"
@@ -722,4 +723,73 @@ TEST_F(StockEffectCloneRenderingTest, ASpriteBatchDrawsThroughAStockClonesShader
     ASSERT_EQ(expected[static_cast<std::size_t>(kSize * 3 / 4 * kSize + kSize * 3 / 4)], Color::Red);
     EffectMaterial clone(source);
     EXPECT_SAME_IMAGE(spritePicture(clone), expected);
+}
+
+// FNA's clone of its SpriteEffect runs SpriteEffect.fx with the clone's raw MatrixTransform:
+// position * MatrixTransform, the s0 texel times the vertex colour. That is BasicEffect's unlit,
+// unfogged, vertex-coloured textured variant with World = MatrixTransform, so both draw one picture.
+TEST_F(StockEffectCloneRenderingTest, ASpriteEffectCloneDrawsWithItsRawMatrixTransform)
+{
+    const auto draw = [this] { DrawColourTexturedQuad(); };
+    const Matrix placement = Matrix::CreateScale(0.25f, 0.5f, 1.0f) * Matrix::CreateTranslation(-0.5f, 0.25f, 0.0f);
+    BasicEffect expected(Device());
+    expected.setWorldProperty(placement);
+    expected.setTextureEnabledProperty(true);
+    expected.setVertexColorEnabledProperty(true);
+    expected.setTextureProperty(&Texture());
+    const Image picture = Render(expected, draw);
+    ASSERT_TRUE(Covers(picture));
+
+    SpriteEffect source(Device());
+    source.Apply();
+    EffectMaterial clone(source);
+    clone.getParametersProperty()["MatrixTransform"]->SetValue(placement);
+    Device().getTexturesProperty()(0, &Texture());
+    EXPECT_SAME_IMAGE(Render(clone, draw), picture);
+    std::unique_ptr<Effect> ofMaterial(clone.Clone());
+    Device().getTexturesProperty()(0, &Texture());
+    EXPECT_SAME_IMAGE(Render(*ofMaterial, draw), picture);
+}
+
+// SpriteBatch applies a custom effect's pass after its own, so a SpriteEffect clone's vertex shader
+// places the sprites with the clone's raw MatrixTransform, as a stock source places them with
+// World*View*Projection; the batch's transform matrix goes unused.
+TEST_F(StockEffectCloneRenderingTest, ASpriteBatchDrawsThroughASpriteEffectClonesRawMatrixTransform)
+{
+    if (!CNA_RENDERER_IS(Software, OpenGL33, OpenGLES3, Fna3d))
+        GTEST_SKIP() << "the SpriteBatch stock-effect route is pinned on these renderers";
+
+    Texture2D white(Device(), 1, 1, false, SurfaceFormat::Color);
+    const Color whiteTexel = Color::White;
+    white.SetData(&whiteTexel, 1);
+    const auto spritePicture = [&](Effect& effect, const Matrix& transform) {
+        GraphicsDevice& device = Device();
+        device.Clear(Color::Black);
+        SpriteBatch batch(device);
+        batch.Begin(SpriteSortMode::Deferred, &BlendState::Opaque, nullptr, &DepthStencilState::None,
+                    &RasterizerState::CullNone, &effect, transform);
+        batch.Draw(white, Vector2(0.0f, 0.0f), std::nullopt, Color::Red, 0.0f, Vector2(0.0f, 0.0f),
+                   1.0f, SpriteEffects::None, -1.0f);
+        batch.End();
+        Image image(static_cast<std::size_t>(kSize * kSize));
+        device.GetBackBufferData(image.data(), static_cast<int>(image.size()));
+        return image;
+    };
+
+    const Matrix world = Matrix::CreateScale(1.0f, -1.0f, 1.0f);
+    const Matrix projection = Matrix::CreateOrthographicOffCenter(-1.0f, 1.0f, -1.0f, 1.0f, 0.0f, 10.0f);
+    BasicEffect stock(Device());
+    stock.setTextureEnabledProperty(true);
+    stock.setVertexColorEnabledProperty(true);
+    stock.setWorldProperty(world);
+    stock.setProjectionProperty(projection);
+    const Image expected = spritePicture(stock, Matrix::getIdentityProperty());
+    ASSERT_EQ(expected[static_cast<std::size_t>(kSize * 3 / 4 * kSize + kSize * 3 / 4)], Color::Red);
+
+    SpriteEffect source(Device());
+    source.Apply();
+    EffectMaterial clone(source);
+    clone.getParametersProperty()["MatrixTransform"]->SetValue(world * projection);
+    EXPECT_SAME_IMAGE(spritePicture(clone, Matrix::getIdentityProperty()), expected);
+    EXPECT_SAME_IMAGE(spritePicture(clone, Matrix::CreateTranslation(3.0f, 2.0f, 0.0f)), expected);
 }

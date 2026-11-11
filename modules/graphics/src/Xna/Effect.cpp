@@ -1262,6 +1262,7 @@ namespace Microsoft::Xna::Framework::Graphics
             case StockEffectKindInternal::DualTexture:    shaderCount = 4;  break;
             case StockEffectKindInternal::EnvironmentMap: shaderCount = 16; break;
             case StockEffectKindInternal::Skinned:        shaderCount = 18; break;
+            case StockEffectKindInternal::Sprite:         shaderCount = 1;  break;
             case StockEffectKindInternal::None:           break;
         }
         if (const EffectParameter* parameter = find("ShaderIndex"))
@@ -1300,6 +1301,9 @@ namespace Microsoft::Xna::Framework::Graphics
         matrix("World", snapshot.world);
         matrix("WorldInverseTranspose", snapshot.worldInverseTranspose);
         matrix("WorldViewProj", snapshot.worldViewProj);
+        // FNA's SpriteEffect.fx: the sprite vertex shader's one matrix is MatrixTransform.
+        if (stockCloneKind_ == StockEffectKindInternal::Sprite)
+            matrix("MatrixTransform", snapshot.worldViewProj);
         if (const EffectParameter* bones = find("Bones"))
         {
             // SkinnedEffect's float4x3 Bones has no fourth column; the affine bone has M44 = 1, as
@@ -1343,6 +1347,9 @@ namespace Microsoft::Xna::Framework::Graphics
                 BindStockTextureInternal(0, snapshot->texture0);
                 BindStockTextureInternal(1, snapshot->texture1);
                 break;
+            case StockEffectKindInternal::Sprite:
+                // CNA's SpriteEffect has no Texture parameter, so the sprite pixel shader samples
+                // whatever s0 holds: SpriteBatch's texture, or the device's.
             case StockEffectKindInternal::None:
                 break;
         }
@@ -1521,6 +1528,20 @@ namespace Microsoft::Xna::Framework::Graphics
                     s->bones[static_cast<std::size_t>(bone)].ToColumnMajor(p.boneTransforms + bone * 16);
                 break;
             }
+            case StockEffectKindInternal::Sprite:
+            {
+                // FNA's SpriteEffect.fx: position * MatrixTransform with the colour and texture
+                // coordinate passed through, then the s0 texel times that colour -- what the
+                // renderers' unlit, unfogged, vertex-coloured textured stock path draws for a white
+                // DiffuseColor.
+                p.textureEnabled = true;
+                p.vertexColorEnabled = true;
+                p.lightingEnabled = false;
+                p.fogEnabled = false;
+                p.diffuseColor[0] = p.diffuseColor[1] = p.diffuseColor[2] = p.diffuseColor[3] = 1.0f;
+                p.texture0 = sampled2D(0, nullptr);
+                break;
+            }
             case StockEffectKindInternal::None:
                 break;
         }
@@ -1545,7 +1566,8 @@ namespace Microsoft::Xna::Framework::Graphics
         }
         else
         {
-            const EffectParameter* parameter = parameters_[std::string("WorldViewProj")];
+            const EffectParameter* parameter = parameters_[std::string(
+                stockCloneKind_ == StockEffectKindInternal::Sprite ? "MatrixTransform" : "WorldViewProj")];
             projection = parameter != nullptr ? parameter->GetValueMatrix() : Matrix::getIdentityProperty();
         }
         return true;

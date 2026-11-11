@@ -1350,7 +1350,8 @@ CNA_C_API CNA_Result cna_shader_effect_create(
  *
  * A material cloned from one of the five stock effects draws, as XNA's does, with that stock
  * effect's shaders fed its own raw parameter values: no stock OnApply derives WorldViewProj,
- * FogVector, EmissiveColor or ShaderIndex for it (HND-TQ-25 D9).
+ * FogVector, EmissiveColor or ShaderIndex for it (HND-TQ-25 D9). One cloned from the SpriteEffect
+ * draws, as FNA's does, with the sprite shaders and its own raw MatrixTransform.
  */
 CNA_C_API CNA_Result cna_effect_material_create(
     CNA_EffectHandle clone_source,

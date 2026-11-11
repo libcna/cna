@@ -46,6 +46,12 @@ namespace Microsoft::Xna::Framework::Graphics
         }
 
     protected:
+        /** @brief SpriteEffect: the sprite shaders a base-Effect or EffectMaterial clone of it runs. */
+        CNAEXT [[nodiscard]] StockEffectKindInternal GetStockEffectKindInternal() const noexcept override
+        {
+            return StockEffectKindInternal::Sprite;
+        }
+
         /**
          * @brief Sets `MatrixTransform` to FNA's sprite projection for the current viewport.
          *

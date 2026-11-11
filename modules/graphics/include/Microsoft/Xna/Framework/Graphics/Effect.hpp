@@ -221,14 +221,14 @@ namespace Microsoft::Xna::Framework::Graphics
         /**
          * @brief Whether this is one of XNA's five stock effects -- BasicEffect, AlphaTestEffect,
          *        DualTextureEffect, EnvironmentMapEffect, SkinnedEffect -- or derives from one,
-         *        or is a base-Effect or EffectMaterial clone of one.
+         *        or is a base-Effect or EffectMaterial clone of one or of SpriteEffect.
          *
          * SpriteBatch asks it of a custom effect: a stock effect's vertex shader places sprites
          * with World*View*Projection. A virtual rather than dynamic_cast for the same reason as
          * IsExactStockSpriteEffectEXT(): a dynamic_cast to each stock type made every SpriteBatch
          * user link all five of them. XNA's clone of a stock effect runs the cloned stock shaders
          * (HND-TQ-25 D9), so its vertex shader places sprites the same way, with its own raw
-         * WorldViewProj.
+         * WorldViewProj; FNA's clone of its SpriteEffect places them with its raw MatrixTransform.
          *
          * @return True for a clone of a stock effect here; true in the five stock effects.
          */
@@ -242,9 +242,10 @@ namespace Microsoft::Xna::Framework::Graphics
          *        renderer.
          *
          * XNA's base-Effect or EffectMaterial clone of a stock effect draws with the cloned stock
-         * shaders, which place a vertex with the raw WorldViewProj parameter (HND-TQ-25 D9). The
-         * renderer receives identity, identity and that matrix -- the WorldViewProj its last
-         * Apply captured, or the current value before any Apply.
+         * shaders, which place a vertex with the raw WorldViewProj parameter (HND-TQ-25 D9); a
+         * clone of SpriteEffect uses MatrixTransform the same way. The renderer receives
+         * identity, identity and that matrix -- the value its last Apply captured, or the current
+         * value before any Apply.
          *
          * @param world Receives the world matrix.
          * @param view Receives the view matrix.
@@ -352,7 +353,7 @@ namespace Microsoft::Xna::Framework::Graphics
          */
         CNAEXT [[nodiscard]] Texture* SampledStockTextureInternal(int slot, Texture* own) const;
 
-        /** @brief Which of XNA's five classic stock effects an effect is, if any. */
+        /** @brief Which of XNA's five classic stock effects, or FNA's SpriteEffect, an effect is, if any. */
         enum class CNAEXT StockEffectKindInternal : std::uint8_t
         {
             /** @brief Not a stock effect. */
@@ -367,6 +368,8 @@ namespace Microsoft::Xna::Framework::Graphics
             EnvironmentMap,
             /** @brief SkinnedEffect. */
             Skinned,
+            /** @brief SpriteEffect, FNA's (XNA 4.0 has none). */
+            Sprite,
         };
 
         /**

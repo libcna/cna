@@ -563,3 +563,62 @@ TEST(StockEffectCloneDispatchTest, ACloneMadeBeforeTheSourcesFirstApplyHasAZeroW
     EXPECT_EQ(projection, Matrix());
 }
 
+// FNA's SpriteEffect (adopted by CNA; XNA 4.0 has none): an EffectMaterial or base-Effect clone of
+// it runs the cloned sprite shaders with its own (empty) OnApply, so nothing recomputes
+// MatrixTransform from the viewport. SpriteEffect.fx places a vertex with that raw matrix and
+// draws the s0 texel times the vertex colour. SpriteEffect's own Clone is a SpriteEffect, which
+// keeps deriving its matrix.
+TEST(StockEffectCloneDispatchTest, ASpriteEffectCloneRunsTheSpriteShaderWithItsRawMatrixTransform)
+{
+    GraphicsDevice device;
+    SpriteEffect source(device);
+    source.Apply();
+    EffectMaterial clone(source);
+    std::unique_ptr<Effect> ofMaterial(clone.Clone());
+    std::unique_ptr<Effect> spriteClone(source.Clone());
+    EXPECT_FALSE(source.IsStockEffectEXT());
+    EXPECT_TRUE(clone.IsStockEffectEXT());
+    EXPECT_TRUE(ofMaterial->IsStockEffectEXT());
+    EXPECT_FALSE(spriteClone->IsStockEffectEXT());
+
+    const Matrix placement = Matrix::CreateScale(0.25f, 0.5f, 1.0f) * Matrix::CreateTranslation(-0.5f, 0.25f, 0.0f);
+    clone.getParametersProperty()["MatrixTransform"]->SetValue(placement);
+    clone.Apply();
+    Matrix world, view, projection;
+    ASSERT_TRUE(clone.GetStockCloneDrawMatricesInternal(world, view, projection));
+    EXPECT_EQ(world, Matrix::getIdentityProperty());
+    EXPECT_EQ(view, Matrix::getIdentityProperty());
+    EXPECT_EQ(projection, placement);
+    EXPECT_EQ(clone.getParametersProperty()["MatrixTransform"]->GetValueMatrix(), placement)
+        << "the clone's Apply does not derive the matrix from the viewport";
+
+    const GpuDrawParams p = DrawParamsOf(clone);
+    EXPECT_TRUE(p.rawStockTransforms);
+    EXPECT_TRUE(p.textureEnabled);
+    EXPECT_TRUE(p.vertexColorEnabled);
+    EXPECT_FALSE(p.lightingEnabled);
+    EXPECT_FALSE(p.fogEnabled);
+    EXPECT_FALSE(p.alphaTestEffect || p.dualTexture || p.envMapping || p.skinned || p.pbr);
+    for (const float component : p.diffuseColor)
+        EXPECT_EQ(component, 1.0f);
+    for (const float component : p.fogVector)
+        EXPECT_EQ(component, 0.0f);
+
+    // The draw uses what the last Apply read.
+    clone.getParametersProperty()["MatrixTransform"]->SetValue(Matrix::CreateScale(3.0f));
+    ASSERT_TRUE(clone.GetStockCloneDrawMatricesInternal(world, view, projection));
+    EXPECT_EQ(projection, placement);
+    clone.Apply();
+    ASSERT_TRUE(clone.GetStockCloneDrawMatricesInternal(world, view, projection));
+    EXPECT_EQ(projection, Matrix::CreateScale(3.0f));
+
+    EXPECT_FALSE(spriteClone->GetStockCloneDrawMatricesInternal(world, view, projection));
+    EXPECT_FALSE(source.GetStockCloneDrawMatricesInternal(world, view, projection));
+
+    // A clone of a SpriteEffect that was never applied starts from its zero MatrixTransform.
+    SpriteEffect fresh(device);
+    EffectMaterial early(fresh);
+    early.Apply();
+    ASSERT_TRUE(early.GetStockCloneDrawMatricesInternal(world, view, projection));
+    EXPECT_EQ(projection, Matrix());
+}
