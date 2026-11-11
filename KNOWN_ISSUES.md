@@ -33,40 +33,28 @@ page under `docs/` (index: `docs/README.md`), deliberate divergences from FNA an
 
 ## Defects
 
-- **`.x` VertexDuplicationIndices window disagrees with genuine XNA on its own fixture (observed
-  2026-11-09, not fixed).** For `x_vertex_duplication.x` (map `0,1,2,3,3,3`; faces `(0,1,2) (0,4,5)
-  (1,3,4) (1,2,3)`) CNA's XNASWEEP-198 rule drops both faces naming two vertices of group 3 and answers
-  4 positions / 6 indices, as the fixture's generator comment expects; the genuine importer answers 6
-  positions / 9 indices (one face dropped), both in today's bits run and in the committed reference
-  `tests/reference/xna40/model/model-import-oracle.json`. No test checks this fixture. The rule was
-  measured on `target.x` and is documented as not understood outside that window; re-measure with
-  per-face probes before changing it.
-  First probes (CNA-FIX-XVERT-01, evidence `../cnaplan/evidence/rev002/hnd-xvert-01/`, design in its
-  DESIGN.md): with map `2,2,2,3` both faces `(0,2,3)` and `(1,2,3)` stay (CNA drops both), which only the "two lowest file
-  indices of a group" candidate (D_pair) predicts -- still to be checked against target.x, which is not
-  available locally, and the fixture's full vertex remapping (source position order `0,1,2,3,5,4`) is not
-  explained by any face rule. No production change to the duplication window yet. The mesh topology is
-  D3DX's own (XImporter calls `D3DXLoadMeshHierarchyFromXW`), so only black-box probes can settle it.
 - **Genuine-XNA native teardown fault (TQ-SWEEP14-02), unattributed.** The harness ownership gap is
   repaired (2026-11-08); the one-off Wine fault of sweep 14 did not reproduce with the old or the
   new harness. If it recurs, capture `+loaddll,+seh` and a WineDbg stack; never suppress the nonzero result.
 - **FNA3D-3 and FNA3D-8 are open in the FNA3D fork** (`docs/fna3d-dependency-defects.md`). FNA3D-3:
-  the SDL GPU driver applies no MultiSampleMask (see External and driver limitations). FNA3D-8:
-  presentation with a source or destination rectangle. The OpenGL driver converts the rectangles
-  (fork 4ff109a), and the SDL GPU driver clears the swapchain outside a partial destination
-  (fork 76a76cf). CNA still refuses a non-default Present on FNA3D.
+  the SDL GPU driver applies no MultiSampleMask (see External and driver limitations). FNA3D-8: CNA
+  forwards a source rectangle and a whole-client destination on FNA3D's OpenGL and SDL GPU drivers
+  (1b7320e41, evidence `../cnaplan/evidence/rev002/ki-fna3d-present/`); a partial destination, an
+  override window and any rectangle on the D3D11 driver are refused by name, because neither driver
+  preserves the pixels outside a destination (OpenGL leaves the back buffer's content, SDL GPU clears
+  to black). SDL GPU's whole-client override measures correct but is still refused: the device decides
+  before adoption without a renderer query.
 
-- **`DIRECTX9` compiled effects: `LegacyBumpEnvironment` fails under Wine/DXVK 3.1.1, unattributed**
-  (`CNA_DIRECTX9_COMPILED_EFFECTS=ON`; the option stays default OFF). Four assertions fail: both TEXBEM
-  off-diagonal lookups and the red/green channels of ps_1_4 BEM arithmetic. The diagonal, zero-matrix/LOD,
-  luminance and retained-state checks in the same case pass, as do the policy gate, the rest of the shared
-  corpus, the focused DirectX9 gate and the full renderer binary. The TEXBEM equation is
-  u' = u + m00·du + m10·dv, v' = v + m01·du + m11·dv; CNA passes the native bump-matrix 00/01/10/11 states as
-  FLOAT bit patterns (`std::bit_cast<DWORD>`). The native state readback returns what CNA set, yet the host's
-  pixels match swapped off-diagonals; the translator/driver fault has not been isolated and no real Windows
-  hardware run exists. Keep the pixel assertions strict: no matrix transpose, no native opcode refusal (TEXBEM
-  is a real ps_1_1-1_3 instruction), and no environment skip counted as a corpus pass. The compiled-effect
-  qualification per family is `docs/fx-compiled-effects.md` §16.
+- **`DIRECTX9` compiled effects: three legacy cases fail under Wine + DXVK 3.1.1, attributed to DXVK**
+  (`CNA_DIRECTX9_COMPILED_EFFECTS=ON`; the option stays default OFF; evidence
+  `../cnaplan/evidence/rev002/ki-dx9-legacy/`, `docs/fx-compiled-effects.md` §16).
+  `LegacyBumpEnvironment` (TEXBEM/BEM off-diagonals: DXVK stores the bump matrix by columns and its
+  dxbc-spirv translator computes MAT00·r + MAT01·g where D3D9 specifies MAT00·r + MAT10·g),
+  `LegacyDepthOutput` and `CompiledEffectLegacyMatrixDepthTest.PlainSignedMixedAndZero...` (TEXM3X2DEPTH
+  with `_bx2` on only one of PAD/DEPTH: the translator treats PAD as a no-op and applies the final
+  instruction's source modifier to every row). Wine's wined3d passes all three with the same binary;
+  DXVK 2.6.0 fails the depth cases too. No CNA change; the assertions stay strict. No real Windows
+  hardware run exists.
 - **X11 foreign-window import does not correlate the refusing BadWindow by request serial**
   (`AdoptNativeWindowHandle`, CNA-DEMOS-ISSUE-158). The refusal matches BadWindow, the
   GetWindowAttributes request, the pending id and SDL's own display, and refuses when more displays
@@ -313,6 +301,12 @@ page under `docs/` (index: `docs/README.md`), deliberate divergences from FNA an
   which is the FBX SDK's own arithmetic. (The generated `.x` normal zero-sign residue of
   `XNASWEEP-231` is fixed: CNA-FIX-L49 generates in the file's own space, measured 2026-11-09.)
   (`MeshHelper.OptimizeForCache` is exact on all 1,210 probes since `XNASWEEP-149`'s round six.)
+- **`.x` duplication without `MeshNormals`** (KI-XVERT-WINDOW, 296cb350d, evidence
+  `../cnaplan/evidence/rev002/ki-xvert-02/`): the VertexDuplicationIndices rule with normals is
+  measured on genuine D3DX (211 probes, 86 of them blind); without `MeshNormals` a non-identity map
+  also changes the generated normals (probe NM2 answers a zero normal), which CNA does not model (it
+  treats the map as inert there). `target.x`, on which XNASWEEP-198 was measured, is not on disk;
+  target-like probes behave as the rule predicts, which is an inference, not a re-measurement.
 - **Local/SystemLink same-machine host departure is implemented under owner policy (2026-11-08, HND-NET-01).** When the host gamer leaves and another local gamer remains on the authority machine, the machine stays host. At the next session Update the first remaining local in join order becomes Host, independently of AllowHostMigration. GamerLeft is raised before HostChanged, whose OldHost is the actual departed host and NewHost the successor. SystemLink broadcasts both changes; a later welcome identifies the successor so a later joiner's EndJoin can complete. With no remaining local, the existing end/machine-migration behavior is preserved. Managed XNA IL specifies result processing, not this election policy. Device-free regressions cover policy and event ordering; the peer, later-join and leak-enabled runs remain integration gates until their recorded commands pass. PlayerMatch/Ranked service host authority is unchanged.
 - **Local/SystemLink sign-out removes membership under owner policy (2026-11-08, HND-NET-01).** The session observes SignedOut and removes the matching local identity at its next Update, raising GamerLeft locally and publishing that individual departure to peers. Other locals keep the session; the last local ends it with ClientSignedOut through the existing CNA end path. A pending AddLocalGamer whose identity was disposed before completion is refused by Update with ObjectDisposedException("gamer") and never joins; other results/notifications of that update still complete. The exception follows the closest existing disposed-entry refusal, extended to completion as CNA policy. Tests cover backend/dispatcher sign-out, host/nonhost/last-local cases, pending adds, duplicate notifications, reused slots, throwing subscribers and disposal/destruction. SystemLink peer execution and leak qualification remain integrator gates. Online/service account and session authority is unchanged. Signed-out identities retained in PreviousGamers keep their original SignedInGamer pointer.
 
