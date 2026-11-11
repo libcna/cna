@@ -724,6 +724,9 @@ namespace CNA::Internal::Net
         // searcher that opened it would, on Linux, take unicast queries meant for a host on this
         // machine and drop them (see UnregisterHost).
         const ENetSocket sock = socket_;
+        // Opening the shared listener initialized ENet (WSAStartup on Windows) before a search's
+        // own socket and name lookups; a search that opens none initializes it itself.
+        ENetLibrary::EnsureInitialized();
 
         DiscoveryQueryMessage query;
         query.SessionTypeFilter = sessionTypeFilter;
