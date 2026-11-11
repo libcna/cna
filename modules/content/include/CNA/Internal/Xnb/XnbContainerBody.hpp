@@ -66,14 +66,18 @@ namespace CNA::Internal::Xnb
      *
      * The declared `totalLength` is compared with the bytes after the header exactly as Refresh
      * PrepareStream IL_009f-00cd does: only a declared length whose body would end past the input
-     * is refused. An uncompressed body then runs to the end of the input whatever the declared
-     * length says (Refresh hands the content reader the input stream itself, IL_00ed); an LZX body
-     * is read from the `totalLength - 14` compressed bytes the declaration names. Callers that
-     * require a file to end exactly at `totalLength` must enforce that separately.
+     * is refused, and only when the input came from a stream that can seek (IL_009f-00a5); the
+     * declaration of a stream that cannot seek is not checked at all. An uncompressed body then
+     * runs to the end of the input whatever the declared length says (Refresh hands the content
+     * reader the input stream itself, IL_00ed); an LZX body is read from the `totalLength - 14`
+     * compressed bytes the declaration names, as far as they are present (see
+     * DecodeXnbLzxPayload). Callers that require a file to end exactly at `totalLength` must
+     * enforce that separately.
      *
      * @param file Complete bytes available for the XNB container.
      * @param origin File or asset name used in diagnostics.
      * @param limits File, compressed-payload, and decompressed-payload limits.
+     * @param inputCanSeek Whether the stream @p file was read from can seek; a file or buffer can.
      * @return The validated header and uncompressed body.
      * @throws Microsoft::Xna::Framework::Content::ContentLoadException if the header, declared
      *         range, compression flags, or a size exceeding @p limits is invalid, or an LZ4
@@ -82,5 +86,6 @@ namespace CNA::Internal::Xnb
     [[nodiscard]] XnbContainerBody DecodeXnbContainerBody(
         std::span<const std::uint8_t> file,
         const std::string& origin,
-        const XnbReadLimits& limits = DefaultXnbReadLimits());
+        const XnbReadLimits& limits = DefaultXnbReadLimits(),
+        bool inputCanSeek = true);
 }

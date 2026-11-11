@@ -108,23 +108,26 @@ namespace Microsoft::Xna::Framework::Content
         const auto stream = OpenStream(assetName);
         RequireOpenedStream(stream.get());
         std::any result = ReadThenCloseStream(
-            *stream, assetName, [&](const std::vector<std::uint8_t>& xnbBytes) {
+            *stream, assetName,
+            [&](const std::vector<std::uint8_t>& xnbBytes, StreamReadState& state) {
                 const std::string xnbPath =
                     ResolveExistingAssetPath(BuildAssetPath(assetName) + ".xnb");
                 detail::RegisterEveryBuiltinXnbReader();
-                return LoadXnbAssetUntyped(xnbBytes, xnbPath, assetName);
+                return LoadXnbAssetUntyped(xnbBytes, state, xnbPath, assetName);
             });
         loadedAssets_[cacheKey] = result;
         return result;
     }
 
     std::any ContentManager::LoadXnbAssetUntyped(const std::vector<std::uint8_t>& bytes,
+                                                  StreamReadState& state,
                                                   const std::string& xnbPath,
                                                   const std::string& assetName)
     {
         const XnbReadScope readScope(*this, assetName);
         const auto container = CNA::Internal::Xnb::DecodeXnbContainerBody(
-            std::span<const std::uint8_t>(bytes.data(), bytes.size()), assetName);
+            std::span<const std::uint8_t>(bytes.data(), bytes.size()), assetName,
+            CNA::Internal::Xnb::DefaultXnbReadLimits(), state.canSeek);
         (void)xnbPath; // Same logical-name diagnostics as typed LoadXnbAsset.
         const auto bodyStream = container.OpenBodyStream();
         ContentReader contentReader(

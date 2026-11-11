@@ -211,10 +211,12 @@ namespace Microsoft::Xna::Framework::Content
         if (const auto stream = TryOpenCompiledStream(assetName))
         {
             return ReadThenCloseStream(
-                *stream, assetName, [&](const std::vector<std::uint8_t>& xnbBytes) {
+                *stream, assetName,
+                [&](const std::vector<std::uint8_t>& xnbBytes, StreamReadState& state) {
                     const std::string xnbCandidate =
                         ResolveExistingAssetPath(BuildAssetPath(assetName) + ".xnb");
-                    return LoadXnbAsset<Audio::SoundEffect>(xnbBytes, xnbCandidate, assetName);
+                    return LoadXnbAsset<Audio::SoundEffect>(
+                        xnbBytes, xnbCandidate, assetName, state);
                 });
         }
 

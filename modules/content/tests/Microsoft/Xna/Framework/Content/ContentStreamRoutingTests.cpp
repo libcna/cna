@@ -98,6 +98,10 @@ namespace
 
         void Close() override {}
 
+        // KI-CONTENT-NONSEEK: Refresh's PrepareStream asks Length only of a stream that can seek
+        // (IL_009f-00b3), so CNA refuses an oversized declared Length up front only then.
+        [[nodiscard]] bool getCanSeekProperty() const override { return true; }
+
         [[nodiscard]] System::IO::intcs getLengthProperty() const override
         {
             return CNA::Internal::Xnb::DefaultXnbReadLimits().maxFileSize + 1;

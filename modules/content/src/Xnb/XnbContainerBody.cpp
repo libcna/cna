@@ -64,7 +64,7 @@ namespace CNA::Internal::Xnb
         // Refresh ContentReader.PrepareStream up to IL_00cd: everything checked before the body.
         [[nodiscard]] XnbHeader ValidateXnbContainerHeader(
             const std::span<const std::uint8_t> file, const std::string& origin,
-            const XnbReadLimits& limits)
+            const XnbReadLimits& limits, const bool inputCanSeek)
         {
             if (limits.maxFileSize < 0 ||
                 file.size() > static_cast<std::size_t>(limits.maxFileSize))
@@ -95,10 +95,10 @@ namespace CNA::Internal::Xnb
 
             // Refresh PrepareStream IL_009f-00cd: `(totalLength - 10)` in Int32 arithmetic,
             // widened, against Length - Position. A smaller or even negative declaration is
-            // accepted.
+            // accepted, and a stream that cannot seek is not checked at all (IL_009f-00a5).
             const std::int64_t declaredBody = static_cast<std::int32_t>(
                 static_cast<std::uint32_t>(header.totalLength) - 10u);
-            if (declaredBody > static_cast<std::int64_t>(file.size()) - 10)
+            if (inputCanSeek && declaredBody > static_cast<std::int64_t>(file.size()) - 10)
             {
                 throw ContentLoadException(
                     "'" + origin + "' declares a totalLength (" +
@@ -113,9 +113,10 @@ namespace CNA::Internal::Xnb
     XnbContainerBody DecodeXnbContainerBody(
         const std::span<const std::uint8_t> file,
         const std::string& origin,
-        const XnbReadLimits& limits)
+        const XnbReadLimits& limits,
+        const bool inputCanSeek)
     {
-        const XnbHeader header = ValidateXnbContainerHeader(file, origin, limits);
+        const XnbHeader header = ValidateXnbContainerHeader(file, origin, limits, inputCanSeek);
 
         if (header.compression == XnbCompression::None)
         {
@@ -144,13 +145,22 @@ namespace CNA::Internal::Xnb
         // IL_00d2-00d6: compressedTodo is totalLength - 14, in Int32 arithmetic.
         const std::int32_t compressedSize = static_cast<std::int32_t>(
             static_cast<std::uint32_t>(header.totalLength) - 14u);
+        // The file size fits in Int32 and is at least 14 (both checked above).
+        const auto present = static_cast<std::int32_t>(file.size() - 14u);
         if (header.compression == XnbCompression::Lzx)
         {
             XnbLzxDecodeResult decoded = DecodeXnbLzxPayload(
-                file.data() + 14u, compressedSize, decompressedSize, origin, limits);
+                file.data() + 14u, compressedSize, present, decompressedSize, origin, limits);
             return {header, std::move(decoded.bytes), std::move(decoded.failure)};
         }
-        // MonoGame's LZ4 body has no Refresh counterpart; it stays an exact, eager decode.
+        // MonoGame's LZ4 body has no Refresh counterpart; it stays an exact, eager decode. Only
+        // an unchecked declaration (a stream that cannot seek) can name more than is present.
+        if (compressedSize > present)
+        {
+            throw ContentLoadException(
+                "'" + origin + "' declares more LZ4 payload (" + std::to_string(compressedSize) +
+                " bytes) than its stream holds (" + std::to_string(present) + ").");
+        }
         std::vector<std::uint8_t> body = DecompressXnbLz4Payload(
             file.data() + 14u, compressedSize, decompressedSize, origin, limits);
         return {header, std::move(body), nullptr};

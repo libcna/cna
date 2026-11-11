@@ -22,18 +22,28 @@ namespace CNA::Internal::Xnb
             return std::make_exception_ptr(
                 System::InvalidOperationException("Error decompressing content data."));
         }
+
+        // DecompressStream.CompressedBufferSize: ReadBufferFromDisk fills at most this much.
+        constexpr int32_t CompressedChunkSize = 0x10000;
     }
 
     XnbLzxDecodeResult DecodeXnbLzxPayload(
         const uint8_t* compressedData,
         int32_t compressedSize,
+        int32_t availableSize,
         int32_t declaredSize,
         const std::string& path,
         const XnbReadLimits& limits)
     {
         XnbLzxDecodeResult result;
         // ReadNextBufferFromDisk IL_0000-0009: a compressedTodo of zero or less reads nothing.
-        const int32_t available = compressedSize > 0 ? compressedSize : 0;
+        const int32_t todo = compressedSize > 0 ? compressedSize : 0;
+        // ReadBufferFromDisk IL_0000-0042 fills min(64 KiB, compressedTodo) bytes per chunk and
+        // throws DecompressionError when the stream ends first (IL_0023-0030): the chunk the input
+        // ends inside never reaches the decoder, and asking for it is the failure below.
+        const int32_t present = availableSize > 0 ? availableSize : 0;
+        const int32_t available =
+            present >= todo ? todo : (present / CompressedChunkSize) * CompressedChunkSize;
 
         System::IO::MemoryStream compressedStream(compressedData, available, false);
         System::IO::MemoryStream decompressedStream;
@@ -141,8 +151,8 @@ namespace CNA::Internal::Xnb
                 std::to_string(decompressedSize) + ").");
         }
 
-        XnbLzxDecodeResult decoded =
-            DecodeXnbLzxPayload(compressedData, compressedSize, decompressedSize, path, limits);
+        XnbLzxDecodeResult decoded = DecodeXnbLzxPayload(
+            compressedData, compressedSize, compressedSize, decompressedSize, path, limits);
         if (decoded.failure)
         {
             std::rethrow_exception(decoded.failure);

@@ -294,14 +294,17 @@ namespace Microsoft::Xna::Framework::Content
     }
 
     std::vector<std::uint8_t> ContentManager::ReadStreamToEnd(System::IO::Stream& stream,
-                                                              const std::string& assetName)
+                                                              const std::string& assetName,
+                                                              const bool canSeek)
     {
         try
         {
             std::vector<std::uint8_t> bytes;
             const auto maxBytes = static_cast<std::size_t>(
                 CNA::Internal::Xnb::DefaultXnbReadLimits().maxFileSize);
-            const auto declaredLength = stream.getLengthProperty();
+            // Refresh PrepareStream IL_009f-00b3 asks Length only of a stream that can seek; a
+            // stream that cannot may refuse the question (NotSupportedException).
+            const auto declaredLength = canSeek ? stream.getLengthProperty() : 0;
             if (declaredLength > 0 &&
                 static_cast<std::size_t>(declaredLength) > maxBytes)
             {

@@ -154,11 +154,21 @@ namespace Microsoft::Xna::Framework::Content
         /// The injected device, else the service provider's IGraphicsDeviceService device, else null.
         [[nodiscard]] Graphics::GraphicsDevice* FindGraphicsDevice() const;
 
+        /// What reading an OpenStream() result knows about the stream it came from.
+        struct StreamReadState
+        {
+            /// The stream's CanSeek. Refresh's PrepareStream asks the stream's Length only when it
+            /// can seek, and checks the declared size against it only then (IL_009f-00cd).
+            bool canSeek = true;
+        };
+
         /// Reads a stream OpenStream() produced to its end. A ContentManager asset is read whole --
         /// LoadXnbAsset() needs the complete container to parse its header and payload -- so the
-        /// stream shape an override may provide is turned into bytes once, here.
+        /// stream shape an override may provide is turned into bytes once, here. The stream's
+        /// Length is consulted only when @p canSeek.
         [[nodiscard]] static std::vector<std::uint8_t> ReadStreamToEnd(System::IO::Stream& stream,
-                                                                      const std::string& assetName);
+                                                                      const std::string& assetName,
+                                                                      bool canSeek);
 
         /// Reads @p stream to its end, hands the bytes to @p read, then closes the stream whether or
         /// not that succeeded: Refresh ContentManager.ReadAsset<T> disposes the OpenStream() result
@@ -168,15 +178,19 @@ namespace Microsoft::Xna::Framework::Content
         template <typename Read>
         static auto ReadThenCloseStream(System::IO::Stream& stream, const std::string& assetName,
                                         Read&& read)
-            -> std::invoke_result_t<Read&, const std::vector<std::uint8_t>&>
+            -> std::invoke_result_t<Read&, const std::vector<std::uint8_t>&, StreamReadState&>
         {
-            using Result = std::invoke_result_t<Read&, const std::vector<std::uint8_t>&>;
+            using Result =
+                std::invoke_result_t<Read&, const std::vector<std::uint8_t>&, StreamReadState&>;
             std::optional<Result> result;
             std::exception_ptr failure;
+            StreamReadState state;
             try
             {
-                const std::vector<std::uint8_t> bytes = ReadStreamToEnd(stream, assetName);
-                result.emplace(read(bytes));
+                state.canSeek = stream.getCanSeekProperty();
+                const std::vector<std::uint8_t> bytes =
+                    ReadStreamToEnd(stream, assetName, state.canSeek);
+                result.emplace(read(bytes, state));
             }
             catch (...)
             {
@@ -201,6 +215,7 @@ namespace Microsoft::Xna::Framework::Content
         [[nodiscard]] std::any LoadUntypedXnbReference(const std::string& assetName);
         [[nodiscard]] std::any LoadXnbAssetUntyped(
             const std::vector<std::uint8_t>& bytes,
+            StreamReadState& state,
             const std::string& xnbPath,
             const std::string& assetName);
 
@@ -352,10 +367,13 @@ namespace Microsoft::Xna::Framework::Content
             const std::unique_ptr<System::IO::Stream> stream = OpenStream(assetName);
             RequireOpenedStream(stream.get());
 
-            return ReadThenCloseStream(*stream, assetName, [&](const std::vector<std::uint8_t>& bytes) {
-                detail::BuiltinContent<T>::Register(*this);
-                return LoadXnbAsset<T>(bytes, assetName, assetName, std::move(recordDisposableObject));
-            });
+            return ReadThenCloseStream(
+                *stream, assetName,
+                [&](const std::vector<std::uint8_t>& bytes, StreamReadState& state) {
+                    detail::BuiltinContent<T>::Register(*this);
+                    return LoadXnbAsset<T>(bytes, assetName, assetName, state,
+                                           std::move(recordDisposableObject));
+                });
         }
 
     public:
@@ -680,10 +698,11 @@ namespace Microsoft::Xna::Framework::Content
             if (const auto stream = TryOpenCompiledStream(cleanedAssetName))
             {
                 T result = ReadThenCloseStream(
-                    *stream, cleanedAssetName, [&](const std::vector<std::uint8_t>& xnbBytes) {
+                    *stream, cleanedAssetName,
+                    [&](const std::vector<std::uint8_t>& xnbBytes, StreamReadState& state) {
                         const std::string xnbCandidate =
                             ResolveExistingAssetPath(BuildAssetPath(cleanedAssetName) + ".xnb");
-                        return LoadXnbAsset<T>(xnbBytes, xnbCandidate, cleanedAssetName);
+                        return LoadXnbAsset<T>(xnbBytes, xnbCandidate, cleanedAssetName, state);
                     });
                 loadedAssets_[cacheKey] = result;
                 return result;
@@ -888,6 +907,8 @@ namespace Microsoft::Xna::Framework::Content
          * @param bytes     Complete `.xnb` bytes read from a filesystem or packaged asset.
          * @param xnbPath   Logical or filesystem path used in diagnostics.
          * @param assetName Logical asset name, passed through to ContentReader for diagnostics.
+         * @param state     What is known about the stream @p bytes were read from.
+         * @param recordDisposableObject Receives each disposable the asset owns, when set.
          * @return The deserialized root asset.
          * @throws ContentLoadException if the file is malformed, decompression fails, names
          *         an unregistered/version-mismatched reader, or is already being read by this
@@ -898,11 +919,13 @@ namespace Microsoft::Xna::Framework::Content
             const std::vector<std::uint8_t>& bytes,
             const std::string& xnbPath,
             const std::string& assetName,
+            StreamReadState& state,
             std::function<void(std::shared_ptr<System::IDisposable>)> recordDisposableObject = {})
         {
             const XnbReadScope readScope(*this, assetName);
             const auto container = CNA::Internal::Xnb::DecodeXnbContainerBody(
-                std::span<const std::uint8_t>(bytes.data(), bytes.size()), assetName);
+                std::span<const std::uint8_t>(bytes.data(), bytes.size()), assetName,
+                CNA::Internal::Xnb::DefaultXnbReadLimits(), state.canSeek);
             (void)xnbPath; // Refresh PrepareStream uses logical assetName for BadXnb.
             const auto bodyStream = container.OpenBodyStream();
             ContentReader contentReader(

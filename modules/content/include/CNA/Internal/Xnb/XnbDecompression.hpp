@@ -42,10 +42,18 @@ namespace CNA::Internal::Xnb
      * Refresh has no such bound: more output than `limits.maxDecompressedSize` (Refresh streams
      * through fixed 64 KiB buffers and never holds the whole body, CNA does).
      *
+     * The compressed bytes are fetched as Refresh's `ReadBufferFromDisk` (IL_0000-0042) fetches
+     * them, in 64 KiB chunks up to the declared size: when fewer than @p compressedSize bytes are
+     * present -- possible only for a stream that cannot seek, whose declared size Refresh's
+     * `PrepareStream` does not check (IL_009f-00a5) -- the chunk the input ends inside fails as a
+     * whole (IL_0023-0030), so only the complete chunks before it reach the decoder.
+     *
      * @param compressedData Pointer to the compressed payload bytes (immediately following the
      *                       10-byte container header and the 4-byte decompressed-size field).
      * @param compressedSize Number of compressed bytes the container declares; a negative value
      *                       is no input (`ReadNextBufferFromDisk` IL_0000-0009).
+     * @param availableSize  Number of bytes actually present at @p compressedData; nothing past
+     *                       them is read.
      * @param declaredSize   The container's decompressed-size field.
      * @param path           File path, used only to build exception messages.
      * @param limits         Bounds applied to the decoded output.
@@ -54,6 +62,7 @@ namespace CNA::Internal::Xnb
     [[nodiscard]] XnbLzxDecodeResult DecodeXnbLzxPayload(
         const uint8_t* compressedData,
         int32_t compressedSize,
+        int32_t availableSize,
         int32_t declaredSize,
         const std::string& path,
         const XnbReadLimits& limits = DefaultXnbReadLimits());
