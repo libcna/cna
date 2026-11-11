@@ -122,6 +122,12 @@ def write(description, root, out, samples=None):
             os.path.join(samples, unit["sourceSample"]) if unit.get("sourceSample") and samples
             else root,
             unit["sourceRoot"].replace("/", os.sep))
+        # A unit whose source root (possibly in another sample, `sourceSample`) is not in the
+        # tree is skipped like a whole missing sample: the corpus under --root can shrink.
+        if not os.path.isdir(base):
+            print("synthesize_projects: %s %s: %s is not in the tree; skipped"
+                  % (sample, unit["project"], os.path.relpath(base, samples or root)))
+            continue
         items = sources(base, unit)
         if os.path.isdir(staged):
             shutil.rmtree(staged)
