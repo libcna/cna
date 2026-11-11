@@ -52,8 +52,11 @@ SystemLink beyond one broadcast domain is a CNA extension (`CNA::Net::SystemLink
 broadcast only. `setExtraSearchAddressesProperty` names hosts (`host` or `host:port`, IPv4 or a
 name resolved at each search) that `Find`/`BeginFind` also query by unicast, for a port forward or
 a virtual network whose broadcasts take another interface; a name that does not resolve is skipped
-and logged. Their sessions are listed with the address the reply came from, so `Join` is
-unchanged. `setHostPortProperty` binds a session this machine creates to a fixed UDP game port
+and logged. The list is read, and its names resolved one after another by the system resolver,
+when the search runs -- in `Find`, or in `EndFind` after `BeginFind` -- before any query is sent;
+CNA sets no timeout of its own, so a slow lookup delays that call by the resolver's time. Their
+sessions are listed with the address the reply came from, so `Join` is unchanged.
+`setHostPortProperty` binds a session this machine creates to a fixed UDP game port
 (0, the default, is ephemeral), so a router can forward it with discovery port 61190; a joining
 session stays ephemeral. Announces carry a random host instance id after the older fields, so a
 searcher lists two hosts on the same fixed port apart; a host without it is still identified by its
