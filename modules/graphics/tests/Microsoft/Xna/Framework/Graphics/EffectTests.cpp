@@ -10,6 +10,7 @@
 #include <iterator>
 #include <limits>
 #include <memory>
+#include <typeinfo>
 #include <utility>
 #include <vector>
 
@@ -1183,4 +1184,91 @@ TEST(EffectTest, StockEffectClonesRejectDisposedSources)
     EXPECT_THROW(std::unique_ptr<Effect>(skinned.Clone()), System::ObjectDisposedException);
     EXPECT_THROW(std::unique_ptr<Effect>(sprite.Clone()), System::ObjectDisposedException);
     EXPECT_THROW(std::unique_ptr<Effect>(material.Clone()), System::ObjectDisposedException);
+}
+
+namespace
+{
+    template <typename Operation>
+    void ExpectDisposedObjectName(const std::string& expected, Operation operation)
+    {
+        try
+        {
+            operation();
+            ADD_FAILURE() << "expected ObjectDisposedException(" << expected << ")";
+        }
+        catch (const System::ObjectDisposedException& e)
+        {
+            EXPECT_EQ(typeid(e), typeid(System::ObjectDisposedException));
+            EXPECT_EQ(e.getObjectNameProperty(), expected);
+        }
+    }
+
+    void ExpectDisposedEffectRefusalsNameTheType(Effect& effect, const std::string& typeName)
+    {
+        SCOPED_TRACE(typeName);
+        effect.setNameProperty("NamedByTheGame");
+        EffectTechnique* technique = effect.getCurrentTechniqueProperty();
+        ASSERT_NE(technique, nullptr);
+        EffectPass* pass = technique->getPassesProperty()[0];
+        ASSERT_NE(pass, nullptr);
+        effect.Dispose();
+
+        ExpectDisposedObjectName(typeName, [&] { std::unique_ptr<Effect> clone(effect.Clone()); });
+        ExpectDisposedObjectName(typeName, [&] { Microsoft::Xna::Framework::Graphics::EffectMaterial material(effect); });
+        ExpectDisposedObjectName(typeName, [&] { effect.setCurrentTechniqueProperty(technique); });
+        ExpectDisposedObjectName(typeName, [&] { effect.Apply(); });
+        ExpectDisposedObjectName(typeName, [&] { pass->Apply(); });
+    }
+}
+
+// Framework Helpers.CheckDisposed IL_000d-0018 throws ObjectDisposedException(obj.GetType().Name).
+// Effect::.ctor(Effect) IL_0019-0029 (Clone, EffectMaterial), set_CurrentTechnique IL_0000-000e and
+// EffectPass.Apply IL_0000-001c pass the effect itself: the refusal names its class, not its Name.
+TEST(EffectTest, DisposedEffectRefusalsNameTheEffectsTypeNotItsName)
+{
+    GraphicsDevice gd;
+    Effect plain(gd);
+    Microsoft::Xna::Framework::Graphics::AlphaTestEffect alphaTest(gd);
+    Microsoft::Xna::Framework::Graphics::BasicEffect basic(gd);
+    Microsoft::Xna::Framework::Graphics::DualTextureEffect dualTexture(gd);
+    Microsoft::Xna::Framework::Graphics::EnvironmentMapEffect environmentMap(gd);
+    Microsoft::Xna::Framework::Graphics::SkinnedEffect skinned(gd);
+    Microsoft::Xna::Framework::Graphics::SpriteEffect sprite(gd);
+    Effect materialSource(gd);
+    Microsoft::Xna::Framework::Graphics::EffectMaterial material(materialSource);
+
+    ExpectDisposedEffectRefusalsNameTheType(plain, "Effect");
+    ExpectDisposedEffectRefusalsNameTheType(alphaTest, "AlphaTestEffect");
+    ExpectDisposedEffectRefusalsNameTheType(basic, "BasicEffect");
+    ExpectDisposedEffectRefusalsNameTheType(dualTexture, "DualTextureEffect");
+    ExpectDisposedEffectRefusalsNameTheType(environmentMap, "EnvironmentMapEffect");
+    ExpectDisposedEffectRefusalsNameTheType(skinned, "SkinnedEffect");
+    ExpectDisposedEffectRefusalsNameTheType(sprite, "SpriteEffect");
+    ExpectDisposedEffectRefusalsNameTheType(material, "EffectMaterial");
+}
+
+// EffectParameter.SetValue(Texture) IL_0005-0015 passes the texture to Helpers.CheckDisposed, so a
+// disposed texture is named by its own class: Texture2D, or RenderTarget2D for a render target.
+TEST(EffectTest, CompiledTextureSetterNamesTheDisposedTexturesType)
+{
+    GraphicsDevice gd;
+    const auto bytes = LoadValidCompiledEffectFixture();
+    ASSERT_FALSE(bytes.empty());
+    if (!gd.SupportsCapability(CNA::GraphicsCapability::CompiledEffects))
+        GTEST_SKIP() << "renderer does not execute compiled effects";
+
+    TestEffect effect(gd, bytes);
+    auto* texture = effect.getParametersProperty()["Texture"];
+    ASSERT_NE(texture, nullptr);
+    Microsoft::Xna::Framework::Graphics::Texture2D disposed(gd, 1, 1);
+    disposed.setNameProperty("NamedByTheGame");
+    disposed.Dispose();
+    Microsoft::Xna::Framework::Graphics::RenderTarget2D disposedTarget(gd, 1, 1);
+    disposedTarget.setNameProperty("NamedByTheGame");
+    disposedTarget.Dispose();
+
+    ExpectDisposedObjectName("Texture2D", [&] { texture->SetValue(&disposed); });
+    ExpectDisposedObjectName("Texture2D", [&] {
+        texture->SetValue(static_cast<Microsoft::Xna::Framework::Graphics::Texture*>(&disposed)); });
+    ExpectDisposedObjectName("RenderTarget2D", [&] { texture->SetValue(&disposedTarget); });
 }

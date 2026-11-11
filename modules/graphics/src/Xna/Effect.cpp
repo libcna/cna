@@ -49,6 +49,14 @@ namespace
             value == 178u;
     }
 
+    // Framework Helpers.CheckDisposed IL_000d-0018 throws ObjectDisposedException(obj.GetType().Name):
+    // the effect's runtime type, never its Name.
+    std::string DisposedEffectName(const Microsoft::Xna::Framework::Graphics::Effect& effect)
+    {
+        const std::string& qualified = effect.GetTypeName();
+        return qualified.substr(qualified.find_last_of('.') + 1);
+    }
+
     std::uint32_t ReadUInt32LittleEndian(
         const std::vector<SharpRuntime::bytecs>& bytes, std::size_t offset)
     {
@@ -1078,7 +1086,7 @@ namespace Microsoft::Xna::Framework::Graphics
     void Effect::ThrowIfDisposedForCloneInternal() const
     {
         if (isDisposed_)
-            throw System::ObjectDisposedException(getNameProperty());
+            throw System::ObjectDisposedException(DisposedEffectName(*this));
     }
 
     void Effect::BindStockTextureInternal(int slot, Texture* texture)
@@ -1099,7 +1107,7 @@ namespace Microsoft::Xna::Framework::Graphics
     void Effect::setCurrentTechniqueProperty(EffectTechnique* value)
     {
         if (isDisposed_)
-            throw System::ObjectDisposedException(getNameProperty());
+            throw System::ObjectDisposedException(DisposedEffectName(*this));
         if (value == nullptr)
             throw System::ArgumentNullException("value");
         if (value->owner_ != this)
@@ -1128,7 +1136,7 @@ namespace Microsoft::Xna::Framework::Graphics
     void Effect::ApplyPassInternal(std::uint32_t passIndex)
     {
         if (isDisposed_)
-            throw System::ObjectDisposedException(getNameProperty());
+            throw System::ObjectDisposedException(DisposedEffectName(*this));
         OnApply();
 
         if (compiledRuntime_)

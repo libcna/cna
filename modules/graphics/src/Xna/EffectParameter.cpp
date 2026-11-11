@@ -542,8 +542,13 @@ namespace Microsoft::Xna::Framework::Graphics
     void EffectParameter::RequireTextureValueUsable(Texture* value) const
     {
         if (value == nullptr) return;
+        // SetValue(Texture) IL_0005-0015: Helpers.CheckDisposed(value) names the texture's runtime
+        // type (GetType().Name), not its Name.
         if (value->getIsDisposedProperty())
-            throw System::ObjectDisposedException(value->getNameProperty());
+        {
+            const std::string& qualified = value->GetTypeName();
+            throw System::ObjectDisposedException(qualified.substr(qualified.find_last_of('.') + 1));
+        }
 
         GraphicsDevice* const device = value->getGraphicsDeviceProperty();
         if (device == nullptr) return;

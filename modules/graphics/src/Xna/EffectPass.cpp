@@ -23,8 +23,13 @@ namespace Microsoft::Xna::Framework::Graphics
     void EffectPass::Apply()
     {
         if (!owner_) return;
+        // EffectPass.Apply IL_000c-001c: Helpers.CheckDisposed(effect) names the effect's runtime
+        // type (GetType().Name), not its Name.
         if (owner_->getIsDisposedProperty())
-            throw System::ObjectDisposedException(owner_->getNameProperty());
+        {
+            const std::string& qualified = owner_->GetTypeName();
+            throw System::ObjectDisposedException(qualified.substr(qualified.find_last_of('.') + 1));
+        }
 
         const EffectTechnique* current = owner_->getCurrentTechniqueProperty();
         if (current == nullptr || current->getIdInternal() != techniqueId_)
