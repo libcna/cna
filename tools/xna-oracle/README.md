@@ -637,3 +637,18 @@ and native regressions are in
 [the provenance](../../tests/reference/xna40/spritebatch-blend-reference/PROVENANCE.json).
 The measurement covers an ordinary RGBA target under Wine/DXVK; it adds no native Windows or
 browser qualification.
+
+## ShaderIndex outside a stock clone's tables (KI-GFX-SHADERINDEX)
+
+`StockCloneShaderIndexOracle.cs` applies an EffectMaterial clone of each stock effect with raw
+ShaderIndex values inside and outside its tables and draws a quad, recording Apply's and the draw's
+outcome and the drawn pixel:
+
+```bash
+bash tools/xna-oracle/run-stock-clone-shader-index-oracle.sh <output-directory>
+```
+
+The recorded observations and their provenance are in
+[`observations.txt`](../../tests/reference/xna40/stock-clone-shader-index/observations.txt);
+`StockEffectCloneDispatchTest.AnOutOfTableShaderIndexThrowsXnasUnexpectedError` is the CNA
+regression. The prefix's GAC holds the original XNA 4.0 build, not Refresh.

@@ -1,0 +1,98 @@
+# KI-GFX-SHADERINDEX: an EffectMaterial clone of each stock effect, its raw ShaderIndex set, then
+# EffectPass.Apply, DrawUserPrimitives of a quad into an 8x8 target and the target's pixel 36.
+# Produced 2026-11-11 by tools/xna-oracle/run-stock-clone-shader-index-oracle.sh in the
+# ~/.wine-cna-xna40 prefix (GAC XNA 4.0 managed assemblies, hashes below; Microsoft's d3dx9_41.dll
+# and DXVK's d3d9 loaded native, per a WINEDEBUG=+loaddll run) inside
+# tools/platform/run_gpu_tests_private.sh --exec. The Refresh build is not in this prefix; its
+# EffectPass.Apply IL_00c0-00db / IL_0112-011c has the same throw on a failed native pass.
+# In this build the EffectMaterial clone of BasicEffect, AlphaTestEffect, EnvironmentMapEffect and
+# SkinnedEffect throws NullReferenceException in the clone constructor, so only DualTextureEffect
+# reaches Apply. "pixel" after a refused Apply is the previous successful pass's drawing.
+assembly/Microsoft.Xna.Framework=8b7aa4c4939f243b21432747281cc8aacdcda56191a16d9eaa036b4136cf0da4
+assembly/Microsoft.Xna.Framework.Graphics=39aed7fd8e308ccace5ce9390256f1c829ca72c2eccd97d4a0f629f24015d3a5
+assembly/Microsoft.Xna.Framework.Game=a0347e9d9a646779a9bb1bd512af333ae07a3db65b3259fae3220ed87a80e756
+BasicEffect/ShaderIndex=0 clone=System.NullReferenceException(Object reference not set to an instance of an object.) (stack: EffectParameter.GetValueSingleArray <- Effect..ctor(Effect))
+BasicEffect/ShaderIndex=1 clone=System.NullReferenceException(Object reference not set to an instance of an object.) (stack: EffectParameter.GetValueSingleArray <- Effect..ctor(Effect))
+BasicEffect/ShaderIndex=2 clone=System.NullReferenceException(Object reference not set to an instance of an object.) (stack: EffectParameter.GetValueSingleArray <- Effect..ctor(Effect))
+BasicEffect/ShaderIndex=31 clone=System.NullReferenceException(Object reference not set to an instance of an object.) (stack: EffectParameter.GetValueSingleArray <- Effect..ctor(Effect))
+BasicEffect/ShaderIndex=32 clone=System.NullReferenceException(Object reference not set to an instance of an object.) (stack: EffectParameter.GetValueSingleArray <- Effect..ctor(Effect))
+BasicEffect/ShaderIndex=33 clone=System.NullReferenceException(Object reference not set to an instance of an object.) (stack: EffectParameter.GetValueSingleArray <- Effect..ctor(Effect))
+BasicEffect/ShaderIndex=64 clone=System.NullReferenceException(Object reference not set to an instance of an object.) (stack: EffectParameter.GetValueSingleArray <- Effect..ctor(Effect))
+BasicEffect/ShaderIndex=1000 clone=System.NullReferenceException(Object reference not set to an instance of an object.) (stack: EffectParameter.GetValueSingleArray <- Effect..ctor(Effect))
+BasicEffect/ShaderIndex=-1 clone=System.NullReferenceException(Object reference not set to an instance of an object.) (stack: EffectParameter.GetValueSingleArray <- Effect..ctor(Effect))
+BasicEffect/ShaderIndex=-2 clone=System.NullReferenceException(Object reference not set to an instance of an object.) (stack: EffectParameter.GetValueSingleArray <- Effect..ctor(Effect))
+BasicEffect/ShaderIndex=-3 clone=System.NullReferenceException(Object reference not set to an instance of an object.) (stack: EffectParameter.GetValueSingleArray <- Effect..ctor(Effect))
+BasicEffect/ShaderIndex=-32 clone=System.NullReferenceException(Object reference not set to an instance of an object.) (stack: EffectParameter.GetValueSingleArray <- Effect..ctor(Effect))
+BasicEffect/ShaderIndex=-33 clone=System.NullReferenceException(Object reference not set to an instance of an object.) (stack: EffectParameter.GetValueSingleArray <- Effect..ctor(Effect))
+BasicEffect/ShaderIndex=2147483647 clone=System.NullReferenceException(Object reference not set to an instance of an object.) (stack: EffectParameter.GetValueSingleArray <- Effect..ctor(Effect))
+BasicEffect/ShaderIndex=-2147483648 clone=System.NullReferenceException(Object reference not set to an instance of an object.) (stack: EffectParameter.GetValueSingleArray <- Effect..ctor(Effect))
+BasicEffect/ShaderIndex=-2147483647 clone=System.NullReferenceException(Object reference not set to an instance of an object.) (stack: EffectParameter.GetValueSingleArray <- Effect..ctor(Effect))
+BasicEffect/after clone=System.NullReferenceException(Object reference not set to an instance of an object.) (stack: EffectParameter.GetValueSingleArray <- Effect..ctor(Effect))
+AlphaTestEffect/ShaderIndex=0 clone=System.NullReferenceException(Object reference not set to an instance of an object.) (stack: EffectParameter.GetValueSingleArray <- Effect..ctor(Effect))
+AlphaTestEffect/ShaderIndex=1 clone=System.NullReferenceException(Object reference not set to an instance of an object.) (stack: EffectParameter.GetValueSingleArray <- Effect..ctor(Effect))
+AlphaTestEffect/ShaderIndex=2 clone=System.NullReferenceException(Object reference not set to an instance of an object.) (stack: EffectParameter.GetValueSingleArray <- Effect..ctor(Effect))
+AlphaTestEffect/ShaderIndex=7 clone=System.NullReferenceException(Object reference not set to an instance of an object.) (stack: EffectParameter.GetValueSingleArray <- Effect..ctor(Effect))
+AlphaTestEffect/ShaderIndex=8 clone=System.NullReferenceException(Object reference not set to an instance of an object.) (stack: EffectParameter.GetValueSingleArray <- Effect..ctor(Effect))
+AlphaTestEffect/ShaderIndex=9 clone=System.NullReferenceException(Object reference not set to an instance of an object.) (stack: EffectParameter.GetValueSingleArray <- Effect..ctor(Effect))
+AlphaTestEffect/ShaderIndex=16 clone=System.NullReferenceException(Object reference not set to an instance of an object.) (stack: EffectParameter.GetValueSingleArray <- Effect..ctor(Effect))
+AlphaTestEffect/ShaderIndex=1000 clone=System.NullReferenceException(Object reference not set to an instance of an object.) (stack: EffectParameter.GetValueSingleArray <- Effect..ctor(Effect))
+AlphaTestEffect/ShaderIndex=-1 clone=System.NullReferenceException(Object reference not set to an instance of an object.) (stack: EffectParameter.GetValueSingleArray <- Effect..ctor(Effect))
+AlphaTestEffect/ShaderIndex=-2 clone=System.NullReferenceException(Object reference not set to an instance of an object.) (stack: EffectParameter.GetValueSingleArray <- Effect..ctor(Effect))
+AlphaTestEffect/ShaderIndex=-3 clone=System.NullReferenceException(Object reference not set to an instance of an object.) (stack: EffectParameter.GetValueSingleArray <- Effect..ctor(Effect))
+AlphaTestEffect/ShaderIndex=-8 clone=System.NullReferenceException(Object reference not set to an instance of an object.) (stack: EffectParameter.GetValueSingleArray <- Effect..ctor(Effect))
+AlphaTestEffect/ShaderIndex=-9 clone=System.NullReferenceException(Object reference not set to an instance of an object.) (stack: EffectParameter.GetValueSingleArray <- Effect..ctor(Effect))
+AlphaTestEffect/ShaderIndex=2147483647 clone=System.NullReferenceException(Object reference not set to an instance of an object.) (stack: EffectParameter.GetValueSingleArray <- Effect..ctor(Effect))
+AlphaTestEffect/ShaderIndex=-2147483648 clone=System.NullReferenceException(Object reference not set to an instance of an object.) (stack: EffectParameter.GetValueSingleArray <- Effect..ctor(Effect))
+AlphaTestEffect/ShaderIndex=-2147483647 clone=System.NullReferenceException(Object reference not set to an instance of an object.) (stack: EffectParameter.GetValueSingleArray <- Effect..ctor(Effect))
+AlphaTestEffect/after clone=System.NullReferenceException(Object reference not set to an instance of an object.) (stack: EffectParameter.GetValueSingleArray <- Effect..ctor(Effect))
+DualTextureEffect/ShaderIndex=0 apply=ok draw=ok pixel=255,255,255,255
+DualTextureEffect/ShaderIndex=1 apply=ok draw=ok pixel=255,255,255,255
+DualTextureEffect/ShaderIndex=2 apply=ok draw=ok pixel=255,255,128,255
+DualTextureEffect/ShaderIndex=3 apply=ok draw=ok pixel=255,255,128,255
+DualTextureEffect/ShaderIndex=4 apply=System.InvalidOperationException(An unexpected error has occurred.) draw=ok pixel=255,255,128,255
+DualTextureEffect/ShaderIndex=5 apply=System.InvalidOperationException(An unexpected error has occurred.) draw=ok pixel=255,255,128,255
+DualTextureEffect/ShaderIndex=8 apply=System.InvalidOperationException(An unexpected error has occurred.) draw=ok pixel=255,255,128,255
+DualTextureEffect/ShaderIndex=1000 apply=System.InvalidOperationException(An unexpected error has occurred.) draw=ok pixel=255,255,128,255
+DualTextureEffect/ShaderIndex=-1 apply=ok draw=ok pixel=255,255,255,255
+DualTextureEffect/ShaderIndex=-2 apply=System.InvalidOperationException(An unexpected error has occurred.) draw=ok pixel=255,255,255,255
+DualTextureEffect/ShaderIndex=-3 apply=System.InvalidOperationException(An unexpected error has occurred.) draw=ok pixel=255,255,255,255
+DualTextureEffect/ShaderIndex=-4 apply=System.InvalidOperationException(An unexpected error has occurred.) draw=ok pixel=255,255,255,255
+DualTextureEffect/ShaderIndex=-5 apply=System.InvalidOperationException(An unexpected error has occurred.) draw=ok pixel=255,255,255,255
+DualTextureEffect/ShaderIndex=2147483647 apply=System.InvalidOperationException(An unexpected error has occurred.) draw=ok pixel=255,255,255,255
+DualTextureEffect/ShaderIndex=-2147483648 apply=ok draw=ok pixel=255,255,255,255
+DualTextureEffect/ShaderIndex=-2147483647 apply=ok draw=ok pixel=255,255,128,255
+DualTextureEffect/after apply=ok draw=ok pixel=255,255,255,255
+EnvironmentMapEffect/ShaderIndex=0 clone=System.NullReferenceException(Object reference not set to an instance of an object.) (stack: EffectParameter.GetValueSingleArray <- Effect..ctor(Effect))
+EnvironmentMapEffect/ShaderIndex=1 clone=System.NullReferenceException(Object reference not set to an instance of an object.) (stack: EffectParameter.GetValueSingleArray <- Effect..ctor(Effect))
+EnvironmentMapEffect/ShaderIndex=2 clone=System.NullReferenceException(Object reference not set to an instance of an object.) (stack: EffectParameter.GetValueSingleArray <- Effect..ctor(Effect))
+EnvironmentMapEffect/ShaderIndex=15 clone=System.NullReferenceException(Object reference not set to an instance of an object.) (stack: EffectParameter.GetValueSingleArray <- Effect..ctor(Effect))
+EnvironmentMapEffect/ShaderIndex=16 clone=System.NullReferenceException(Object reference not set to an instance of an object.) (stack: EffectParameter.GetValueSingleArray <- Effect..ctor(Effect))
+EnvironmentMapEffect/ShaderIndex=17 clone=System.NullReferenceException(Object reference not set to an instance of an object.) (stack: EffectParameter.GetValueSingleArray <- Effect..ctor(Effect))
+EnvironmentMapEffect/ShaderIndex=32 clone=System.NullReferenceException(Object reference not set to an instance of an object.) (stack: EffectParameter.GetValueSingleArray <- Effect..ctor(Effect))
+EnvironmentMapEffect/ShaderIndex=1000 clone=System.NullReferenceException(Object reference not set to an instance of an object.) (stack: EffectParameter.GetValueSingleArray <- Effect..ctor(Effect))
+EnvironmentMapEffect/ShaderIndex=-1 clone=System.NullReferenceException(Object reference not set to an instance of an object.) (stack: EffectParameter.GetValueSingleArray <- Effect..ctor(Effect))
+EnvironmentMapEffect/ShaderIndex=-2 clone=System.NullReferenceException(Object reference not set to an instance of an object.) (stack: EffectParameter.GetValueSingleArray <- Effect..ctor(Effect))
+EnvironmentMapEffect/ShaderIndex=-3 clone=System.NullReferenceException(Object reference not set to an instance of an object.) (stack: EffectParameter.GetValueSingleArray <- Effect..ctor(Effect))
+EnvironmentMapEffect/ShaderIndex=-16 clone=System.NullReferenceException(Object reference not set to an instance of an object.) (stack: EffectParameter.GetValueSingleArray <- Effect..ctor(Effect))
+EnvironmentMapEffect/ShaderIndex=-17 clone=System.NullReferenceException(Object reference not set to an instance of an object.) (stack: EffectParameter.GetValueSingleArray <- Effect..ctor(Effect))
+EnvironmentMapEffect/ShaderIndex=2147483647 clone=System.NullReferenceException(Object reference not set to an instance of an object.) (stack: EffectParameter.GetValueSingleArray <- Effect..ctor(Effect))
+EnvironmentMapEffect/ShaderIndex=-2147483648 clone=System.NullReferenceException(Object reference not set to an instance of an object.) (stack: EffectParameter.GetValueSingleArray <- Effect..ctor(Effect))
+EnvironmentMapEffect/ShaderIndex=-2147483647 clone=System.NullReferenceException(Object reference not set to an instance of an object.) (stack: EffectParameter.GetValueSingleArray <- Effect..ctor(Effect))
+EnvironmentMapEffect/after clone=System.NullReferenceException(Object reference not set to an instance of an object.) (stack: EffectParameter.GetValueSingleArray <- Effect..ctor(Effect))
+SkinnedEffect/ShaderIndex=0 clone=System.NullReferenceException(Object reference not set to an instance of an object.) (stack: EffectParameter.GetValueSingleArray <- Effect..ctor(Effect))
+SkinnedEffect/ShaderIndex=1 clone=System.NullReferenceException(Object reference not set to an instance of an object.) (stack: EffectParameter.GetValueSingleArray <- Effect..ctor(Effect))
+SkinnedEffect/ShaderIndex=2 clone=System.NullReferenceException(Object reference not set to an instance of an object.) (stack: EffectParameter.GetValueSingleArray <- Effect..ctor(Effect))
+SkinnedEffect/ShaderIndex=17 clone=System.NullReferenceException(Object reference not set to an instance of an object.) (stack: EffectParameter.GetValueSingleArray <- Effect..ctor(Effect))
+SkinnedEffect/ShaderIndex=18 clone=System.NullReferenceException(Object reference not set to an instance of an object.) (stack: EffectParameter.GetValueSingleArray <- Effect..ctor(Effect))
+SkinnedEffect/ShaderIndex=19 clone=System.NullReferenceException(Object reference not set to an instance of an object.) (stack: EffectParameter.GetValueSingleArray <- Effect..ctor(Effect))
+SkinnedEffect/ShaderIndex=36 clone=System.NullReferenceException(Object reference not set to an instance of an object.) (stack: EffectParameter.GetValueSingleArray <- Effect..ctor(Effect))
+SkinnedEffect/ShaderIndex=1000 clone=System.NullReferenceException(Object reference not set to an instance of an object.) (stack: EffectParameter.GetValueSingleArray <- Effect..ctor(Effect))
+SkinnedEffect/ShaderIndex=-1 clone=System.NullReferenceException(Object reference not set to an instance of an object.) (stack: EffectParameter.GetValueSingleArray <- Effect..ctor(Effect))
+SkinnedEffect/ShaderIndex=-2 clone=System.NullReferenceException(Object reference not set to an instance of an object.) (stack: EffectParameter.GetValueSingleArray <- Effect..ctor(Effect))
+SkinnedEffect/ShaderIndex=-3 clone=System.NullReferenceException(Object reference not set to an instance of an object.) (stack: EffectParameter.GetValueSingleArray <- Effect..ctor(Effect))
+SkinnedEffect/ShaderIndex=-18 clone=System.NullReferenceException(Object reference not set to an instance of an object.) (stack: EffectParameter.GetValueSingleArray <- Effect..ctor(Effect))
+SkinnedEffect/ShaderIndex=-19 clone=System.NullReferenceException(Object reference not set to an instance of an object.) (stack: EffectParameter.GetValueSingleArray <- Effect..ctor(Effect))
+SkinnedEffect/ShaderIndex=2147483647 clone=System.NullReferenceException(Object reference not set to an instance of an object.) (stack: EffectParameter.GetValueSingleArray <- Effect..ctor(Effect))
+SkinnedEffect/ShaderIndex=-2147483648 clone=System.NullReferenceException(Object reference not set to an instance of an object.) (stack: EffectParameter.GetValueSingleArray <- Effect..ctor(Effect))
+SkinnedEffect/ShaderIndex=-2147483647 clone=System.NullReferenceException(Object reference not set to an instance of an object.) (stack: EffectParameter.GetValueSingleArray <- Effect..ctor(Effect))
+SkinnedEffect/after clone=System.NullReferenceException(Object reference not set to an instance of an object.) (stack: EffectParameter.GetValueSingleArray <- Effect..ctor(Effect))

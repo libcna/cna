@@ -16,6 +16,7 @@
 #include <limits>
 #include <memory>
 #include <string>
+#include <typeinfo>
 #include <vector>
 
 #include "CNA/Internal/Renderers/Common/IGraphicsRenderer.hpp"
@@ -722,4 +723,38 @@ TEST(StockEffectCloneDispatchTest, EveryStockEffectLatchesItsDrawAtApply)
     EXPECT_EQ(DrawParamsOf(dualTexture).diffuseColor[3], 1.0f);
     EXPECT_EQ(DrawParamsOf(environmentMap).envMapAmount, 1.0f);
     EXPECT_EQ(DrawParamsOf(skinned).weightsPerVertex, 4);
+}
+
+// Genuine XNA (Microsoft's d3dx9_41 under Wine; tests/reference/xna40/stock-clone-shader-index)
+// fails the pass for a ShaderIndex outside the stock tables, and EffectPass.Apply IL_0112-011c
+// throws GetExceptionFromResult's InvalidOperationException(FrameworkResources.UnexpectedError)
+// (KI-GFX-SHADERINDEX).
+TEST(StockEffectCloneDispatchTest, AnOutOfTableShaderIndexThrowsXnasUnexpectedError)
+{
+    GraphicsDevice device;
+    DualTextureEffect dual(device);
+    BasicEffect basic(device);
+    EffectMaterial dualClone(dual);
+    EffectMaterial basicClone(basic);
+    const auto expectRefusal = [](Effect& clone, int index)
+    {
+        SCOPED_TRACE(index);
+        SetShaderIndex(clone, index);
+        try
+        {
+            clone.Apply();
+            ADD_FAILURE() << "Expected InvalidOperationException";
+        }
+        catch (const System::InvalidOperationException& error)
+        {
+            EXPECT_EQ(typeid(error), typeid(System::InvalidOperationException));
+            EXPECT_EQ(error.getMessageProperty(), "An unexpected error has occurred.");
+        }
+    };
+    for (const int index : {4, 5, 8, 1000, -2, -4, std::numeric_limits<int>::max()})
+        expectRefusal(dualClone, index);
+    for (const int index : {32, 33, 1000, -2})
+        expectRefusal(basicClone, index);
+    SetShaderIndex(dualClone, 3);
+    EXPECT_NO_THROW(dualClone.Apply());
 }

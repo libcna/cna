@@ -1334,12 +1334,14 @@ namespace Microsoft::Xna::Framework::Graphics
             snapshot.shaderIndex = parameter->GetValueInt32();
         if (snapshot.shaderIndex < 0 || snapshot.shaderIndex >= shaderCount)
         {
-            // What the native effect does with an index outside its shader tables is not
-            // established; CNA refuses it rather than drawing some variant (HND-TQ-25 D9).
-            throw System::InvalidOperationException(
-                "The ShaderIndex parameter value " + std::to_string(snapshot.shaderIndex) +
-                " selects none of the " + std::to_string(shaderCount) +
-                " shaders of the stock effect this effect was cloned from.");
+            // Native D3DX fails the pass for an index outside the stock tables, and
+            // EffectPass.Apply IL_00c0-00db / IL_0112-011c ends the effect and throws
+            // GetExceptionFromResult's InvalidOperationException(FrameworkResources.UnexpectedError)
+            // -- measured under Wine with Microsoft's d3dx9_41 (KI-GFX-SHADERINDEX,
+            // tests/reference/xna40/stock-clone-shader-index). The native effect accepted -1,
+            // int.MinValue and int.MinValue + 1 there, drawing whatever lies outside its tables;
+            // CNA refuses those as well.
+            throw System::InvalidOperationException("An unexpected error has occurred.");
         }
 
         vector4("DiffuseColor", snapshot.diffuseColor);
