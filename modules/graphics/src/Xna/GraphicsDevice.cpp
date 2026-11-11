@@ -2537,8 +2537,9 @@ namespace Microsoft::Xna::Framework::Graphics
         Matrix world, view, proj;
         ExtractMatrices(currentEffect_, world, view, proj);
         CNA::Internal::Renderers::GpuDrawParams drawParams;
+        // The applied effect's vertex-colour selection stands, as on the typed overload (XNA
+        // BasicEffect.OnApply IL_0123-012e puts it in the ShaderIndex the pass applies).
         currentEffect_->FillGpuDrawParams(drawParams);
-        drawParams.vertexColorEnabled = true;
         RequireStockEffectInputs(drawParams, VertexPositionColor::getVertexDeclarationStatic());
         applySamplerStatesToRenderer();
         renderer_->DrawPrimitivesEx(*tmpVb, world, view, proj, primitiveType, primitiveCount,
@@ -2597,8 +2598,8 @@ namespace Microsoft::Xna::Framework::Graphics
         Matrix world, view, proj;
         ExtractMatrices(currentEffect_, world, view, proj);
         CNA::Internal::Renderers::GpuDrawParams drawParams;
+        // The applied effect's vertex-colour selection stands, as on the typed overload.
         currentEffect_->FillGpuDrawParams(drawParams);
-        drawParams.vertexColorEnabled = true;
         drawParams.numVertices = numVertices;
         RequireStockEffectInputs(drawParams, VertexPositionColor::getVertexDeclarationStatic());
         currentIndexBuffer_ = nullptr;

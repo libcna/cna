@@ -156,3 +156,51 @@ TEST(GraphicsDeviceEntryPixelsTest, RawDeclarationAndLegacyUntypedRoutesAlsoPain
     AssertRedDraw(device, target, [&] { device.DrawUserPrimitives(PrimitiveType::TriangleList, static_cast<const void*>(objects), 1, 1); });
     AssertRedDraw(device, target, [&] { device.DrawUserIndexedPrimitives(PrimitiveType::TriangleList, static_cast<const void*>(objects), 1, 3, static_cast<const void*>(i16), 1, 1); });
 }
+
+// XNA BasicEffect.OnApply IL_0123-012e folds VertexColorEnabled into the ShaderIndex the pass
+// applies; the vertex layout of the draw does not change that choice. The untyped CNAEXT routes
+// read native VertexPositionColor objects like the typed overload and keep the applied selection
+// too: green vertices under a white unlit effect draw white unless VertexColorEnabled is set.
+TEST(GraphicsDeviceEntryPixelsTest, UntypedRoutesKeepTheAppliedVertexColorSelection)
+{
+    CNA_SKIP_IF_RENDERER_IS_NOT(CNA::GraphicsRendererType::Software);
+    GraphicsDevice device;
+    device.SetGraphicsProfileEXT(GraphicsProfile::HiDef);
+    RenderTarget2D target(device, 8, 8);
+    BasicEffect effect(device);
+    effect.setDiffuseColorProperty(Vector3(1, 1, 1));
+    device.setBlendStateProperty(BlendState::Opaque);
+    device.setDepthStencilStateProperty(DepthStencilState::None);
+    device.setRasterizerStateProperty(RasterizerState::CullNone);
+    const Color green(0, 255, 0, 255);
+    const VertexPositionColor objects[]{
+        VertexPositionColor(Vector3(-1, -1, 0), green), VertexPositionColor(Vector3(-1, -1, 0), green),
+        VertexPositionColor(Vector3(3, -1, 0), green), VertexPositionColor(Vector3(-1, 3, 0), green)};
+    const std::uint16_t i16[]{0, 2, 0, 1};
+    const auto centre = [&](auto draw)
+    {
+        device.SetRenderTarget(&target);
+        device.Clear(Color::Black);
+        draw();
+        device.SetRenderTarget(nullptr);
+        std::array<Color, 64> pixels{};
+        target.GetData(pixels.data(), 64);
+        return pixels[4 * 8 + 4];
+    };
+    for (const bool vertexColor : {false, true})
+    {
+        SCOPED_TRACE(vertexColor ? "VertexColorEnabled" : "VertexColorEnabled=false");
+        effect.VertexColorEnabled = vertexColor;
+        effect.Apply();
+        const Color expected = vertexColor ? green : Color(255, 255, 255, 255);
+        EXPECT_EQ(centre([&] { device.DrawUserPrimitives(PrimitiveType::TriangleList, objects, 1, 1); }), expected)
+            << "typed";
+        EXPECT_EQ(centre([&] { device.DrawUserPrimitives(PrimitiveType::TriangleList,
+                                                         static_cast<const void*>(objects), 1, 1); }), expected)
+            << "untyped";
+        EXPECT_EQ(centre([&] { device.DrawUserIndexedPrimitives(PrimitiveType::TriangleList,
+                                                                static_cast<const void*>(objects), 1, 3,
+                                                                static_cast<const void*>(i16), 1, 1); }), expected)
+            << "untyped indexed";
+    }
+}
