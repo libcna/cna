@@ -32,8 +32,8 @@ protected:
     void SetUp() override
     {
         selected=GraphicsRendererSelection::GetSelected();
-        if(selected!=GraphicsRendererType::SdlGpu && selected!=GraphicsRendererType::WebGPU)
-            GTEST_SKIP() << "GAP-08c requires SDLGPU or WEBGPU";
+        if(!AcceptsSelected(selected))
+            GTEST_SKIP() << "the selected renderer is not one this fixture covers";
         platform=PlatformFactory::Create("SDL3");
         scope=std::make_unique<CNA::Platform::Testing::ScopedCurrentPlatform>(*platform);
         platform->AcquireSubsystem(PlatformSubsystem::Video);
@@ -43,6 +43,7 @@ protected:
         description.width=16; description.height=16;
         description.centered=false; description.x=160; description.y=32;
         description.borderless=true; description.visible=true;
+        RequestRendererWindow(description);
         own=platform->CreateWindow(description);
         own->Sync();
         // The designated private X11 runner must execute these cases without skips.
@@ -71,6 +72,18 @@ protected:
         ASSERT_TRUE(front->WaitFor(*platform,[](const auto& rgb) { return Solid(rgb,16,16,0xFF00FF); }))
             << "ordinary Present control must reach the client: " << front->Diagnostics();
     }
+    /** @brief The FNA3D descriptor's window: an OpenGL visual with 24/8 depth/stencil, double buffered. */
+    void RequestRendererWindow(WindowDescription& description) const
+    {
+        if(selected!=GraphicsRendererType::Fna3d) return;
+        description.renderIntent=WindowRenderIntent::OpenGl;
+        description.openGlFramebuffer.doubleBuffered=true;
+        description.openGlFramebuffer.depthBits=24;
+        description.openGlFramebuffer.stencilBits=8;
+    }
+    /** @brief Whether this fixture's cases run on @p type. @param type Selected identity. @return True to run. */
+    virtual bool AcceptsSelected(GraphicsRendererType type) const
+    { return type==GraphicsRendererType::SdlGpu || type==GraphicsRendererType::WebGPU; }
     void TearDown() override
     {
         device.reset(); // claims/surfaces/history released before borrowed platform wrappers/hosts
@@ -125,6 +138,7 @@ protected:
         description.width=24; description.height=20;
         description.centered=false; description.x=240; description.y=32;
         description.borderless=true; description.visible=true;
+        RequestRendererWindow(description);
         other=platform->CreateWindow(description); other->Sync();
         ASSERT_EQ(other->GetPixelSize().width,24); ASSERT_EQ(other->GetPixelSize().height,20);
         foreign=std::make_unique<PresentedWindow>(other->GetNativeHandle(),24,20,false,PresentedCaptureMethod::Auto);

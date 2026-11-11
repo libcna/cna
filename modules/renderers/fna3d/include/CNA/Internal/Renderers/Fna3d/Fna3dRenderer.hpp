@@ -1133,6 +1133,20 @@ namespace CNA::Internal::Renderers::Fna3d
         void Present() override;
 
         /**
+         * @brief Forwards a source rectangle, and a destination covering the whole client, to
+         *        FNA3D_SwapBuffers.
+         *
+         * The pinned fork's OpenGL and SDL GPU drivers map both rectangles correctly but preserve
+         * none of the client pixels outside a destination (FNA3D-8), so a destination other than the
+         * whole client, an override window and any rectangle on the D3D11 driver are refused.
+         *
+         * @param region The validated request; GraphicsDevice refuses an override window first.
+         * @return Always true; a request FNA3D cannot honour throws instead.
+         * @throws System::NotSupportedException naming FNA3D-8 and the driver for a refused request.
+         */
+        bool PresentRegionEXT(const RendererPresentRegionEXT& region) override;
+
+        /**
          * @brief Reports the logical (virtual) size game code sees.
          * @param width  Filled with the logical width.
          * @param height Filled with the logical height.
@@ -2071,6 +2085,8 @@ namespace CNA::Internal::Renderers::Fna3d
         std::unique_ptr<Fna3dVertexBufferRenderer> neutralTangent_;
         /// Whether FNA3D selected its OpenGL driver, the one with glSampleMaski.
         bool driverIsOpenGl_ = false;
+        /// Whether FNA3D created its D3D11 driver, whose rectangle presentation is unqualified.
+        bool driverIsDirect3D11_ = false;
         int maxTextureSlots_ = 0;
         int maxVertexTextureSlots_ = 0;
     };

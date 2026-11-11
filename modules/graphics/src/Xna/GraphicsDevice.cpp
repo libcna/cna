@@ -846,13 +846,14 @@ namespace Microsoft::Xna::Framework::Graphics
 
     namespace
     {
-        [[noreturn]] void RefuseFna3dRegionPresent()
+        [[noreturn]] void RefuseFna3dOverridePresent()
         {
-            // Private native captures on both pinned drivers passed ordinary Present but failed
-            // region/override witnesses (2026-11-06, FNA3D-8). Never submit known-wrong pixels.
+            // FNA3D-8: the fork's OpenGL driver switches only to an SDL OpenGL window of its own
+            // pixel format and reports a failed switch only in its log, and neither driver preserves
+            // the pixels outside a destination. The FNA3D renderer decides rectangles per driver.
             throw System::NotSupportedException(
-                "The FNA3D renderer cannot present source/destination rectangles or an override "
-                "window because of confirmed dependency defect FNA3D-8. Use ordinary Present().");
+                "The FNA3D renderer cannot present to an override window because of dependency "
+                "defect FNA3D-8. Present to the device's own window.");
         }
 
         [[nodiscard]] std::uintptr_t NativePresentIdentity(const CNA::Platform::NativeWindowHandle& handle)
@@ -944,9 +945,9 @@ namespace Microsoft::Xna::Framework::Graphics
                     "destinationRectangle");
             }
         }
-        const bool fna3dRegionUnsupported = GetGraphicsRendererType() == CNA::GraphicsRendererType::Fna3d;
-        if (fna3dRegionUnsupported && overrideWindowHandle != 0)
-            RefuseFna3dRegionPresent();
+        if (overrideWindowHandle != 0 &&
+            GetGraphicsRendererType() == CNA::GraphicsRendererType::Fna3d)
+            RefuseFna3dOverridePresent();
 
         // Refresh public Present IL_0078-0082 forwards a native HWND, whereas FNA's SDL
         // platform uses toolkit tokens. Resolve native identities only through IPlatform.
@@ -1019,9 +1020,6 @@ namespace Microsoft::Xna::Framework::Graphics
             region.destinationHeight = destinationRectangle->Height;
             region.hasDestinationRectangle = true;
         }
-
-        if (fna3dRegionUnsupported)
-            RefuseFna3dRegionPresent();
 
         if (renderer_ == nullptr)
         {

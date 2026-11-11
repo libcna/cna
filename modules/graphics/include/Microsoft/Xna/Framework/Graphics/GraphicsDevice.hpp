@@ -356,7 +356,10 @@ namespace Microsoft::Xna::Framework::Graphics
          * window; OPENGLES3 and WEBGL2 share the OPENGL33 path without hardware qualification; in
          * the browser, WEBGL2 and WEBGPU present only to their canvas and refuse a foreign window;
          * DIRECTX9 forwards all three to Direct3D 9's `Present`;
-         * HEADLESS accepts any request and presents nothing; FNA3D and STUB refuse.
+         * FNA3D forwards a source rectangle, and a destination covering the whole client, to its
+         * OpenGL and SDL GPU drivers, and refuses a partial destination, a foreign window and any
+         * rectangle on its D3D11 driver (dependency defect FNA3D-8);
+         * HEADLESS accepts any request and presents nothing; STUB refuses.
          *
          * @param sourceRectangle The part of the backbuffer to present, or nullopt for all of it.
          * @param destinationRectangle Where in the window's client area to present it, in client

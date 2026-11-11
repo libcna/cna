@@ -11,6 +11,7 @@
 
 #include "CNA/LogCategory.hpp"
 #include "CNA/Logger.hpp"
+#include "System/NotSupportedException.hpp"
 
 #include "Fna3dStockEffectBlobs.hpp"
 
@@ -35,8 +36,14 @@ namespace CNA::Internal::Renderers::Fna3d
                     state.alphaBlendFunction != FNA3D_BLENDFUNCTION_ADD);
         }
 
+        /// FNA3D has no driver query. Its D3D11 driver names itself while the device is created
+        /// (FNA3D_Driver_D3D11.c, D3D11_CreateDevice), on the creating thread; SDL GPU logs nothing.
+        thread_local bool createdDirect3D11Device = false;
+
         void ForwardInfo(const char* message)
         {
+            if (std::strcmp(message, "FNA3D Driver: D3D11") == 0)
+                createdDirect3D11Device = true;
             CNA::Logger::Info(std::string("FNA3D: ") + message, CNA::LogCategory::RENDER);
         }
 
@@ -198,7 +205,9 @@ namespace CNA::Internal::Renderers::Fna3d
         presentation_.displayOrientation = FNA3D_DISPLAYORIENTATION_DEFAULT;
         presentation_.renderTargetUsage = FNA3D_RENDERTARGETUSAGE_DISCARDCONTENTS;
 
+        createdDirect3D11Device = false;
         device_ = Detail::CreateDevice(&presentation_, 0);
+        driverIsDirect3D11_ = createdDirect3D11Device;
         if (device_ == nullptr)
         {
             throw std::runtime_error(
@@ -713,6 +722,51 @@ namespace CNA::Internal::Renderers::Fna3d
         destination.h = layout_.destinationHeight;
 
         FNA3D_SwapBuffers(device_, nullptr, &destination, window_);
+    }
+
+    bool Fna3dRenderer::PresentRegionEXT(const RendererPresentRegionEXT& region)
+    {
+        // Refresh GraphicsDevice.Present IL_0014-0082 hands both rectangles to the native Present,
+        // which keeps the client pixels outside the destination. The pinned fork maps source and
+        // destination rectangles correctly on its OpenGL (4ff109a) and SDL GPU drivers but
+        // preserves none of them (FNA3D-8), so only a destination covering the whole client is sent.
+        if (region.overrideWindowHandle != 0 ||
+            (region.targetWindowId != 0 && region.targetWindowId != SDL_GetWindowID(window_)))
+        {
+            throw System::NotSupportedException(
+                "The FNA3D renderer cannot present to an override window because of dependency "
+                "defect FNA3D-8. Present to the device's own window.");
+        }
+        if (driverIsDirect3D11_)
+        {
+            throw System::NotSupportedException(
+                "The FNA3D renderer's D3D11 driver cannot present source or destination "
+                "rectangles: its presentation is unqualified (dependency defect FNA3D-8). Use "
+                "Present().");
+        }
+        if (region.hasDestinationRectangle &&
+            (region.destinationX != 0 || region.destinationY != 0 ||
+             region.destinationWidth != region.targetWidth ||
+             region.destinationHeight != region.targetHeight))
+        {
+            throw System::NotSupportedException(
+                std::string("The FNA3D renderer's ") + (driverIsOpenGl_ ? "OpenGL" : "SDL GPU") +
+                " driver cannot present to a destination rectangle other than the whole " +
+                std::to_string(region.targetWidth) + "x" + std::to_string(region.targetHeight) +
+                " client area, because of dependency defect FNA3D-8: " +
+                (driverIsOpenGl_
+                     ? "it leaves the pixels outside it to whatever the window's back buffer holds"
+                     : "it clears the pixels outside it to black") +
+                ", where XNA keeps the previously presented pixels. A source rectangle alone is "
+                "supported.");
+        }
+
+        FNA3D_Rect source{region.sourceX, region.sourceY, region.sourceWidth, region.sourceHeight};
+        FNA3D_Rect destination{region.destinationX, region.destinationY,
+                               region.destinationWidth, region.destinationHeight};
+        FNA3D_SwapBuffers(device_, region.hasSourceRectangle ? &source : nullptr,
+                          region.hasDestinationRectangle ? &destination : nullptr, window_);
+        return true;
     }
 
     void Fna3dRenderer::GetViewportSize(int& width, int& height)

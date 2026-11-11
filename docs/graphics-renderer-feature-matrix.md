@@ -109,7 +109,7 @@ than presenting a different region.
 |---|---:|---:|---:|
 | `HEADLESS` | ◇ accepted and traced | ◇ accepted and traced | ◇ accepted and traced |
 | `SOFTWARE` | ✅ clipped CPU source region | ⚙ native dirty-rectangle presenter | ⚙ native target adoption + presenter |
-| `FNA3D` | ❌ FNA3D-8 refusal | ❌ FNA3D-8 refusal | ❌ FNA3D-8 refusal |
+| `FNA3D` | ✅ forwarded to `FNA3D_SwapBuffers` (OpenGL, ES 3 and SDL GPU drivers; back-buffer filter, below) | ⚙ whole client only; a partial destination is an FNA3D-8 refusal | ❌ FNA3D-8 refusal |
 | `SDLGPU`, `WEBGPU` | ✅ source sampled from the logical buffer | ✅ composed into retained GPU history | ⚙ GPU readback + native dirty-rectangle presenter |
 | `OPENGL33` | ✅ crop, scale and composite into retained history | ✅ composed into history with the original mapping | ⚙ readback + native dirty-rectangle presenter |
 | `OPENGLES3`, `WEBGL2` | ◇ implemented through the shared EasyGL path; not qualified on hardware or a browser | ◇ same | `WEBGL2` refuses a nonzero native override |
@@ -134,12 +134,17 @@ X11/Win32/Cocoa hosts are imported without transferring ownership. An unregister
 `wl_surface` cannot supply dimensions through this API and refuses; platform-known Wayland windows
 retain their actual size information.
 
-FNA3D refuses every non-default request with `NotSupportedException` naming confirmed dependency
-defect [FNA3D-8](fna3d-dependency-defects.md#fna3d-8-region-and-override-presentation-produces-wrong-native-client-pixels).
-Private native captures on both pinned OpenGL and SDLGPU drivers passed the ordinary-present
-control but failed the region/override witnesses (2026-11-06). Ordinary Present remains supported;
-CNA does not submit a request it knows the dependency cannot honor. No fork fix or pin change is
-implied. SOFTWARE native captures confirmed the region/foreign pixels; two own-window checks
+FNA3D forwards a source rectangle, and a destination equal to the whole client, to
+`FNA3D_SwapBuffers`; native captures pass on the pinned fork's OpenGL driver, on it with
+`FNA3D_OPENGL_FORCE_ES3`, and on its SDL GPU driver (`Fna3dPresentPixels.*`, CTest
+`Gap08_Fna3dPresentedWindowPixels_<driver>`). FNA3D scales with its back-buffer filter, linear
+unless `FNA3D_BACKBUFFER_SCALE_NEAREST` is set, so at a source edge inside the back buffer the two
+outer client pixels of a 4x scale blend the neighbouring texel, where SDLGPU and WEBGPU sample only
+the source. Everything else throws `NotSupportedException` naming dependency defect
+[FNA3D-8](fna3d-dependency-defects.md#fna3d-8-region-and-override-presentation-produces-wrong-native-client-pixels):
+a destination leaving part of the client uncovered (with the driver named; neither driver keeps the
+pixels outside it), a foreign window (before it is adopted), and any rectangle on the D3D11 driver.
+SOFTWARE native captures confirmed the region/foreign pixels; two own-window checks
 needed separated clients to avoid X11 exposure artefacts, with the revised fixture awaiting rerun.
 
 

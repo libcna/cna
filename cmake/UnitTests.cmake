@@ -2321,6 +2321,27 @@ if(TARGET CnaTests AND CNA_PLATFORM STREQUAL "SDL3" AND CMAKE_SYSTEM_NAME STREQU
         ENVIRONMENT "SDL_VIDEODRIVER=x11;SDL_AUDIODRIVER=dummy;SDL_FRAMEBUFFER_ACCELERATION=0")
     set_tests_properties(Gap08c_GpuPresentedWindowPixels PROPERTIES RUN_SERIAL TRUE)
 endif()
+# FNA3D-8: what the FNA3D renderer forwards to FNA3D_SwapBuffers, as native client pixels, on each
+# of the fork's Linux drivers (OpenGL ES 3 is the OpenGL driver with FNA3D_OPENGL_FORCE_ES3).
+if(TARGET CnaTests AND "FNA3D" IN_LIST CNA_RENDERER_IDENTITIES AND CNA_PLATFORM STREQUAL "SDL3"
+   AND CMAKE_SYSTEM_NAME STREQUAL "Linux")
+    foreach(_cna_fna3d_present_driver IN ITEMS OpenGL OpenGLES3 SDLGPU)
+        set(_cna_fna3d_present_env "CNA_GRAPHICS_RENDERER=FNA3D;SDL_VIDEODRIVER=x11;SDL_AUDIODRIVER=dummy")
+        if(_cna_fna3d_present_driver STREQUAL "OpenGLES3")
+            list(APPEND _cna_fna3d_present_env "FNA3D_FORCE_DRIVER=OpenGL" "FNA3D_OPENGL_FORCE_ES3=1")
+        else()
+            list(APPEND _cna_fna3d_present_env "FNA3D_FORCE_DRIVER=${_cna_fna3d_present_driver}")
+        endif()
+        cna_register_renderer_test(NAME Gap08_Fna3dPresentedWindowPixels_${_cna_fna3d_present_driver}
+            COMMAND CnaTests --gtest_filter=Fna3dPresentPixels.*
+            LABELS "graphics;presentation;Fna3d" TIMEOUT 120
+            ENVIRONMENT "${_cna_fna3d_present_env}")
+        set_tests_properties(Gap08_Fna3dPresentedWindowPixels_${_cna_fna3d_present_driver}
+            PROPERTIES RUN_SERIAL TRUE)
+    endforeach()
+    unset(_cna_fna3d_present_env)
+    unset(_cna_fna3d_present_driver)
+endif()
 
 # Task 470: headless-safe CTest skip convention. A test that self-detects "no GPU/display
 # available" (e.g. SDL_InitSubSystem(SDL_INIT_VIDEO) failing, see

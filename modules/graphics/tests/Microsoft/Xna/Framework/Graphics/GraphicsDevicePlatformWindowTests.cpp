@@ -715,7 +715,7 @@ TEST_F(Gap08PresentBindingTest, NonNativePlatformRefusesAnOverrideAsUnsupported)
 } // namespace
 
 namespace {
-TEST_F(Gap08PresentBindingTest, Fna3dRefusesEveryNonDefaultPresentBeforeNativeAdoption)
+TEST_F(Gap08PresentBindingTest, Fna3dRefusesAnOverrideWindowBeforeNativeAdoption)
 {
     using namespace Microsoft::Xna::Framework;
     using Descriptor = CNA::Internal::Renderers::GraphicsRendererDescriptor;
@@ -734,32 +734,41 @@ TEST_F(Gap08PresentBindingTest, Fna3dRefusesEveryNonDefaultPresentBeforeNativeAd
     } restore{*device, Peer::SetPresentIdentity(*device, fna)};
     ASSERT_EQ(device->GetGraphicsRendererType(), CNA::GraphicsRendererType::Fna3d);
 
-    // Owner's 2026-11-06 native measurements: ordinary control passed, all nine region/window
-    // witnesses failed on OpenGL and SDLGPU (FNA3D-8). Refuse each option independently, before
-    // adopting a target or submitting wrong pixels; this is a capability promise, not an IL claim.
-    struct Request { std::optional<Rectangle> source, destination; std::uintptr_t window; };
+    // FNA3D-8 at fork 76a76cf: the OpenGL driver switches only to an SDL OpenGL window of its own
+    // pixel format and reports a failed switch only in its log, and neither driver preserves the
+    // pixels outside a destination. Refuse every override before adopting a target or submitting
+    // pixels; this is a capability promise, not an IL claim.
+    struct Request { std::optional<Rectangle> source, destination; };
     const Request requests[] = {
-        {Rectangle(0,0,4,4), std::nullopt, 0},
-        {std::nullopt, Rectangle(0,0,4,4), 0},
-        {std::nullopt, std::nullopt, 0xA000},
-        {Rectangle(0,0,4,4), Rectangle(0,0,4,4), 0xA000}};
+        {std::nullopt, std::nullopt},
+        {Rectangle(0,0,4,4), std::nullopt},
+        {std::nullopt, Rectangle(0,0,4,4)},
+        {Rectangle(0,0,4,4), Rectangle(0,0,4,4)}};
+    device->Clear(Color::Red);
     for (const auto& request : requests) {
         try {
-            device->Present(request.source, request.destination, request.window);
-            FAIL() << "FNA3D must refuse a non-default Present";
+            device->Present(request.source, request.destination, 0xA000);
+            FAIL() << "FNA3D must refuse an override window";
         } catch (const System::NotSupportedException& error) {
             const std::string message = error.what();
             EXPECT_NE(message.find("FNA3D"), std::string::npos);
             EXPECT_NE(message.find("FNA3D-8"), std::string::npos);
             EXPECT_NE(message.find("dependency"), std::string::npos);
+            EXPECT_NE(message.find("override window"), std::string::npos);
         }
     }
     EXPECT_EQ(trace.adoptions, 0);
     EXPECT_TRUE(trace.frames.empty());
+
+    // Rectangles on the device's own window are the FNA3D renderer's per-driver decision
+    // (Fna3dPresentPixels.*), so the device no longer refuses them itself.
+    EXPECT_NO_THROW(device->Present(Rectangle(0,0,4,4), std::nullopt, 0));
+    const std::size_t before = trace.frames.size();
     device->Present(std::nullopt, std::nullopt, 0);
     device->Present();
-    ASSERT_EQ(trace.frames.size(), 2u);
-    EXPECT_TRUE(trace.frames[0].ordinary);
-    EXPECT_TRUE(trace.frames[1].ordinary);
+    ASSERT_EQ(trace.frames.size(), before + 2u);
+    EXPECT_TRUE(trace.frames[before].ordinary);
+    EXPECT_TRUE(trace.frames[before + 1].ordinary);
+    EXPECT_EQ(trace.adoptions, 0);
 }
 } // namespace

@@ -15,47 +15,48 @@ whoever maintains the forks; `KNOWN_ISSUES.md` keeps the short CNA-side entry fo
 
 ### FNA3D-8: region and override presentation produces wrong native client pixels
 
-**Status:** confirmed (GAP-08a). **Drivers:** OpenGL and SDLGPU.
+**Status:** confirmed (GAP-08a), narrowed at the pin. **Drivers:** OpenGL and SDLGPU.
 
-On a private Xwayland display (AMD Radeon 780M, Mesa 25.0.7, FNA3D `10f650b`), CNA's forwarding
-implementation passed the fixture's ordinary-Present magenta control on both drivers, then failed
-all nine `Gap08PresentedPixels` cases — native-client XGetImage observations, not backbuffer
-comparisons. Source-only, oversized-source, asymmetric-source, destination-retention, scaling,
-clipping and native-size-backbuffer cases failed on both drivers, as did the foreign-client region
-assertions of the two override cases. (Their own-window comparisons had an overlapping-X11-window
-exposure artefact, also seen with SOFTWARE, and are not evidence of a driver write.)
+XNA's Present (Refresh `GraphicsDevice.Present` IL_0014-0082) hands both rectangles and the window
+to the native Present, which keeps the client pixels outside the destination. At `10f650b` all
+nine `Gap08PresentedPixels` cases failed on both drivers (private Xwayland, AMD Radeon 780M,
+Mesa 25.0.7): OpenGL `OPENGL_SwapBuffers` passed the rectangles' extents as `glBlitFramebuffer`
+second corners, so `(4,4,4,4)` was an empty span, and SDL GPU loaded the swapchain with
+`SDL_GPU_LOADOP_DONT_CARE`.
 
-Attribution at `10f650b`:
+**Fork state at the pin.** OpenGL: TQ-FORK-GLPRESENT-01 (`4ff109a`) turns both rectangles into GL
+endpoints and targets the override drawable through `SDL_GL_MakeCurrent`. SDL GPU: by owner
+decision (TQ-FORK-SDLPRESENT-02, `76a76cf`, after the refusal `d001379` blanked CNA's letterboxed
+frames) the driver clears the swapchain to opaque black whenever the destination does not cover it
+exactly. Neither driver preserves the pixels outside a destination: OpenGL leaves them to whatever
+the window's back buffer holds, SDL GPU makes them black.
 
-- OpenGL `OPENGL_SwapBuffers` reads `srcW/srcH` and `dstW/dstH` as extents, then passes them as
-  second corners to `glBlitFramebuffer` (`src/FNA3D_Driver_OpenGL.c:1373–1390,1466–1471`), so
-  `(4,4,4,4)` becomes an empty span; its direct-window branch (`:1494–1498`) ignores rectangles,
-  and the override is swapped without an apparent context rebind.
-- SDL GPU loads the destination swapchain texture with `SDL_GPU_LOADOP_DONT_CARE`
-  (`src/FNA3D_Driver_SDL.c:1207`), which does not preserve untouched pixels.
+**Measured at the pin (2026-11-11).** With CNA forwarding every request to `FNA3D_SwapBuffers` (a
+probe build), the 17 `GpuPresentPixels` cases on the same private runner gave: OpenGL and OpenGL
+ES 3 (`FNA3D_OPENGL_FORCE_ES3=1`) pass all eight partial-destination cases on the own window -- this
+Xwayland happened to keep the back buffer -- and a whole-client override into an SDL OpenGL window,
+but fail all three partial destinations into a second window and both presentations into an
+external X11 window, which is not an SDL OpenGL window; SDL GPU fails every partial destination
+(black outside) and passes both whole-client overrides, including the external window. Source rectangles map
+correctly on all three; the strict `Solid` oracles fail only because FNA3D's back-buffer filter is
+linear (`FNA3D_BACKBUFFER_SCALE_NEAREST` unset) and blends the texel beyond a source edge inside
+the back buffer into the two outer client pixels of a 4x scale.
 
-**Fork state at the pin.** OpenGL: repaired by TQ-FORK-GLPRESENT-01 (`4ff109a`) — rectangles
-become GL endpoints and presentation targets the override drawable; the fork's
-`presentation_tests` check default-framebuffer pixels including window-override rectangles. SDL GPU:
-`LOAD` is not a repair, because an acquired swapchain texture holds whichever earlier frame last
-used that image, not the previous presentation. An explicit refusal (`d001379`) blanked CNA's
-ordinary letterboxed frames, which also pass a destination rectangle
-(`Fna3d_CrossFamily_SpriteBatch_Presentation_SdlGpuDriver`). By owner decision the driver clears the
-swapchain to opaque black whenever the destination does not cover it exactly
-(TQ-FORK-SDLPRESENT-02, `76a76cf`; pinned by the fork's `sdlgpu_command_tests presentation`
-group): letterbox bars and a region Present's surroundings are defined black, but previous pixels
-are still not kept.
+**CNA now:** the FNA3D renderer forwards a source rectangle and a destination equal to the whole
+client on the OpenGL and SDL GPU drivers; `Fna3dPresentPixels.*` (CTest
+`Gap08_Fna3dPresentedWindowPixels_{OpenGL,OpenGLES3,SDLGPU}`) passes on all three through the private
+runner, with oracles that avoid the filter footprint. A destination that leaves part of the client
+uncovered throws `NotSupportedException` naming FNA3D-8 and the driver before FNA3D draws; so does
+any rectangle on the D3D11 driver (unqualified), and `GraphicsDevice` refuses a foreign window
+before adopting it (`Gap08PresentBindingTest.Fna3dRefusesAnOverrideWindowBeforeNativeAdoption`),
+because it cannot yet tell the drivers apart there: the SDL GPU driver's whole-client override
+measured correct but stays refused with the OpenGL one. Ordinary Present is unchanged.
 
-**CNA meanwhile:** a non-default `GraphicsDevice::Present` on FNA3D throws a named
-`NotSupportedException` citing FNA3D-8, before adopting any override target; ordinary Present is
-supported. `Gap08PresentBindingTest.Fna3dRefusesEveryNonDefaultPresentBeforeNativeAdoption` pins
-independent source/destination/window refusal, no adoption/output, and ordinary controls. XNA keeps
-the pixels outside the rectangle, which neither driver reproduces natively.
-
-**Reproducer:** `Gap08PresentedPixels.*` through `tools/platform/run_gpu_tests_private.sh --exec`
-with `CNA_GRAPHICS_RENDERER=FNA3D`, `SDL_VIDEODRIVER=x11`, and `FNA3D_FORCE_DRIVER=OpenGL` then
-`=SDLGPU`. The checked-in native fixture exercises SOFTWARE only; an FNA3D rerun needs CNA's
-forwarding reinstated in a probe build. Any new FNA3D presentation claim needs that native rerun.
+**Reproducer:** `Fna3dPresentPixels.*` through `tools/platform/run_gpu_tests_private.sh --exec env
+CNA_GRAPHICS_RENDERER=FNA3D SDL_VIDEODRIVER=x11 FNA3D_FORCE_DRIVER=OpenGL|SDLGPU` (plus
+`FNA3D_OPENGL_FORCE_ES3=1`); the probe evidence is `../cnaplan/evidence/rev002/ki-fna3d-present/`.
+A repair that preserved the outside pixels (a retained presentation image, as CNA's SDLGPU renderer
+keeps) would let CNA forward partial destinations and overrides; it needs this native rerun.
 
 ### FNA3D-3: the SDL GPU driver applies no MultiSampleMask
 
@@ -77,7 +78,6 @@ keeps a 3, 5 or 7 sample request unrounded while render targets round it down;
 
 ## Pending qualification
 
-- **FNA3D-8, OpenGL half:** no CNA-level native rerun of `Gap08PresentedPixels` against the repair.
 - **FNA3D-2 and FNA3D-6:** owner LeakSanitizer runs and replays of the original fuzz seeds
   (`20261103001801`, `20261103032166`; `20261104107187`) with
   `python3 tools/fuzz/reproduce.py <record>.json --regenerate`, against the repaired pair and with
