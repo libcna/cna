@@ -793,3 +793,32 @@ TEST_F(StockEffectCloneRenderingTest, ASpriteBatchDrawsThroughASpriteEffectClone
     EXPECT_SAME_IMAGE(spritePicture(clone, Matrix::getIdentityProperty()), expected);
     EXPECT_SAME_IMAGE(spritePicture(clone, Matrix::CreateTranslation(3.0f, 2.0f, 0.0f)), expected);
 }
+
+// XNA's native pass latches what a stock effect's OnApply wrote when the pass begins, so a property
+// set between Apply and the draw changes nothing on screen until the next Apply (KI-GFX-STOCK-LATCH).
+TEST_F(StockEffectCloneRenderingTest, AStockEffectDrawsWhatItsLastApplyLatched)
+{
+    const auto draw = [this] { DrawBasicQuad(); };
+    BasicEffect effect(Device());
+    Scene(effect);
+    effect.setDiffuseColorProperty(Vector3(0.5f, 0.25f, 0.75f));
+    const Image picture = Render(effect, draw);
+    ASSERT_TRUE(Covers(picture));
+
+    GraphicsDevice& device = Device();
+    device.Clear(Color(7, 199, 53, 255));
+    effect.Apply();
+    effect.setDiffuseColorProperty(Vector3(1.0f, 0.0f, 0.0f));
+    effect.setWorldProperty(Matrix::CreateScale(0.25f));
+    draw();
+    Image latched(static_cast<std::size_t>(kSize * kSize));
+    device.GetBackBufferData(latched.data(), static_cast<int>(latched.size()));
+    EXPECT_SAME_IMAGE(latched, picture);
+
+    BasicEffect expected(Device());
+    expected.setViewProperty(SceneView());
+    expected.setProjectionProperty(SceneProjection());
+    expected.setWorldProperty(Matrix::CreateScale(0.25f));
+    expected.setDiffuseColorProperty(Vector3(1.0f, 0.0f, 0.0f));
+    EXPECT_SAME_IMAGE(Render(effect, draw), Render(expected, draw));
+}

@@ -245,13 +245,14 @@ namespace Microsoft::Xna::Framework::Graphics
          * shaders, which place a vertex with the raw WorldViewProj parameter (HND-TQ-25 D9); a
          * clone of SpriteEffect uses MatrixTransform the same way. The renderer receives
          * identity, identity and that matrix -- the value its last Apply captured, or the current
-         * value before any Apply.
+         * value before any Apply. A stock effect itself answers the World, View and Projection
+         * its last Apply latched (KI-GFX-STOCK-LATCH) and false before its first Apply.
          *
          * @param world Receives the world matrix.
          * @param view Receives the view matrix.
          * @param projection Receives the projection matrix.
-         * @return True when this effect is such a clone and the matrices were written; false,
-         *         leaving them untouched, otherwise.
+         * @return True when this effect is such a clone, or a stock effect that has been applied,
+         *         and the matrices were written; false, leaving them untouched, otherwise.
          */
         CNAEXT [[nodiscard]] bool GetStockCloneDrawMatricesInternal(
             Microsoft::Xna::Framework::Matrix& world,
@@ -353,6 +354,20 @@ namespace Microsoft::Xna::Framework::Graphics
          */
         CNAEXT [[nodiscard]] Texture* SampledStockTextureInternal(int slot, Texture* own) const;
 
+        /**
+         * @brief Hands a draw what this stock effect's last Apply latched.
+         *
+         * XNA's OnApply writes a stock effect's derived parameters and its native pass latches them
+         * when it begins (EffectPass.Apply IL_003b, IL_009f): a property set after Apply reaches the
+         * draws only through the next Apply. The samplers still read what the device's slots hold at
+         * the draw, so the textures are taken from those slots then.
+         *
+         * @param params Receives the latched draw parameters.
+         * @return True when the effect has been applied and @p params was written; false otherwise.
+         */
+        CNAEXT [[nodiscard]] bool FillLatchedStockDrawParamsInternal(
+            CNA::Internal::Renderers::GpuDrawParams& params) const;
+
         /** @brief Which of XNA's five classic stock effects, or FNA's SpriteEffect, an effect is, if any. */
         enum class CNAEXT StockEffectKindInternal : std::uint8_t
         {
@@ -438,6 +453,9 @@ namespace Microsoft::Xna::Framework::Graphics
         // Apply's native-pass part for such a clone: binds the textures its shaders sample and
         // captures the parameter values the next draws use.
         void ApplyStockClonePassInternal();
+        // KI-GFX-STOCK-LATCH: a stock class's Apply keeps the draw parameters and matrices its draws
+        // use until the next Apply.
+        void LatchStockClassDrawInternal();
         // Hands the renderer the captured values in its stock-path vocabulary.
         void FillStockCloneDrawParamsInternal(CNA::Internal::Renderers::GpuDrawParams& params) const;
 

@@ -339,6 +339,8 @@ namespace Microsoft::Xna::Framework::Graphics
 
     void SkinnedEffect::FillGpuDrawParams(CNA::Internal::Renderers::GpuDrawParams& p) const
     {
+        // KI-GFX-STOCK-LATCH: after an Apply, a draw uses what that Apply latched.
+        if (FillLatchedStockDrawParamsInternal(p)) return;
         // MOD-821: accepted-and-ignored on renderers without a shadow-sampling variant, exactly
         // like the PBR fields beside them.
         p.shadowsEnabled  = shadowsEnabledEXT_ && shadowMapEXT_ != nullptr;

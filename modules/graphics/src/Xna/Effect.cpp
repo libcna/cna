@@ -14,6 +14,7 @@
 #include "System/InvalidOperationException.hpp"
 #include "System/NotSupportedException.hpp"
 #include "System/ObjectDisposedException.hpp"
+#include "Microsoft/Xna/Framework/Graphics/IEffectMatrices.hpp"
 
 #include <algorithm>
 #include <cstddef>
@@ -825,6 +826,13 @@ namespace CNA::Internal::Graphics
         // EnvironmentMap).
         Microsoft::Xna::Framework::Graphics::Texture* texture0 = nullptr;
         Microsoft::Xna::Framework::Graphics::Texture* texture1 = nullptr;
+
+        // KI-GFX-STOCK-LATCH: what a stock class's own Apply latched for its draws.
+        bool stockClassDraw = false;
+        CNA::Internal::Renderers::GpuDrawParams drawParams;
+        Microsoft::Xna::Framework::Matrix drawWorld;
+        Microsoft::Xna::Framework::Matrix drawView;
+        Microsoft::Xna::Framework::Matrix drawProjection;
     };
 }
 
@@ -1161,6 +1169,63 @@ namespace Microsoft::Xna::Framework::Graphics
             ApplyStockClonePassInternal();
         }
         if (device_) device_->SetCurrentEffect(this);
+        // XNA's stock effects are compiled effects: OnApply writes the parameters and the native
+        // pass latches them when it begins (EffectPass.Apply IL_003b, IL_009f), so the draws until
+        // the next Apply use what this Apply saw (KI-GFX-STOCK-LATCH).
+        const StockEffectKindInternal kind = GetStockEffectKindInternal();
+        if (compiledRuntime_ == nullptr && kind != StockEffectKindInternal::None &&
+            kind != StockEffectKindInternal::Sprite)
+            LatchStockClassDrawInternal();
+    }
+
+    void Effect::LatchStockClassDrawInternal()
+    {
+        // Without a latch the stock class's FillGpuDrawParams reads its current state.
+        stockCloneApplied_.reset();
+        auto latch = std::make_unique<CNA::Internal::Graphics::StockCloneParameterSnapshot>();
+        latch->stockClassDraw = true;
+        FillGpuDrawParams(latch->drawParams);
+        latch->drawWorld = Matrix::getIdentityProperty();
+        latch->drawView = Matrix::getIdentityProperty();
+        latch->drawProjection = Matrix::getIdentityProperty();
+        if (const auto* matrices = dynamic_cast<const IEffectMatrices*>(this))
+        {
+            latch->drawWorld = matrices->getWorldProperty();
+            latch->drawView = matrices->getViewProperty();
+            latch->drawProjection = matrices->getProjectionProperty();
+        }
+        stockCloneApplied_ = std::move(latch);
+    }
+
+    bool Effect::FillLatchedStockDrawParamsInternal(CNA::Internal::Renderers::GpuDrawParams& p) const
+    {
+        if (stockCloneApplied_ == nullptr || !stockCloneApplied_->stockClassDraw)
+            return false;
+        p = stockCloneApplied_->drawParams;
+        // The samplers read the device's slots at the draw (a texture set on the device after Apply
+        // is the one drawn), as SampledStockTextureInternal does for the unlatched path.
+        if (device_ != nullptr && device_->currentEffect_ == this)
+        {
+            const auto renderer2D = [](Texture* texture)
+                -> const CNA::Internal::Renderers::ITextureRenderer*
+            {
+                auto* texture2D = dynamic_cast<Texture2D*>(texture);
+                return texture2D != nullptr ? &texture2D->GetRenderer() : nullptr;
+            };
+            auto& textures = device_->getTexturesProperty();
+            if (p.textureEnabled)
+                p.texture0 = renderer2D(textures[0]);
+            if (p.dualTexture)
+                p.texture1 = renderer2D(textures[1]);
+            if (p.envMapping)
+            {
+                p.envMap = nullptr;
+                if (const auto* cubes = CNA::Internal::Graphics::stockCloneCubeAccess.load())
+                    if (auto* cube = cubes->asCube(textures[1]))
+                        p.envMap = cube->GetRendererRaw();
+            }
+        }
+        return true;
     }
 
     void Effect::ApplyCompiledPassState(std::uint32_t passIndex)
@@ -1554,6 +1619,13 @@ namespace Microsoft::Xna::Framework::Graphics
 
     bool Effect::GetStockCloneDrawMatricesInternal(Matrix& world, Matrix& view, Matrix& projection) const
     {
+        if (stockCloneApplied_ != nullptr && stockCloneApplied_->stockClassDraw)
+        {
+            world = stockCloneApplied_->drawWorld;
+            view = stockCloneApplied_->drawView;
+            projection = stockCloneApplied_->drawProjection;
+            return true;
+        }
         if (!IsStockCloneInternal())
             return false;
         // GpuDrawParams::rawStockTransforms: the renderer's world*view*projection is then exactly

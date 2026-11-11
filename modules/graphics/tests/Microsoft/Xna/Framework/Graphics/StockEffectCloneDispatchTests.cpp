@@ -31,6 +31,7 @@
 #include "Microsoft/Xna/Framework/Graphics/EffectParameterCollection.hpp"
 #include "Microsoft/Xna/Framework/Graphics/EnvironmentMapEffect.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
+#include "Microsoft/Xna/Framework/Graphics/IEffectMatrices.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SkinnedEffect.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SpriteEffect.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SurfaceFormat.hpp"
@@ -467,6 +468,7 @@ TEST(StockEffectCloneDispatchTest, OnlyCloneOfAStockEffectThatIsNotItselfStockTa
 {
     GraphicsDevice device;
     BasicEffect source(device);
+    source.setWorldProperty(Matrix::CreateScale(2.0f));
     EffectMaterial material(source);
     std::unique_ptr<Effect> ofMaterial(material.Clone());
     std::unique_ptr<Effect> stockClone(source.Clone());
@@ -486,7 +488,11 @@ TEST(StockEffectCloneDispatchTest, OnlyCloneOfAStockEffectThatIsNotItselfStockTa
     EXPECT_FALSE(DrawParamsOf(plain).rawStockTransforms);
 
     Matrix world, view, projection;
-    EXPECT_FALSE(stockClone->GetStockCloneDrawMatricesInternal(world, view, projection));
+    // The stock class's own clone draws with its own World, View and Projection as its Apply
+    // latched them (KI-GFX-STOCK-LATCH), not with a raw WorldViewProj.
+    ASSERT_TRUE(stockClone->GetStockCloneDrawMatricesInternal(world, view, projection));
+    EXPECT_EQ(world, Matrix::CreateScale(2.0f));
+    EXPECT_EQ(projection, Matrix::getIdentityProperty());
     EXPECT_FALSE(plain.GetStockCloneDrawMatricesInternal(world, view, projection));
 }
 
@@ -621,4 +627,99 @@ TEST(StockEffectCloneDispatchTest, ASpriteEffectCloneRunsTheSpriteShaderWithItsR
     early.Apply();
     ASSERT_TRUE(early.GetStockCloneDrawMatricesInternal(world, view, projection));
     EXPECT_EQ(projection, Matrix());
+}
+
+// XNA's stock effects are compiled effects: OnApply writes their derived parameters and the native
+// pass latches them when it begins (EffectPass.Apply IL_003b, IL_009f). A property set after Apply
+// reaches the draws only through the next Apply; the samplers still read the device's slots at the
+// draw (KI-GFX-STOCK-LATCH).
+TEST(StockEffectCloneDispatchTest, AStockEffectsDrawUsesWhatItsLastApplyLatched)
+{
+    GraphicsDevice device;
+    BasicEffect effect(device);
+    Texture2D first(device, 1, 1, false, SurfaceFormat::Color);
+    Texture2D second(device, 1, 1, false, SurfaceFormat::Color);
+    effect.setTextureEnabledProperty(true);
+    effect.setTextureProperty(&first);
+    effect.setDiffuseColorProperty(Vector3(0.25f, 0.5f, 0.75f));
+    effect.setWorldProperty(Matrix::CreateScale(2.0f));
+    Matrix world, view, projection;
+    EXPECT_FALSE(effect.GetStockCloneDrawMatricesInternal(world, view, projection))
+        << "before its first Apply a stock effect has nothing latched";
+    effect.Apply();
+
+    effect.setDiffuseColorProperty(Vector3(1.0f, 0.0f, 0.0f));
+    effect.setWorldProperty(Matrix::CreateScale(5.0f));
+    effect.setTextureEnabledProperty(false);
+    effect.setVertexColorEnabledProperty(true);
+    GpuDrawParams p = DrawParamsOf(effect);
+    EXPECT_EQ(p.diffuseColor[0], 0.25f);
+    EXPECT_EQ(p.diffuseColor[2], 0.75f);
+    EXPECT_TRUE(p.textureEnabled);
+    EXPECT_FALSE(p.vertexColorEnabled);
+    ASSERT_TRUE(effect.GetStockCloneDrawMatricesInternal(world, view, projection));
+    EXPECT_EQ(world, Matrix::CreateScale(2.0f));
+    EXPECT_EQ(p.texture0, &first.GetRenderer());
+
+    // The sampler reads the slot the draw finds: a texture set on the device after Apply is drawn.
+    device.getTexturesProperty()(0, &second);
+    EXPECT_EQ(DrawParamsOf(effect).texture0, &second.GetRenderer());
+
+    effect.Apply();
+    p = DrawParamsOf(effect);
+    EXPECT_EQ(p.diffuseColor[0], 1.0f);
+    EXPECT_EQ(p.diffuseColor[1], 0.0f);
+    EXPECT_FALSE(p.textureEnabled);
+    EXPECT_TRUE(p.vertexColorEnabled);
+    ASSERT_TRUE(effect.GetStockCloneDrawMatricesInternal(world, view, projection));
+    EXPECT_EQ(world, Matrix::CreateScale(5.0f));
+}
+
+// The same latch for the other four stock effects' own state.
+TEST(StockEffectCloneDispatchTest, EveryStockEffectLatchesItsDrawAtApply)
+{
+    GraphicsDevice device;
+    AlphaTestEffect alphaTest(device);
+    DualTextureEffect dualTexture(device);
+    EnvironmentMapEffect environmentMap(device);
+    SkinnedEffect skinned(device);
+    alphaTest.setReferenceAlphaProperty(32);
+    dualTexture.setAlphaProperty(0.5f);
+    environmentMap.setEnvironmentMapAmountProperty(0.25f);
+    skinned.setWeightsPerVertexProperty(2);
+    for (Effect* effect : std::initializer_list<Effect*>{&alphaTest, &dualTexture, &environmentMap, &skinned})
+    {
+        effect->Apply();
+        dynamic_cast<IEffectMatrices&>(*effect).setWorldProperty(Matrix::CreateScale(3.0f));
+    }
+    alphaTest.setReferenceAlphaProperty(200);
+    dualTexture.setAlphaProperty(1.0f);
+    environmentMap.setEnvironmentMapAmountProperty(1.0f);
+    skinned.setWeightsPerVertexProperty(4);
+
+    AlphaTestEffect at32(device);
+    at32.setReferenceAlphaProperty(32);
+    at32.Apply();
+    AlphaTestEffect at200(device);
+    at200.setReferenceAlphaProperty(200);
+    at200.Apply();
+    ASSERT_NE(DrawParamsOf(at32).alphaTest[0], DrawParamsOf(at200).alphaTest[0]);
+    EXPECT_EQ(DrawParamsOf(alphaTest).alphaTest[0], DrawParamsOf(at32).alphaTest[0]);
+    alphaTest.Apply();
+    EXPECT_EQ(DrawParamsOf(alphaTest).alphaTest[0], DrawParamsOf(at200).alphaTest[0]);
+    EXPECT_EQ(DrawParamsOf(dualTexture).diffuseColor[3], 0.5f);
+    EXPECT_EQ(DrawParamsOf(environmentMap).envMapAmount, 0.25f);
+    EXPECT_EQ(DrawParamsOf(skinned).weightsPerVertex, 2);
+    for (Effect* effect : std::initializer_list<Effect*>{&dualTexture, &environmentMap, &skinned})
+    {
+        Matrix world, view, projection;
+        ASSERT_TRUE(effect->GetStockCloneDrawMatricesInternal(world, view, projection));
+        EXPECT_EQ(world, Matrix::getIdentityProperty());
+        effect->Apply();
+        ASSERT_TRUE(effect->GetStockCloneDrawMatricesInternal(world, view, projection));
+        EXPECT_EQ(world, Matrix::CreateScale(3.0f));
+    }
+    EXPECT_EQ(DrawParamsOf(dualTexture).diffuseColor[3], 1.0f);
+    EXPECT_EQ(DrawParamsOf(environmentMap).envMapAmount, 1.0f);
+    EXPECT_EQ(DrawParamsOf(skinned).weightsPerVertex, 4);
 }

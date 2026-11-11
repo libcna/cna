@@ -259,6 +259,8 @@ namespace Microsoft::Xna::Framework::Graphics
 
     void DualTextureEffect::FillGpuDrawParams(CNA::Internal::Renderers::GpuDrawParams& p) const
     {
+        // KI-GFX-STOCK-LATCH: after an Apply, a draw uses what that Apply latched.
+        if (FillLatchedStockDrawParamsInternal(p)) return;
         using namespace CNA::Internal::Renderers;
 
         p.dualTexture        = true;

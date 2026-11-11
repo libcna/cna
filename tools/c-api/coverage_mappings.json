@@ -1480,7 +1480,7 @@
     },
     {
       "id": "effect-lifecycle-and-concrete-effects-complete-contract",
-      "qualified_name_regex": "^(?!.*::(?:IsStockEffectEXT|GetStockEffectKindInternal)$).*",
+      "qualified_name_regex": "^(?!.*::(?:IsStockEffectEXT|GetStockEffectKindInternal|FillLatchedStockDrawParamsInternal)$).*",
       "header_regex": "^modules/graphics/include/Microsoft/Xna/Framework/Graphics/(?:Effect|EffectMaterial|ShaderEffect|SpriteEffect)\\.hpp$",
       "kinds": [
         "class",
@@ -14435,13 +14435,13 @@
     },
     {
       "id": "effect-stock-clone-dispatch",
-      "qualified_name_regex": "^Microsoft::Xna::Framework::Graphics::(?:(?:Effect|BasicEffect|AlphaTestEffect|DualTextureEffect|EnvironmentMapEffect|SkinnedEffect|SpriteEffect)::GetStockEffectKindInternal|Effect::GetStockCloneDrawMatricesInternal|Effect::StockEffectKindInternal(?:::(?:None|Basic|AlphaTest|DualTexture|EnvironmentMap|Skinned|Sprite))?)$",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Graphics::(?:(?:Effect|BasicEffect|AlphaTestEffect|DualTextureEffect|EnvironmentMapEffect|SkinnedEffect|SpriteEffect)::GetStockEffectKindInternal|Effect::(?:GetStockCloneDrawMatricesInternal|FillLatchedStockDrawParamsInternal)|Effect::StockEffectKindInternal(?:::(?:None|Basic|AlphaTest|DualTexture|EnvironmentMap|Skinned|Sprite))?)$",
       "kinds": [
         "method",
         "enum",
         "enum-value"
       ],
-      "mapping": "No separate C route: the C++ plumbing by which a base-Effect or EffectMaterial clone of a stock effect (or of SpriteEffect, KI-GFX-SPRITEEFFECT-CLONE) keeps drawing with that stock effect's shaders (HND-TQ-25 D9) -- a protected virtual naming the stock class, its kind enumeration, and the draw matrices GraphicsDevice and SpriteBatch hand the renderer. A C program reaches the behaviour through `cna_effect_material_create`, `cna_effect_clone` and `cna_effect_apply`, and C cannot derive from an effect",
+      "mapping": "No separate C route: the C++ plumbing by which a base-Effect or EffectMaterial clone of a stock effect (or of SpriteEffect, KI-GFX-SPRITEEFFECT-CLONE) keeps drawing with that stock effect's shaders (HND-TQ-25 D9) -- a protected virtual naming the stock class, its kind enumeration, the draw matrices GraphicsDevice and SpriteBatch hand the renderer, and the protected helper through which a stock effect's draws use what its last Apply latched (KI-GFX-STOCK-LATCH). A C program reaches the behaviour through `cna_effect_material_create`, `cna_effect_clone` and `cna_effect_apply`, and C cannot derive from an effect",
       "tests": "Doxygen declaration inventory; `StockEffectCloneDispatchTest` and `StockEffectCloneRenderingTest` exercise the dispatch",
       "status": "not-applicable",
       "task": "CBIND-080",
@@ -14453,6 +14453,7 @@
         "CPP-29F4A480E11E",
         "CPP-363A16D09493",
         "CPP-38A43CF52EC8",
+        "CPP-4379F57AE3E0",
         "CPP-45D8607E761E",
         "CPP-69DF26D41344",
         "CPP-754A3B0500F0",
