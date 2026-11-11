@@ -395,6 +395,25 @@ TEST_F(StockEffectCloneRenderingTest, ARawWorldViewProjOnTheClonePlacesTheQuad)
     EXPECT_SAME_IMAGE(Render(source, draw), sourcePicture);
 }
 
+// XNA's embedded stock effect starts with every constant zero, so a clone made before its source's
+// first Apply has a zero WorldViewProj: the stock vertex shader collapses the quad and nothing is
+// drawn. A clone made after that Apply draws the source's picture.
+TEST_F(StockEffectCloneRenderingTest, ACloneMadeBeforeTheSourcesFirstApplyDrawsNothing)
+{
+    const auto draw = [this] { DrawBasicQuad(); };
+    BasicEffect source(Device());
+    Scene(source);
+    EffectMaterial early(source);
+    const Image background(static_cast<std::size_t>(kSize * kSize), Color(7, 199, 53, 255));
+    EXPECT_SAME_IMAGE(Render(early, draw), background);
+
+    const Image picture = Render(source, draw);
+    ASSERT_TRUE(Covers(picture));
+    EffectMaterial late(source);
+    EXPECT_SAME_IMAGE(Render(late, draw), picture);
+    EXPECT_SAME_IMAGE(Render(early, draw), background);
+}
+
 // The raw DiffuseColor is what the unlit stock pixel shader outputs, with no OnApply folding
 // EmissiveColor or Alpha into it; a source property set afterwards does not reach the clone.
 TEST_F(StockEffectCloneRenderingTest, ARawDiffuseColourOnTheCloneIsWhatTheShaderDraws)

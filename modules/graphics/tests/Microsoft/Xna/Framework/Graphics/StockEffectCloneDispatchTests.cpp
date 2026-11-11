@@ -12,9 +12,11 @@
 
 #include <gtest/gtest.h>
 
+#include <initializer_list>
 #include <limits>
 #include <memory>
 #include <string>
+#include <vector>
 
 #include "CNA/Internal/Renderers/Common/IGraphicsRenderer.hpp"
 #include "Microsoft/Xna/Framework/Matrix.hpp"
@@ -30,6 +32,7 @@
 #include "Microsoft/Xna/Framework/Graphics/EnvironmentMapEffect.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SkinnedEffect.hpp"
+#include "Microsoft/Xna/Framework/Graphics/SpriteEffect.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SurfaceFormat.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
 #include "Microsoft/Xna/Framework/Graphics/TextureCollection.hpp"
@@ -486,3 +489,77 @@ TEST(StockEffectCloneDispatchTest, OnlyCloneOfAStockEffectThatIsNotItselfStockTa
     EXPECT_FALSE(stockClone->GetStockCloneDrawMatricesInternal(world, view, projection));
     EXPECT_FALSE(plain.GetStockCloneDrawMatricesInternal(world, view, projection));
 }
+
+// The constants of the stock .fx files have no initializers, so XNA's embedded effect starts with
+// every one of them zero: a parameter no constructor writes reads zero until the first OnApply
+// writes it -- a zero matrix, not identity, and a Vector4 (0, 0, 0, 0).
+TEST(StockEffectCloneDispatchTest, UnwrittenStockParametersStartAtZero)
+{
+    GraphicsDevice device;
+    BasicEffect basic(device);
+    AlphaTestEffect alphaTest(device);
+    DualTextureEffect dualTexture(device);
+    EnvironmentMapEffect environmentMap(device);
+    SkinnedEffect skinned(device);
+    SpriteEffect sprite(device);
+    const Matrix zero;
+    for (Effect* effect : std::initializer_list<Effect*>{&basic, &alphaTest, &dualTexture,
+                                                         &environmentMap, &skinned})
+    {
+        SCOPED_TRACE(effect->GetTypeName());
+        auto& parameters = effect->getParametersProperty();
+        for (const char* name : {"World", "WorldInverseTranspose", "WorldViewProj"})
+        {
+            if (const EffectParameter* matrix = parameters[name])
+            {
+                SCOPED_TRACE(name);
+                EXPECT_EQ(matrix->GetValueMatrix(), zero);
+                EXPECT_EQ(matrix->GetValueSingleArray(16), std::vector<float>(16, 0.0f));
+            }
+        }
+        ASSERT_NE(parameters["WorldViewProj"], nullptr);
+        for (const char* name : {"DiffuseColor", "FogVector"})
+        {
+            SCOPED_TRACE(name);
+            ASSERT_NE(parameters[name], nullptr);
+            EXPECT_EQ(parameters[name]->GetValueVector4(), Vector4::Zero);
+            EXPECT_EQ(parameters[name]->GetValueSingleArray(4), std::vector<float>(4, 0.0f));
+        }
+        EXPECT_EQ(parameters["ShaderIndex"]->GetValueInt32(), 0);
+    }
+    EXPECT_EQ(alphaTest.getParametersProperty()["AlphaTest"]->GetValueVector4(), Vector4::Zero);
+    EXPECT_EQ(sprite.getParametersProperty()["MatrixTransform"]->GetValueMatrix(), zero);
+}
+
+// A clone made before its source's first Apply copies those zeros: the stock vertex shader places
+// every vertex with a zero WorldViewProj, so XNA draws nothing through it. After the source's
+// Apply the clone copies the WorldViewProj that Apply derived.
+TEST(StockEffectCloneDispatchTest, ACloneMadeBeforeTheSourcesFirstApplyHasAZeroWorldViewProj)
+{
+    GraphicsDevice device;
+    BasicEffect source(device);
+    source.setWorldProperty(Matrix::CreateScale(0.5f));
+    source.setViewProperty(Matrix::CreateTranslation(0.0f, 0.0f, -2.0f));
+    EffectMaterial early(source);
+    early.Apply();
+    Matrix world, view, projection;
+    ASSERT_TRUE(early.GetStockCloneDrawMatricesInternal(world, view, projection));
+    EXPECT_EQ(projection, Matrix());
+    const GpuDrawParams p = DrawParamsOf(early);
+    EXPECT_EQ(p.diffuseColor[0], 0.0f);
+    EXPECT_EQ(p.diffuseColor[3], 0.0f);
+
+    source.Apply();
+    EffectMaterial late(source);
+    late.Apply();
+    ASSERT_TRUE(late.GetStockCloneDrawMatricesInternal(world, view, projection));
+    EXPECT_EQ(projection, Matrix::CreateScale(0.5f) * Matrix::CreateTranslation(0.0f, 0.0f, -2.0f));
+    EXPECT_EQ(DrawParamsOf(late).diffuseColor[3], 1.0f);
+
+    // Before any Apply of the clone itself, the draw matrices read the current raw value.
+    BasicEffect fresh(device);
+    EffectMaterial unappliedEarly(fresh);
+    ASSERT_TRUE(unappliedEarly.GetStockCloneDrawMatricesInternal(world, view, projection));
+    EXPECT_EQ(projection, Matrix());
+}
+

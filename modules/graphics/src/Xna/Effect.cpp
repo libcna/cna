@@ -1586,6 +1586,16 @@ namespace Microsoft::Xna::Framework::Graphics
     {
         EffectParameter parameter(name, "", rows, columns, parameterClass, parameterType);
         parameter.stockParameter_ = true;
+        // The stock .fx constants have no initializers (ShaderIndex is `= 0`), so XNA's embedded
+        // effect starts with every one of them zero: until an OnApply or the game writes one, a
+        // matrix reads zero rather than identity and a Vector4 (0, 0, 0, 0), and a clone made
+        // before its source's first Apply draws with a zero WorldViewProj.
+        const std::size_t cells = parameterClass == EffectParameterClass::Matrix ? 16u
+            : static_cast<std::size_t>(std::max(rows, 1)) * static_cast<std::size_t>(std::max(columns, 1));
+        if (parameterType == EffectParameterType::Single)
+            parameter.floatData_.assign(cells, 0.0f);
+        else if (parameterType == EffectParameterType::Int32 || parameterType == EffectParameterType::Bool)
+            parameter.intData_.assign(cells, 0);
         parameters.Add(std::move(parameter));
     }
 
