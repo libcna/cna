@@ -147,6 +147,10 @@ namespace Microsoft::Xna::Framework::Content
         [[nodiscard]] std::unique_ptr<System::IO::Stream> TryOpenCompiledStream(
             const std::string& assetName);
 
+        /// Refuses a null OpenStream() result as Refresh does: System::ArgumentNullException for
+        /// the parameter `input` (see ContentManager.cpp).
+        static void RequireOpenedStream(const System::IO::Stream* stream);
+
         /// The injected device, else the service provider's IGraphicsDeviceService device, else null.
         [[nodiscard]] Graphics::GraphicsDevice* FindGraphicsDevice() const;
 
@@ -302,7 +306,9 @@ namespace Microsoft::Xna::Framework::Content
          * cause -- which is what XNA does, including for a missing file.
          *
          * @param assetName The name of the asset being read, without an extension.
-         * @return An open stream positioned at the start of the asset's data. Never null.
+         * @return An open stream positioned at the start of the asset's data. Never null: an
+         *         override that returns null makes the read throw System::ArgumentNullException
+         *         for the parameter `input`, as XNA's does.
          * @throws ContentLoadException if the asset cannot be opened.
          */
         [[nodiscard]] virtual std::unique_ptr<System::IO::Stream> OpenStream(
@@ -322,7 +328,8 @@ namespace Microsoft::Xna::Framework::Content
          *        manager records them itself, as `Load<T>()` does.
          * @return The asset, freshly read; this method does not consult or populate the cache.
          * @throws System::ObjectDisposedException if this manager has been disposed.
-         * @throws System::ArgumentNullException if @p assetName is empty.
+         * @throws System::ArgumentNullException if @p assetName is empty, or (parameter `input`)
+         *         if OpenStream() returns null, as XNA's reader construction does.
          * @throws ContentLoadException if the asset cannot be opened or read.
          */
         template <typename T>
@@ -343,11 +350,7 @@ namespace Microsoft::Xna::Framework::Content
             // The stream is this method's to own and close: XNA reads it inside a `using`, and the
             // override that produced it keeps no reference.
             const std::unique_ptr<System::IO::Stream> stream = OpenStream(assetName);
-            if (!stream)
-            {
-                throw ContentLoadException(
-                    "ContentManager: OpenStream returned no stream for asset '" + assetName + "'.");
-            }
+            RequireOpenedStream(stream.get());
 
             return ReadThenCloseStream(*stream, assetName, [&](const std::vector<std::uint8_t>& bytes) {
                 detail::BuiltinContent<T>::Register(*this);
@@ -612,7 +615,8 @@ namespace Microsoft::Xna::Framework::Content
          * @param assetName Relative file path inside the content root (with or without extension).
          * @return Loaded asset instance.
          * @throws ContentLoadException if the asset cannot be loaded.
-         * @throws System::ArgumentNullException if @p assetName is empty.
+         * @throws System::ArgumentNullException if @p assetName is empty, or (parameter `input`)
+         *         if OpenStream() returns null.
          * @throws System::ObjectDisposedException if this manager has been disposed.
          */
         template <typename T>

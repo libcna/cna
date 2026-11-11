@@ -106,11 +106,7 @@ namespace Microsoft::Xna::Framework::Content
         }
 
         const auto stream = OpenStream(assetName);
-        if (!stream)
-        {
-            throw ContentLoadException(
-                "ContentManager: OpenStream returned no stream for asset '" + assetName + "'.");
-        }
+        RequireOpenedStream(stream.get());
         std::any result = ReadThenCloseStream(
             *stream, assetName, [&](const std::vector<std::uint8_t>& xnbBytes) {
                 const std::string xnbPath =

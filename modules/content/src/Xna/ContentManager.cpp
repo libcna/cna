@@ -340,14 +340,26 @@ namespace Microsoft::Xna::Framework::Content
         }
     }
 
+    void ContentManager::RequireOpenedStream(const System::IO::Stream* stream)
+    {
+        // Refresh ContentManager.ReadAsset<T> IL_0027-0033 passes a null OpenStream() result to
+        // ContentReader.Create, whose PrepareStream IL_0000-0001 wraps it in a BinaryReader;
+        // mscorlib's BinaryReader..ctor(Stream, Encoding) IL_0006-0013 throws
+        // ArgumentNullException("input"). PrepareStream catches only IOException (IL_00f1), and
+        // the finally that disposes the stream skips a null one (ReadAsset IL_0079-007a).
+        if (stream == nullptr)
+        {
+            throw System::ArgumentNullException("input");
+        }
+    }
+
     std::unique_ptr<System::IO::Stream> ContentManager::TryOpenCompiledStream(const std::string& assetName)
     {
         CompiledStreamAttempt attempt(this, assetName);
         try
         {
             auto stream = OpenStream(assetName);
-            if (!stream)
-                throw ContentLoadException("ContentManager: OpenStream returned no stream for asset '" + assetName + "'.");
+            RequireOpenedStream(stream.get());
             return stream;
         }
         catch (const ContentLoadException& error)

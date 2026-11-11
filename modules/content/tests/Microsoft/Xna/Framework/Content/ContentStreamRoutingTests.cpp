@@ -22,6 +22,7 @@
 #include "Microsoft/Xna/Framework/Curve.hpp"
 #include "Microsoft/Xna/Framework/Audio/SoundEffect.hpp"
 #include "System/IO/BinaryWriter.hpp"
+#include "System/ArgumentNullException.hpp"
 #include "System/InvalidOperationException.hpp"
 #include "System/Resources/ResourceManager.hpp"
 
@@ -424,7 +425,9 @@ TEST_F(StreamRoutingBoundaryTest, NullOverrideStreamDoesNotFallBack)
     int reads = 0;
     manager.RegisterTypeReader<Payload>(std::make_unique<CountingLooseReader>(reads));
     manager.open = [](const auto&) { return std::unique_ptr<System::IO::Stream>{}; };
-    EXPECT_THROW((void)manager.Load<Payload>("asset"), ContentLoadException);
+    // KI-CONTENT-NULLSTREAM: Refresh's BinaryReader over the null stream refuses it
+    // (ArgumentNullException "input"), not ContentLoadException.
+    EXPECT_THROW((void)manager.Load<Payload>("asset"), System::ArgumentNullException);
     EXPECT_EQ(manager.opens, 1);
     EXPECT_EQ(reads, 0);
 }
