@@ -292,6 +292,20 @@ page under `docs/` (index: `docs/README.md`), deliberate divergences from FNA an
   with a default-device stream. The ALSA backend reopens a PCM that disappears (CNA-FIX-L45,
   `docs/audio-alsa.md`), tested with injected `ENODEV` failures only; no physical unplug or
   default-device switch has been run on either backend (former AUD-04-010/011).
+- **Sound lags on the web (Emscripten, SDL3 audio).** CNA mixes only when SDL asks
+  (`Sdl3AudioDevice::FeedStream`) and queues nothing of its own, but SDL3's Emscripten driver plays
+  through a `ScriptProcessorNode` of twice the default buffer (2048 frames at 48 kHz, 42.7 ms;
+  `third_party/SDL/src/audio/emscripten/SDL_emscriptenaudio.c:186`) whose callback runs on the
+  browser's main thread. The constant delay is one to two such buffers plus the browser's output
+  latency, estimated at 70-130 ms against 20-40 ms natively. In an Asyncify build (`Game::RunLoop`
+  awaits `requestAnimationFrame`) the callback runs only between frames, so a frame longer than one
+  buffer delays or drops sound as well. Reported by Mobile Eggbert (its `TODO.md`: "Web version: Sound
+  is a little bit delayed") and by a Galaxy Eggbert web player (2026-11-11; there the game's own
+  repeated death sounds and terrain-rebuild stalls make it worse, sent to that game). Analysed from
+  the code only, not measured in a browser. Remedies, none taken: `SDL_HINT_AUDIO_DEVICE_SAMPLE_FRAMES`
+  (halves the constant part, more dropouts on long frames); a CNA web audio device on an
+  AudioWorklet (`-sAUDIO_WORKLET`, needs cross-origin isolation for `SharedArrayBuffer`); running the
+  game off the main thread (pthreads, same hosting requirement).
 - **Three audio reports from the 2026-07-17 audit stay unconfirmed, not open:** high-pitched sound
   effects, missing audio files, and distorted or sped-up gameplay audio. They were never
   reproduced against the game they came from, which is not available. The audit narrowed the
