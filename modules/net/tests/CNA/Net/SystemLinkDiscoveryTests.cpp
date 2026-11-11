@@ -26,6 +26,7 @@
 #include <future>
 #include <netinet/in.h>
 #include <optional>
+#include <thread>
 #include <sys/select.h>
 #include <sys/socket.h>
 #include <unistd.h>
@@ -597,6 +598,84 @@ TEST_F(SystemLinkDiscoveryTest, AReportBeforeItsHostsAnnounceWaitsForThatHost)
     ASSERT_EQ(found.size(), 2u);
     EXPECT_EQ(Upstream(found, "FarFirst"), 0);
     EXPECT_EQ(Upstream(found, "FarSecond"), 22222);
+}
+
+// An invitation that overtakes its announce and comes again after it is one host's: one train.
+TEST_F(SystemLinkDiscoveryTest, AnInvitationBeforeAndAfterItsAnnounceGetsOneTrain)
+{
+    FakeFarHost far("127.0.0.1");
+    ASSERT_TRUE(far.Ready());
+    SystemLinkDiscovery::setExtraSearchAddressesProperty({far.SearchAddress()});
+
+    auto host = std::async(std::launch::async, [&]
+    {
+        const auto from = far.WaitForQuery();
+        if (!from) return -1;
+        far.Send(*from, Invite(40000, far.Port()));
+        far.Send(*from, NetDiscoveryProtocol::Encode(FarAnnounce("FarHost", 40000, 7)));
+        far.Send(*from, Invite(40000, far.Port()));
+        int probes = 0;
+        while (const auto datagram = far.Receive(500))
+            if (NetDiscoveryProtocol::PeekTag(datagram->first) == DiscoveryMessageTag::UpstreamProbe) ++probes;
+        return probes;
+    });
+    EXPECT_EQ(FoundFar(ENetDiscoveryService::FindSessions(NetworkSessionType::SystemLink)).size(), 1u);
+    EXPECT_EQ(host.get(), static_cast<int>(kQosProbeCount));
+}
+
+// One host by two addresses: the second address's train overtook its announce, and the first
+// address's train is timed in full first. Adopting the second address must not append the older
+// arrivals to that train (its clock would run backwards and the rate saturate).
+TEST_F(SystemLinkDiscoveryTest, AnAliasArrivingLateKeepsTheTimedTrain)
+{
+    FakeFarHost firstPath("127.0.0.1"), secondPath("127.0.0.3");
+    ASSERT_TRUE(firstPath.Ready() && secondPath.Ready());
+    SystemLinkDiscovery::setExtraSearchAddressesProperty({firstPath.SearchAddress(), secondPath.SearchAddress()});
+
+    auto host = std::async(std::launch::async, [&]
+    {
+        const auto toFirst = firstPath.WaitForQuery();
+        const auto toSecond = secondPath.WaitForQuery();
+        if (!toFirst || !toSecond) return false;
+        bool sent = true;
+        for (uint8_t index = 0; index < kQosProbeCount; ++index) sent = secondPath.Send(*toSecond, Probe(40000, index)) && sent;
+        sent = firstPath.Send(*toFirst, NetDiscoveryProtocol::Encode(FarAnnounce("FarHost", 40000, 3))) && sent;
+        // About 1 ms apart: 7 x 1200 bytes over ~7 ms, near 1.2 MB/s.
+        for (uint8_t index = 0; index < kQosProbeCount; ++index)
+        {
+            std::this_thread::sleep_for(std::chrono::milliseconds(1));
+            sent = firstPath.Send(*toFirst, Probe(40000, index)) && sent;
+        }
+        return secondPath.Send(*toSecond, NetDiscoveryProtocol::Encode(FarAnnounce("FarHost", 40000, 3))) && sent;
+    });
+    const auto found = FoundFar(ENetDiscoveryService::FindSessions(NetworkSessionType::SystemLink));
+    ASSERT_TRUE(host.get());
+    ASSERT_EQ(found.size(), 1u);
+    const int downstream = Downstream(found, "FarHost");
+    EXPECT_GT(downstream, 0);
+    EXPECT_LT(downstream, 20'000'000) << "the timed train was extended with the alias's older arrivals";
+}
+
+// A report from an address no announce claimed (here a second same-port host whose announce was
+// lost) is not the only listed host's.
+TEST_F(SystemLinkDiscoveryTest, AReportNoAnnounceClaimsIsNotTheListedHosts)
+{
+    FakeFarHost first("127.0.0.1"), second("127.0.0.2");
+    ASSERT_TRUE(first.Ready() && second.Ready());
+    SystemLinkDiscovery::setExtraSearchAddressesProperty({first.SearchAddress(), second.SearchAddress()});
+
+    auto hosts = std::async(std::launch::async, [&]
+    {
+        const auto toFirst = first.WaitForQuery();
+        const auto toSecond = second.WaitForQuery();
+        if (!toFirst || !toSecond) return false;
+        const bool sent = first.Send(*toFirst, NetDiscoveryProtocol::Encode(FarAnnounce("FarFirst", 40000, 1)));
+        return second.Send(*toSecond, Report(40000, 22222)) && sent;
+    });
+    const auto found = FoundFar(ENetDiscoveryService::FindSessions(NetworkSessionType::SystemLink));
+    ASSERT_TRUE(hosts.get());
+    ASSERT_EQ(found.size(), 1u);
+    EXPECT_EQ(Upstream(found, "FarFirst"), 0);
 }
 #endif
 #endif

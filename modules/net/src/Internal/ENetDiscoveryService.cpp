@@ -78,6 +78,7 @@ namespace CNA::Internal::Net
         {
             uint16_t ConnectPort = 0;
             std::string Address;
+            uint8_t Index = 0;
             std::chrono::steady_clock::time_point At;
         };
         std::vector<EarlyProbe>* earlyProbes_ = nullptr;
@@ -244,10 +245,11 @@ namespace CNA::Internal::Net
             std::string Host;
             uint16_t ConnectPort = 0;
             uint16_t ResponderPort = 0;
-            bool operator==(const UpstreamTrain&) const = default;
         };
         std::vector<UpstreamTrain> upstreamTrains_;
-        // Upstream reports whose host is not listed yet (UDP may reorder), by source address.
+        // Upstream reports whose host is not listed yet (UDP may reorder), by source address. One
+        // that no announce of the search claims is dropped: with hosts sharing a fixed port, a port
+        // does not tell which of them sent it, and a host measured nowhere reports 0.
         struct EarlyReport
         {
             uint16_t ConnectPort = 0;
@@ -433,17 +435,21 @@ namespace CNA::Internal::Net
                 [&](const Found& found) { return found.Announce.ConnectPort == connectPort && AnsweredFrom(found, ip); });
         }
 
-        // Probes and reports that overtook the announce of the path they came by.
+        // Probes and reports that overtook the announce of the path they came by. A listing times one
+        // train: an alias's buffered probes are another path's train, adopted only while the
+        // listing has none, since appending older arrivals to a train already timed would run its
+        // clock backwards.
         void AdoptEarlyArrivals(Found& found, const std::string& address)
         {
-            for (const EarlyProbe& arrival : *earlyProbes_)
-                if (arrival.ConnectPort == found.Announce.ConnectPort && arrival.Address == address)
-                {
-                    DiscoveryQosProbeMessage early;
-                    early.ConnectPort = arrival.ConnectPort;
-                    early.Index = static_cast<uint8_t>(found.FirstIndex < 0 ? 0 : found.LastIndex + 1);
-                    RecordProbe(found, early, arrival.At);
-                }
+            if (found.FirstIndex < 0)
+                for (const EarlyProbe& arrival : *earlyProbes_)
+                    if (arrival.ConnectPort == found.Announce.ConnectPort && arrival.Address == address)
+                    {
+                        DiscoveryQosProbeMessage early;
+                        early.ConnectPort = arrival.ConnectPort;
+                        early.Index = arrival.Index;
+                        RecordProbe(found, early, arrival.At);
+                    }
             for (const EarlyReport& report : earlyReports_)
                 if (report.ConnectPort == found.Announce.ConnectPort && report.Address == address)
                     found.UpstreamBytesPerSecond = report.BytesPerSecond;
@@ -548,7 +554,15 @@ namespace CNA::Internal::Net
                                     ? "#" + std::to_string(host - currentResults_->begin())
                                     : HostIp(fromAddress),
                                 invite.ConnectPort, invite.ResponderPort};
-                            if (std::find(upstreamTrains_.begin(), upstreamTrains_.end(), train) != upstreamTrains_.end()
+                            // A train sent before the listing existed was keyed by the address
+                            // that is now one of the listing's.
+                            const auto sameHost = [&](const UpstreamTrain& sent)
+                            {
+                                return sent.ConnectPort == train.ConnectPort && sent.ResponderPort == train.ResponderPort
+                                    && (sent.Host == train.Host
+                                        || (host != currentResults_->end() && AnsweredFrom(*host, sent.Host)));
+                            };
+                            if (std::any_of(upstreamTrains_.begin(), upstreamTrains_.end(), sameHost)
                                 || upstreamTrains_.size() >= 64)
                                 break;
                             upstreamTrains_.push_back(train);
@@ -581,7 +595,7 @@ namespace CNA::Internal::Net
                             auto found = FoundHost(probe.ConnectPort, fromAddress);
                             if (found != currentResults_->end()) RecordProbe(*found, probe, at);
                             else if (earlyProbes_->size() < 64)
-                                earlyProbes_->push_back(EarlyProbe{probe.ConnectPort, HostIp(fromAddress), at});
+                                earlyProbes_->push_back(EarlyProbe{probe.ConnectPort, HostIp(fromAddress), probe.Index, at});
                         }
                         break;
                 }
@@ -815,20 +829,6 @@ namespace CNA::Internal::Net
             PollOnce(replies, static_cast<uint32_t>(std::min<long long>(remaining, 5)));
             if (sock != ENET_SOCKET_NULL)
                 while (PollOnce(sock, 0)) { }
-        }
-
-        // A report from an address none of the host's announces came from (a multi-homed host's
-        // route back can leave by another interface) still belongs to the only listing with its
-        // port, if that listing has none of its own. With two such listings it stays unassigned.
-        for (const EarlyReport& report : earlyReports_)
-        {
-            const auto matches = [&](const Found& host) { return host.Announce.ConnectPort == report.ConnectPort; };
-            if (std::any_of(found.begin(), found.end(),
-                    [&](const Found& host) { return matches(host) && AnsweredFrom(host, report.Address); })
-                || std::count_if(found.begin(), found.end(), matches) != 1)
-                continue;
-            Found& only = *std::find_if(found.begin(), found.end(), matches);
-            if (only.UpstreamBytesPerSecond == 0) only.UpstreamBytesPerSecond = report.BytesPerSecond;
         }
 
         std::vector<AvailableNetworkSession> results;
