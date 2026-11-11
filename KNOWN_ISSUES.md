@@ -67,40 +67,47 @@ page under `docs/` (index: `docs/README.md`), deliberate divergences from FNA an
   hardware run exists. Keep the pixel assertions strict: no matrix transpose, no native opcode refusal (TEXBEM
   is a real ps_1_1-1_3 instruction), and no environment skip counted as a corpus pass. The compiled-effect
   qualification per family is `docs/fx-compiled-effects.md` §16.
-- **`SoundBankTest.PlayCueThreeArgAppliesRealAttenuationToActiveInstance` depends on timing
-  (2026-11-10, not fixed).** PlayCue checks IsStopped after playback starts, and the test reads the
-  cue's attenuation afterwards; with the 2 ms fixture wave the cue had sometimes finished, failing
-  general-tests-ci once. The wave is now 0.5 s (d04009afe), which is a margin, not lifetime
-  control: a test thread descheduled for longer still fails. The deterministic form holds the
-  playback active until the attenuation is inspected and tests natural completion separately.
 - **X11 foreign-window import does not correlate the refusing BadWindow by request serial**
   (`AdoptNativeWindowHandle`, CNA-DEMOS-ISSUE-158). The refusal matches BadWindow, the
   GetWindowAttributes request, the pending id and SDL's own display, and refuses when more displays
   report than it records (e28fea5bf). A same-id GetWindowAttributes from another thread on SDL's
-  private connection during the import is not told apart, so it can refuse a valid import, never
-  accept an invalid one. The concurrent cases are argued from source, not covered by a test.
+  private connection during the import is not told apart, so it can refuse a valid import (only if
+  the window's existence changed during the import), never accept an invalid one. A serial check
+  cannot close it (KI-X11-SERIAL, 2026-11-11): SDL publishes its X11 `Display*` per window only, so it
+  is unknown before a first import, and the range [next request before, last processed after] also
+  contains a concurrent request on the same connection. The concurrent cases are argued from source,
+  not covered by a test.
 
-### Divergences from XNA found on 2026-11-09, not fixed
+### Divergences from XNA, not fixed (state of 2026-11-11)
 
-- XACT: effect families 4/6 and loop-region waves unmeasured (banks authored in
-  `../cnaplan/evidence/rev002/hnd-xact/banks/`, `run-native.sh run effect`); random/shuffle without NEW_ON_LOOP and raw 5-254 follow the rule by
-  extension only; `check-xact-prefetch-oracle.py` fails "Probe source changed" since HND-XACT-04.
-- Graphics: effect ObjectDisposedException names use the resource Name, not XNA's type name; stock
-  EffectParameter::SetValue(Texture) never refuses a disposed texture; an unwritten stock matrix
-  parameter reads identity (XNA: zero), so a stock clone made before the source's first Apply draws;
-  SpriteEffect clones go through the custom path; stock classes read fields at draw time rather than
-  latching at Apply; DIRECTX9 stock-clone path compiled only.
-- C API: `cna_effect_clone` does not extend parameter-level/shader-unit C retention; content tags of
-  meshes/parts have no C route; HND-TQ-22 C route (ObjectValue handles, ABI 0.61) not done.
-- Content: Refresh closes an uncompressed XNB's stream twice (CNA once); Refresh skips totalLength for
-  non-seekable streams; null OpenStream is ArgumentNullException in XNA (CNA ContentLoadException);
-  texture dimension <= 0 is ArgumentOutOfRangeException in XNA; LZX failures surface per frame;
-  sharp-runtime PeekChar on a non-seekable stream throws (.NET returns -1).
-- Out-of-range ShaderIndex on a stock clone: CNA refuses at Apply; genuine XNA unmeasured.
-- Tooling: worktrees with a symlinked `third_party/SDL` fail SDL staging (fix proposed on the local
-  branch `work/hnd-gfx`, 0f5474490, not integrated). `scripts/check_no_posix_setenv.py` is not wired
-  into CMake or CI and reports 7 POSIX `setenv`/`unsetenv` call sites (c-api TestScratchBridge,
-  graphics-ext ASCII tests, storage tests).
+- XACT (HND-XACT-06, evidence `../cnaplan/evidence/rev002/hnd-xact-06-loop-extensions/`): with only an
+  effect NEW_ON_LOOP (families 4/6), XACT holds one wave and varies its pitch per pass; CNA plays n+1
+  complete waves of the first candidate with a new effect draw each (count and candidate match).
+  Unmeasured: volume/filter NEW_ON_LOOP, ADD operators, type 6 with both NEW_ON_LOOP kinds, per-pass
+  pitch values, Ordered From Random / Random No Immediate Repeats, more than two candidates, raw 255,
+  streaming, cross-bank candidates.
+- Graphics: a stock parameter's `SetValue(Texture*)` and `SetValue(Texture2D*)` write separate storage,
+  so `Parameters["Texture"].SetValue((Texture*)t)` is not seen by `GetValueTexture2D` or the stock draw;
+  a SpriteEffect passed to `SpriteBatch.Begin` does not run its own matrix (FNA ignores
+  `transformMatrix` there); `SpriteBatch.Draw`'s disposed-texture refusal names the texture's Name
+  (unchecked against XNA). Out-of-range ShaderIndex on a stock clone (measured on XNA 4.0 under Wine,
+  `tests/reference/xna40/stock-clone-shader-index/`): CNA matches XNA's InvalidOperationException
+  "An unexpected error has occurred."; native D3DX also accepts -1, int.MinValue and int.MinValue+1
+  and draws from outside its tables, which CNA refuses. In that original XNA 4.0 build (the prefix has
+  no Refresh), EffectMaterial clones of BasicEffect, AlphaTestEffect, EnvironmentMapEffect and
+  SkinnedEffect throw NullReferenceException in `Effect..ctor(Effect)`; Refresh is unmeasured, which
+  bears on the HND-TQ-25 D9 premise.
+- C API: content tags of meshes/parts have no C route; HND-TQ-22 C route (ObjectValue handles, ABI 0.61)
+  not done; `CNA::Net::SystemLinkDiscovery` (GALAXY-NET-01) has no C route (planned, CBIND-127).
+- Content: Texture3D/TextureCube level counts <= 0 are accepted by XNA (same loop as Texture2D), CNA
+  refuses; a level count past the full chain or a wrong level byte count is ContentLoadException in CNA
+  where XNA fails inside SetData (type unconfirmed); the TextureCube reader still decodes before it
+  constructs, so the profile's cube refusals come after the levels; Reach NPOT DXT textures are
+  uploaded as Color by CNA although XNA's Texture2D constructor refuses them (IL_00d0-0122); XNA's
+  Texture2D/Texture3D readers ignore an existing instance, CNA reloads into it. LZX (KI-CONTENT-LZXGRAN,
+  measured on XnaNative 4.0.30901): a valid frame after a short one is unmeasured, and the loss of
+  buffered output when a chunk fetch fails has no test. sharp-runtime `BinaryReader(nullptr)` names
+  the parameter "stream" (.NET 4: "input").
 - OPENGLES3 compiled effects: LOD bias is unrepresentable (ES 3 has no sampler bias), so 2 of the 44
   corpus cases skip and the family is not qualified; `cmake-build-multi` keeps it OFF.
 
@@ -113,8 +120,9 @@ page under `docs/` (index: `docs/README.md`), deliberate divergences from FNA an
   ordered NEW_ON_LOOP successor prefetch before EOF without late retry, cross-bank selection (first
   registered duplicate wins; clones own their banks; a sole foreign category victim is replaced) and
   sequential notification/resource lifetimes; CNA fixes landed for the differences. A finite loop byte n plays
-  n+1 passes (HND-XACT-05, 56 native cells, event types 1/3); effect families 4/6, loop-region waves,
-  random/shuffle variations and raw 5-254 are unmeasured. Still open: exact hidden timing/RNG,
+  n+1 passes for every play-wave family (HND-XACT-05, 56 native cells, event types 1/3; HND-XACT-06,
+  136 cells: families 4/6, loop-region waves, random/shuffle, raw 5/100/254), split into separate waves
+  only by the track NEW_ON_LOOP bit. Still open: exact hidden timing/RNG,
   ordering among several category victims and other replacement modes, live interactive changes and
   rollback, concurrent callback quiescence and forced in-use destruction; native Windows, managed
   execution and gain/PCM remain unqualified.
