@@ -14,6 +14,7 @@
 
 #include <memory>
 #include <string>
+#include <string_view>
 #include <vector>
 
 #if !defined(__EMSCRIPTEN__) && !defined(_WIN32)
@@ -86,6 +87,11 @@ TEST_F(SystemLinkDiscoveryTest, SearchAddressesSplitIntoHostAndDiscoveryPort)
     for (const char* malformed : {"", " host", "ho st", "host:", ":61190", "host:0", "host:65536", "host:99999x",
                                   "host:123456", "::1", "fe80::1:61190", "host:-1", "host:+5"})
         EXPECT_FALSE(ParseSearchAddress(malformed, 61190).has_value()) << '"' << malformed << '"';
+
+    // The resolver reads the name only up to a NUL, so this would query 127.0.0.1:40000.
+    using namespace std::string_view_literals;
+    EXPECT_FALSE(ParseSearchAddress("127.0.0.1\0.invalid:40000"sv, 61190).has_value());
+    EXPECT_FALSE(ParseSearchAddress("host\0"sv, 61190).has_value());
 }
 
 TEST_F(SystemLinkDiscoveryTest, TheSearchAddressesAreKeptInTheirOrder)
@@ -103,6 +109,8 @@ TEST_F(SystemLinkDiscoveryTest, AMalformedSearchAddressIsRefusedAndThePreviousLi
     EXPECT_THROW(SystemLinkDiscovery::setExtraSearchAddressesProperty({"10.0.0.3", "bad host"}),
                  System::ArgumentException);
     EXPECT_THROW(SystemLinkDiscovery::setExtraSearchAddressesProperty({"10.0.0.3:0"}), System::ArgumentException);
+    EXPECT_THROW(SystemLinkDiscovery::setExtraSearchAddressesProperty({std::string("10.0.0.3\0.invalid", 17)}),
+                 System::ArgumentException);
     EXPECT_EQ(SystemLinkDiscovery::getExtraSearchAddressesProperty(), (std::vector<std::string>{"10.0.0.2"}));
 }
 

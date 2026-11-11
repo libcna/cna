@@ -9,8 +9,11 @@ namespace CNA::Internal::Net
 {
     std::optional<SearchAddress> ParseSearchAddress(std::string_view entry, std::uint16_t defaultPort)
     {
+        // A NUL would end the name the resolver receives (Host.c_str()) early, so the entry would
+        // reach another host than it names.
         if (entry.empty()
-            || std::any_of(entry.begin(), entry.end(), [](char c) { return std::isspace(static_cast<unsigned char>(c)) != 0; }))
+            || std::any_of(entry.begin(), entry.end(),
+                           [](char c) { return c == '\0' || std::isspace(static_cast<unsigned char>(c)) != 0; }))
             return std::nullopt;
         const auto colon = entry.find(':');
         if (colon == std::string_view::npos) return SearchAddress{std::string(entry), defaultPort};
