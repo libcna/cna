@@ -694,7 +694,7 @@ TEST_F(StockEffectCloneRenderingTest, SkinnedEffectClonesDrawTheSourcesPictureAn
 // World*View*Projection (the route AStockEffectInBeginPlacesTheSpritesByItsMatrices pins).
 TEST_F(StockEffectCloneRenderingTest, ASpriteBatchDrawsThroughAStockClonesShaders)
 {
-    if (!CNA_RENDERER_IS(Software, OpenGL33, OpenGLES3, Fna3d))
+    if (!CNA_RENDERER_IS(Software, OpenGL33, OpenGLES3, Fna3d, DirectX9))
         GTEST_SKIP() << "the SpriteBatch stock-effect route is pinned on these renderers";
 
     Texture2D white(Device(), 1, 1, false, SurfaceFormat::Color);
@@ -756,7 +756,7 @@ TEST_F(StockEffectCloneRenderingTest, ASpriteEffectCloneDrawsWithItsRawMatrixTra
 // World*View*Projection; the batch's transform matrix goes unused.
 TEST_F(StockEffectCloneRenderingTest, ASpriteBatchDrawsThroughASpriteEffectClonesRawMatrixTransform)
 {
-    if (!CNA_RENDERER_IS(Software, OpenGL33, OpenGLES3, Fna3d))
+    if (!CNA_RENDERER_IS(Software, OpenGL33, OpenGLES3, Fna3d, DirectX9))
         GTEST_SKIP() << "the SpriteBatch stock-effect route is pinned on these renderers";
 
     Texture2D white(Device(), 1, 1, false, SurfaceFormat::Color);

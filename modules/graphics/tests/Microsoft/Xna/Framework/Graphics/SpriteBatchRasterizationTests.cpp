@@ -341,7 +341,7 @@ TEST(SpriteBatchRasterizationTest, APlainPrimitiveStillReachesTheBackBufferAfter
 // top-right quadrant.
 TEST(SpriteBatchRasterizationTest, AStockEffectInBeginPlacesTheSpritesByItsMatrices)
 {
-    CNA_SKIP_IF_RENDERER_IS_NONE_OF(Software, OpenGL33, OpenGLES3, Fna3d);
+    CNA_SKIP_IF_RENDERER_IS_NONE_OF(Software, OpenGL33, OpenGLES3, Fna3d, DirectX9);
 
     GraphicsDevice device = MakeDevice();
     Texture2D texture = MakeWhiteTexture(device);
