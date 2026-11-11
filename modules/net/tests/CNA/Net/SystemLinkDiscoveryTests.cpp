@@ -35,6 +35,7 @@ using CNA::Internal::Net::DiscoveryAnnounceMessage;
 using CNA::Internal::Net::DiscoveryMessageTag;
 using CNA::Internal::Net::DiscoveryQosProbeMessage;
 using CNA::Internal::Net::DiscoveryUpstreamInviteMessage;
+using CNA::Internal::Net::DiscoveryUpstreamReportMessage;
 using CNA::Internal::Net::kQosProbeCount;
 using CNA::Internal::Net::ENetBackend;
 using CNA::Internal::Net::ENetDiscoveryService;
@@ -130,12 +131,12 @@ namespace
     class FakeFarHost
     {
     public:
-        explicit FakeFarHost(const char* ip = "127.0.0.1") : ip_(ip)
+        explicit FakeFarHost(const char* ip = "127.0.0.1", uint16_t port = 0) : ip_(ip)
         {
             socket_ = ::socket(AF_INET, SOCK_DGRAM, 0);
             sockaddr_in address{};
             address.sin_family = AF_INET;
-            address.sin_port = 0;
+            address.sin_port = htons(port);
             inet_pton(AF_INET, ip, &address.sin_addr);
             bound_ = socket_ >= 0 && ::bind(socket_, reinterpret_cast<const sockaddr*>(&address), sizeof(address)) == 0;
             socklen_t length = sizeof(address);
@@ -392,6 +393,47 @@ namespace
         return -1;
     }
 
+    int Upstream(const std::vector<AvailableNetworkSession>& found, const std::string& gamertag)
+    {
+        for (const auto& session : found)
+            if (session.getHostGamertagProperty() == gamertag)
+                return session.getQualityOfServiceProperty().getBytesPerSecondUpstreamProperty();
+        ADD_FAILURE() << gamertag << " was not found";
+        return -1;
+    }
+
+    std::vector<SharpRuntime::bytecs> Invite(uint16_t connectPort, uint16_t responderPort)
+    {
+        DiscoveryUpstreamInviteMessage invite;
+        invite.ConnectPort = connectPort;
+        invite.ResponderPort = responderPort;
+        return NetDiscoveryProtocol::Encode(invite);
+    }
+
+    std::vector<SharpRuntime::bytecs> Report(uint16_t connectPort, int bytesPerSecond)
+    {
+        DiscoveryUpstreamReportMessage report;
+        report.ConnectPort = connectPort;
+        report.BytesPerSecond = bytesPerSecond;
+        return NetDiscoveryProtocol::Encode(report);
+    }
+
+    // Collects one upstream train; the sender of its probes, to report back to.
+    std::optional<sockaddr_in> ReceiveUpstreamTrain(const FakeFarHost& fake)
+    {
+        int probes = 0;
+        std::optional<sockaddr_in> from;
+        while (probes < kQosProbeCount)
+        {
+            const auto datagram = fake.Receive(500);
+            if (!datagram) return std::nullopt;
+            if (NetDiscoveryProtocol::PeekTag(datagram->first) != DiscoveryMessageTag::UpstreamProbe) continue;
+            ++probes;
+            from = datagram->second;
+        }
+        return from;
+    }
+
     std::vector<SharpRuntime::bytecs> Probe(uint16_t connectPort, uint8_t index)
     {
         DiscoveryQosProbeMessage probe;
@@ -476,6 +518,85 @@ TEST_F(SystemLinkDiscoveryTest, ASearchLeavesTheSharedDiscoveryPortToTheHost)
         << "the unicast query to port 61190 did not reach the host's listener";
     ::close(far);
     ::close(host);
+}
+
+// A host on the searcher's machine answers by two addresses (here 127.0.0.1 and 127.0.0.3); its
+// invitation and report take the second while another host on the same fixed port is listed. The
+// report is still the first host's.
+TEST_F(SystemLinkDiscoveryTest, AReportByAHostsSecondAddressIsItsOwnBesideASamePortHost)
+{
+    FakeFarHost firstPath("127.0.0.1"), secondPath("127.0.0.3"), other("127.0.0.2");
+    ASSERT_TRUE(firstPath.Ready() && secondPath.Ready() && other.Ready());
+    SystemLinkDiscovery::setExtraSearchAddressesProperty(
+        {firstPath.SearchAddress(), secondPath.SearchAddress(), other.SearchAddress()});
+
+    auto hosts = std::async(std::launch::async, [&]
+    {
+        const auto toFirst = firstPath.WaitForQuery();
+        const auto toSecond = secondPath.WaitForQuery();
+        const auto toOther = other.WaitForQuery();
+        if (!toFirst || !toSecond || !toOther) return false;
+        bool sent = firstPath.Send(*toFirst, NetDiscoveryProtocol::Encode(FarAnnounce("FarHost", 40000, 1)));
+        sent = secondPath.Send(*toSecond, NetDiscoveryProtocol::Encode(FarAnnounce("FarHost", 40000, 1))) && sent;
+        sent = other.Send(*toOther, NetDiscoveryProtocol::Encode(FarAnnounce("FarOther", 40000, 2))) && sent;
+        sent = secondPath.Send(*toSecond, Invite(40000, secondPath.Port())) && sent;
+        const auto searcher = ReceiveUpstreamTrain(secondPath);
+        return searcher && secondPath.Send(*searcher, Report(40000, 12345)) && sent;
+    });
+    const auto found = FoundFar(ENetDiscoveryService::FindSessions(NetworkSessionType::SystemLink));
+    ASSERT_TRUE(hosts.get());
+    ASSERT_EQ(found.size(), 2u);
+    EXPECT_EQ(Upstream(found, "FarHost"), 12345);
+    EXPECT_EQ(Upstream(found, "FarOther"), 0);
+}
+
+// Two machines choose their responder ports independently, so two hosts on the same fixed connect
+// port can invite to the same responder port number; each still gets a train.
+TEST_F(SystemLinkDiscoveryTest, TwoHostsWithOneResponderPortNumberEachGetAnUpstreamTrain)
+{
+    FakeFarHost first("127.0.0.1");
+    ASSERT_TRUE(first.Ready());
+    FakeFarHost second("127.0.0.2", first.Port());
+    ASSERT_TRUE(second.Ready()) << "127.0.0.2:" << first.Port() << " is taken";
+    SystemLinkDiscovery::setExtraSearchAddressesProperty({first.SearchAddress(), second.SearchAddress()});
+
+    const auto host = [](const FakeFarHost& fake, const char* gamertag, uint64_t instance)
+    {
+        const auto from = fake.WaitForQuery();
+        if (!from || !fake.Send(*from, NetDiscoveryProtocol::Encode(FarAnnounce(gamertag, 40000, instance)))
+            || !fake.Send(*from, Invite(40000, fake.Port())))
+            return false;
+        return ReceiveUpstreamTrain(fake).has_value();
+    };
+    auto a = std::async(std::launch::async, host, std::cref(first), "FarFirst", 1);
+    auto b = std::async(std::launch::async, host, std::cref(second), "FarSecond", 2);
+    EXPECT_EQ(FoundFar(ENetDiscoveryService::FindSessions(NetworkSessionType::SystemLink)).size(), 2u);
+    EXPECT_TRUE(a.get()) << "the first host got no upstream train";
+    EXPECT_TRUE(b.get()) << "the second host got no upstream train";
+}
+
+// A report that overtakes its host's announce waits for that host instead of going to the only
+// listing with its port.
+TEST_F(SystemLinkDiscoveryTest, AReportBeforeItsHostsAnnounceWaitsForThatHost)
+{
+    FakeFarHost first("127.0.0.1"), second("127.0.0.2");
+    ASSERT_TRUE(first.Ready() && second.Ready());
+    SystemLinkDiscovery::setExtraSearchAddressesProperty({first.SearchAddress(), second.SearchAddress()});
+
+    auto hosts = std::async(std::launch::async, [&]
+    {
+        const auto toFirst = first.WaitForQuery();
+        const auto toSecond = second.WaitForQuery();
+        if (!toFirst || !toSecond) return false;
+        bool sent = first.Send(*toFirst, NetDiscoveryProtocol::Encode(FarAnnounce("FarFirst", 40000, 1)));
+        sent = second.Send(*toSecond, Report(40000, 22222)) && sent;
+        return second.Send(*toSecond, NetDiscoveryProtocol::Encode(FarAnnounce("FarSecond", 40000, 2))) && sent;
+    });
+    const auto found = FoundFar(ENetDiscoveryService::FindSessions(NetworkSessionType::SystemLink));
+    ASSERT_TRUE(hosts.get());
+    ASSERT_EQ(found.size(), 2u);
+    EXPECT_EQ(Upstream(found, "FarFirst"), 0);
+    EXPECT_EQ(Upstream(found, "FarSecond"), 22222);
 }
 #endif
 #endif
