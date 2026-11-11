@@ -62,22 +62,15 @@ namespace CNA::Internal::Xnb
         }
 
         void ValidateMipCount(const char* readerName, const XnbTextureData& data,
-                              const bool requireCompleteChain)
+                              const std::uint32_t minimum)
         {
             const std::uint32_t maximum = MaxMipCount(data.width, data.height, data.depth);
-            if (data.mipCount == 0u || data.mipCount > maximum)
+            if (data.mipCount < minimum || data.mipCount > maximum)
             {
                 throw ContentLoadException(
                     std::string(readerName) + ": declared mip level count (" +
-                    std::to_string(data.mipCount) + ") is outside 1.." +
-                    std::to_string(maximum) + ".");
-            }
-            if (requireCompleteChain && data.mipCount != 1u && data.mipCount != maximum)
-            {
-                throw ContentLoadException(
-                    std::string(readerName) +
-                    ": incomplete mip chain; expected level zero only or all " +
-                    std::to_string(maximum) + " levels.");
+                    std::to_string(data.mipCount) + ") is outside " + std::to_string(minimum) +
+                    ".." + std::to_string(maximum) + ".");
             }
         }
 
@@ -272,11 +265,11 @@ namespace CNA::Internal::Xnb
         RequireTextureFormat("Texture2DReader", data.surfaceFormat, XnbTextureKind::Texture2D);
         data.depth = 1u;
         data.faceCount = 1u;
-        if (mipCount <= 0)
-        {
-            throw ContentLoadException("Texture2DReader: invalid mip level count.");
-        }
-        data.mipCount = static_cast<std::uint32_t>(mipCount);
+        // Refresh Texture2DReader.Read uses the level count only to ask for mipmaps
+        // (levelCount > 1, IL_0027-002b) and to bound the loop that reads and sets each level
+        // (IL_0035-0064): zero or less reads no level, and fewer than the texture's full chain
+        // leaves the remaining levels unset. A count past the chain stays CNA's own refusal.
+        data.mipCount = mipCount > 0 ? static_cast<std::uint32_t>(mipCount) : 0u;
         data.platform = input.getPlatformProperty();
         if (data.width > maximumDimension || data.height > maximumDimension)
         {
@@ -292,7 +285,7 @@ namespace CNA::Internal::Xnb
                  data.surfaceFormat == SurfaceFormat::NormalizedByte2 ? 2u : 4u},
                 "Texture2DReader"),
             "Texture2DReader");
-        ValidateMipCount("Texture2DReader", data, true);
+        ValidateMipCount("Texture2DReader", data, 0u);
         ReadTextureLevels(input, data, "Texture2DReader");
         return data;
     }
@@ -324,7 +317,7 @@ namespace CNA::Internal::Xnb
                      data.surfaceFormat)},
                 "Texture3DReader"),
             "Texture3DReader");
-        ValidateMipCount("Texture3DReader", data, false);
+        ValidateMipCount("Texture3DReader", data, 1u);
         ReadTextureLevels(input, data, "Texture3DReader");
         return data;
     }
@@ -350,7 +343,7 @@ namespace CNA::Internal::Xnb
         input.CheckDecodedByteSize(
             CheckedMultiplyOrThrow({data.width, data.height, 4u}, "TextureCubeReader"),
             "TextureCubeReader");
-        ValidateMipCount("TextureCubeReader", data, false);
+        ValidateMipCount("TextureCubeReader", data, 1u);
         ReadTextureLevels(input, data, "TextureCubeReader");
         return data;
     }

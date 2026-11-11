@@ -654,6 +654,53 @@ TEST_F(Texture2DContentTypeReaderTest, SingleAxisExceedingMaxTextureDimensionThr
 // shape -- a declared levelCount exceeding what a real width x height texture can ever have. Before
 // this task's fix, the read loop below would call Texture2D::SetData() for mip levels the actual
 // constructed texture never allocated, the confirmed root cause of the Vulkan/WebGPU crashes.
+// KI-CONTENT-LEVELS: Refresh's Texture2DReader.Read asks for mipmaps when levelCount > 1
+// (IL_0027-002b) and then reads and sets exactly levelCount levels (IL_0035-0064). A count of zero
+// or less creates the texture and reads no level; fewer levels than the full chain set only those.
+TEST_F(Texture2DContentTypeReaderTest, ALevelCountOfZeroOrLessCreatesTheTextureAndReadsNoLevel)
+{
+    for (const int32_t levelCount : {0, -1, std::numeric_limits<int32_t>::min()})
+    {
+        SCOPED_TRACE(levelCount);
+        ContentManager cm;
+        cm.setGraphicsDevice(gd);
+        System::IO::MemoryStream ms;
+        System::IO::BinaryWriter writer(&ms, true);
+        writer.Write(static_cast<int32_t>(SurfaceFormat::Color));
+        writer.Write(int32_t{4});
+        writer.Write(int32_t{4});
+        writer.Write(levelCount);
+        writer.Write(int32_t{0x5EED}); // not part of the texture: the next object's first field
+        writer.Flush();
+        const auto buf = ms.ToArray();
+        System::IO::MemoryStream body(buf.data(), static_cast<int32_t>(buf.size()));
+        ContentReader reader(&cm, &body, "test", 5, 'w');
+        auto typeReader = ContentTypeReaderManager::CreateReader("Microsoft.Xna.Framework.Content.Texture2DReader");
+        ASSERT_NE(typeReader, nullptr);
+
+        const Texture2D texture = std::any_cast<Texture2D>(typeReader->ReadUntyped(reader, std::any{}));
+        EXPECT_EQ(texture.getWidthProperty(), 4);
+        EXPECT_EQ(texture.getHeightProperty(), 4);
+        EXPECT_EQ(texture.getLevelCountProperty(), 1);
+        EXPECT_EQ(reader.ReadInt32(), 0x5EED);
+    }
+}
+
+TEST_F(Texture2DContentTypeReaderTest, APartialMipChainSetsOnlyTheLevelsItHolds)
+{
+    // 4x4 has a three-level chain (4, 2, 1); the file holds two levels.
+    const std::vector<std::vector<std::uint8_t>> levels{
+        std::vector<std::uint8_t>(4 * 4 * 4, 0x11), std::vector<std::uint8_t>(2 * 2 * 4, 0x22)};
+    Texture2D texture = ReadHandConstructedTexture2D(gd, SurfaceFormat::Color, 4, 4, levels);
+    ASSERT_EQ(texture.getLevelCountProperty(), 3);
+    std::vector<std::uint8_t> level0(levels[0].size(), 0xCD);
+    texture.GetData(0, nullptr, level0.data(), 0, static_cast<int>(level0.size()));
+    EXPECT_EQ(level0, levels[0]);
+    std::vector<std::uint8_t> level1(levels[1].size(), 0xCD);
+    texture.GetData(1, nullptr, level1.data(), 0, static_cast<int>(level1.size()));
+    EXPECT_EQ(level1, levels[1]);
+}
+
 TEST_F(Texture2DContentTypeReaderTest, MipLevelCountExceedingCeilingThrowsContentLoadException)
 {
     ContentManager cm;
