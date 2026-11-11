@@ -16,28 +16,34 @@ namespace CNA::Internal::Xnb
      */
     struct XnbLzxDecodeResult
     {
-        /** @brief Every byte decoded before decoding stopped. */
+        /** @brief Every byte served before decoding stopped. */
         std::vector<uint8_t> bytes;
 
         /**
-         * @brief The failure a read past @ref bytes raises; null when the decoded bytes end
-         *        where the container's declared size says they end.
+         * @brief The failure a read past @ref bytes raises; null when the served bytes spend
+         *        the container's declared size, so that such a read simply finds the end.
          */
         std::exception_ptr failure;
     };
 
     /**
      * @brief Decodes a `.xnb` LZX payload the way Refresh's `DecompressStream` serves it to the
-     *        content reader, frame by frame instead of 64 KiB buffer by buffer.
+     *        content reader, one native call's buffer at a time.
      *
-     * Refresh decompresses lazily: `DecompressNextBuffer` (IL_0000-000a) stops once
-     * `decompressedTodo` is spent, so a declared size of zero or less is an empty body and the
-     * buffer that crosses the declared size is still served whole; a native decoder failure
-     * (IL_0089-0095), a call that neither consumes input nor produces output (IL_009c-00ad) and a
-     * short read of the compressed bytes (`ReadBufferFromDisk` IL_0023-0030) each throw
-     * `InvalidOperationException`, and only when the reader reaches that point. CNA decodes
-     * eagerly, so it keeps the decoded prefix and records the failure for the read that would
-     * have reached it. One bound of CNA's own also stops decoding, with
+     * Refresh decompresses lazily: each `DecompressNextBuffer` (made when the reader has used the
+     * previous buffer) calls XnaNative.dll's `Decompress` with the unconsumed part of the current
+     * 64 KiB compressed chunk and a 64 KiB output buffer, and serves what that call produced.
+     * Measured on XnaNative.dll 4.0.30901.0 (the Refresh redistributable), one call decodes every
+     * frame whose bytes it has while it holds at most 64 KiB of undelivered output, takes the
+     * bytes of a frame it cannot finish yet, decodes nothing after a frame whose size is not
+     * 32 KiB, delivers at most 64 KiB and keeps the rest for the next call -- and fails as a whole
+     * when any frame it decodes fails, losing the good frames decoded with it (IL_0089-0095).
+     * So: nothing is decoded once `decompressedTodo` is spent (IL_0000-000a), and a declared size
+     * of zero or less is an empty body; the buffer that crosses the declared size is served
+     * whole; a call that takes and makes nothing (IL_009c-00ad) and a short compressed read
+     * (`ReadBufferFromDisk` IL_0023-0030) throw `InvalidOperationException`. CNA decodes eagerly,
+     * so it keeps the served prefix and records the failure for the read that would have reached
+     * it. One bound of CNA's own also stops decoding, with
      * Microsoft::Xna::Framework::Content::ContentLoadException rather than an XNA type because
      * Refresh has no such bound: more output than `limits.maxDecompressedSize` (Refresh streams
      * through fixed 64 KiB buffers and never holds the whole body, CNA does).
@@ -45,8 +51,8 @@ namespace CNA::Internal::Xnb
      * The compressed bytes are fetched as Refresh's `ReadBufferFromDisk` (IL_0000-0042) fetches
      * them, in 64 KiB chunks up to the declared size: when fewer than @p compressedSize bytes are
      * present -- possible only for a stream that cannot seek, whose declared size Refresh's
-     * `PrepareStream` does not check (IL_009f-00a5) -- the chunk the input ends inside fails as a
-     * whole (IL_0023-0030), so only the complete chunks before it reach the decoder.
+     * `PrepareStream` does not check (IL_009f-00a5) -- fetching the chunk the input ends inside
+     * fails, and what the decoder held undelivered is lost with it.
      *
      * @param compressedData Pointer to the compressed payload bytes (immediately following the
      *                       10-byte container header and the 4-byte decompressed-size field).
