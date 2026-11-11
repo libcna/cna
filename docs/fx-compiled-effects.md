@@ -633,6 +633,16 @@ the API already covers; revisit only if a real port constructs identical bytecod
   translation, exception ABI, texture/MSAA restrictions and the installed browser package each
   need their own policy, full corpus, lifetime/mutation and installed-consumer results before a
   family-wide default.
-- **`DIRECTX9`**: default OFF; its remaining corpus failure is in
-  [KNOWN_ISSUES.md](../KNOWN_ISSUES.md).
+- **`DIRECTX9`**: default OFF. Under Wine with DXVK 3.1.1, `Gap13CompiledEffectCorpusTest`'s
+  `LegacyBumpEnvironment` and `LegacyDepthOutput` and
+  `CompiledEffectLegacyMatrixDepthTest.PlainSignedMixedAndZeroMatchLiteralForkFixtures` fail; the
+  same binary passes all three under Wine's own wined3d (OpenGL), so they are DXVK translator
+  faults. DXVK's device stores the bump matrix transposed for a dot product
+  (`src/d3d9/d3d9_device.cpp` 7489-7494) that its dxbc-spirv SM1 converter no longer forms
+  (`sm3_converter.cpp` `applyBumpMapping`), which swaps BUMPENVMAT01 and BUMPENVMAT10 in TEXBEM,
+  TEXBEML and BEM; and its `emitTexMatMul` evaluates every TEXM3X2/TEXM3X3 row with the last
+  instruction's source and modifier, ignoring the PAD instruction's own, so a `_bx2` on only one
+  of TEXM3X2PAD/TEXM3X2DEPTH changes the depth. CNA's bytecode and states are unchanged and the
+  assertions stay strict (evidence: `../cnaplan/evidence/rev002/ki-dx9-legacy/`). No real Windows
+  hardware run exists.
 - **`SOFTWARE`**: default OFF, a separate qualification stage. HEADLESS/STUB are unsupported.
