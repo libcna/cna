@@ -1221,7 +1221,8 @@ namespace {
         if (!finding && !discovery && !client && !bind && operation != "host") return 64;
         auto gamer = SignedInGamer::CreateInternal("UnavailableTest");
         if (operation == "reply") {
-            // Keep discovery's shared socket alive, then fail only the next private search socket.
+            // A search after a search. Only a host opens the shared discovery socket (RV-NET-3), so
+            // this fails at the private search socket like the first search does.
             (void)NetworkSession::Find(NetworkSessionType::SystemLink, 1, {});
         }
         struct Blocker {
@@ -1246,9 +1247,10 @@ namespace {
             std::fprintf(stderr, "unavailable: cannot establish descriptor budget\n");
             return 2;
         }
+        // A search opens only its private reply socket; hosting opens the shared discovery socket.
         const char* expected = bind ? "Failed to bind discovery UDP socket."
-            : operation == "reply" ? "Failed to create discovery search UDP socket."
-            : finding || discovery ? "Failed to create discovery UDP socket."
+            : finding ? "Failed to create discovery search UDP socket."
+            : discovery ? "Failed to create discovery UDP socket."
             : client ? "Failed to create ENet client host." : "Failed to create ENet host.";
         bool typed = false, correctMessage = false, began = false;
         int callbacks = 0;

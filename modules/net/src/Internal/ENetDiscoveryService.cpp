@@ -685,6 +685,14 @@ namespace CNA::Internal::Net
             registeredHostPort_ = 0;
             registeredHostInstance_ = 0;
             responder_.reset();
+            // Only a host listens on the shared port. A binding left open here would be the newest
+            // on Linux and take the unicast queries meant for a host that started earlier on this
+            // machine, then drop them, since this process no longer answers.
+            if (socket_ != ENET_SOCKET_NULL)
+            {
+                enet_socket_destroy(socket_);
+                socket_ = ENET_SOCKET_NULL;
+            }
         }
     }
 
@@ -711,7 +719,11 @@ namespace CNA::Internal::Net
             return {};
         }
 
-        ENetSocket sock = EnsureSocket();
+        // A search itself needs only its private reply socket. The shared port is open only while
+        // this process hosts, and is then polled so that host still answers other machines; a
+        // searcher that opened it would, on Linux, take unicast queries meant for a host on this
+        // machine and drop them (see UnregisterHost).
+        const ENetSocket sock = socket_;
 
         DiscoveryQueryMessage query;
         query.SessionTypeFilter = sessionTypeFilter;
@@ -755,7 +767,8 @@ namespace CNA::Internal::Net
             auto remaining = std::chrono::duration_cast<std::chrono::milliseconds>(deadline - now).count();
             // The shared socket still answers other machines' queries while this one waits.
             PollOnce(replies, static_cast<uint32_t>(std::min<long long>(remaining, 5)));
-            while (PollOnce(sock, 0)) { }
+            if (sock != ENET_SOCKET_NULL)
+                while (PollOnce(sock, 0)) { }
         }
 
         std::vector<AvailableNetworkSession> results;

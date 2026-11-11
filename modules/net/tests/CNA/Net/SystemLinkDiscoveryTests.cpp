@@ -432,5 +432,50 @@ TEST_F(SystemLinkDiscoveryTest, ProbesAreTheirOwnHostsWhenTwoHostsShareAFixedPor
         EXPECT_GT(Downstream(found, "FarSecond"), 0);
     }
 }
+
+// A host's discovery listener shares port 61190, and Linux delivers a unicast datagram to the
+// newest binding of it. A process that only searches must not hold one, or a remote unicast query
+// (SystemLinkDiscovery's extra search addresses) meant for a host on this machine reaches the
+// searcher and is dropped.
+TEST_F(SystemLinkDiscoveryTest, ASearchLeavesTheSharedDiscoveryPortToTheHost)
+{
+    const int host = ::socket(AF_INET, SOCK_DGRAM, 0);
+    ASSERT_GE(host, 0);
+    const int reuse = 1;
+    ASSERT_EQ(::setsockopt(host, SOL_SOCKET, SO_REUSEADDR, &reuse, sizeof(reuse)), 0);
+    sockaddr_in address{};
+    address.sin_family = AF_INET;
+    address.sin_addr.s_addr = htonl(INADDR_ANY);
+    address.sin_port = htons(SystemLinkDiscovery::DiscoveryPort);
+    ASSERT_EQ(::bind(host, reinterpret_cast<const sockaddr*>(&address), sizeof(address)), 0)
+        << "another process holds port 61190 without SO_REUSEADDR";
+
+    (void)ENetDiscoveryService::FindSessions(NetworkSessionType::SystemLink);
+    // The search's own broadcast and loopback queries reached the listener too.
+    std::array<unsigned char, 1500> drain{};
+    while (::recv(host, drain.data(), drain.size(), MSG_DONTWAIT) > 0) { }
+
+    // The query a far searcher sends to this machine's address.
+    const int far = ::socket(AF_INET, SOCK_DGRAM, 0);
+    ASSERT_GE(far, 0);
+    sockaddr_in target{};
+    target.sin_family = AF_INET;
+    target.sin_port = htons(SystemLinkDiscovery::DiscoveryPort);
+    inet_pton(AF_INET, "127.0.0.1", &target.sin_addr);
+    CNA::Internal::Net::DiscoveryQueryMessage query;
+    query.SessionTypeFilter = NetworkSessionType::SystemLink;
+    const auto bytes = NetDiscoveryProtocol::Encode(query);
+    ASSERT_EQ(::sendto(far, bytes.data(), bytes.size(), 0, reinterpret_cast<const sockaddr*>(&target), sizeof(target)),
+              static_cast<ssize_t>(bytes.size()));
+
+    fd_set readable;
+    FD_ZERO(&readable);
+    FD_SET(host, &readable);
+    timeval timeout{1, 0};
+    EXPECT_GT(::select(host + 1, &readable, nullptr, nullptr, &timeout), 0)
+        << "the unicast query to port 61190 did not reach the host's listener";
+    ::close(far);
+    ::close(host);
+}
 #endif
 #endif

@@ -1554,7 +1554,7 @@ if(CNA_BUILD_TESTS)
     # discovered separately and hold one CTest RESOURCE_LOCK, so they run one at a time among
     # themselves and still in parallel with everything else.
     set(_cna_unit_tests_network_filter
-        "ENetBackendTest.*:ENetHostHandleTest.*:ENetDiscoveryServiceTest.*:NetworkSessionTest.*:ServiceSearchTest.*:OnlineNetworkSessionTest.*:NetworkSessionTypePolicyTest.*:TwoProcessLoopbackTest.*:AvailableNetworkSession*.*:QualityOfServiceTest.*:OnlineLeaderboardTest.*:LocalNetworkGamerTest.*:GamerServicesDispatcherHangRegressionTest.*:RelayTransportTest.*")
+        "ENetBackendTest.*:ENetHostHandleTest.*:ENetDiscoveryServiceTest.*:SystemLinkDiscoveryTest.*:NetworkSessionTest.*:ServiceSearchTest.*:OnlineNetworkSessionTest.*:NetworkSessionTypePolicyTest.*:TwoProcessLoopbackTest.*:AvailableNetworkSession*.*:QualityOfServiceTest.*:OnlineLeaderboardTest.*:LocalNetworkGamerTest.*:GamerServicesDispatcherHangRegressionTest.*:RelayTransportTest.*")
     # Avatar acceptance AVH-07: the SDLGPU and FNA3D compiled-effect suites test their
     # renderer's own runtime and need it to be the device's. In a multi-renderer tree whose default
     # is another renderer they were discovered with the default, so most cases skipped and those
