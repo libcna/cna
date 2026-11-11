@@ -225,10 +225,11 @@ namespace
 
     // Minimal compact .xwb with one mono 16-bit PCM entry (half a second of silence) -- needed
     // (unlike BuildXsbFixtureBytes above) so that Cue::Play() resolves a real WaveBank entry and
-    // creates an actual SoundEffectInstance, which T-4B's PlayCue-3D geometry test needs a real
-    // MIX_Track to inspect. The wave must outlast PlayCue itself: PlayCue keeps a fire-and-forget
-    // cue only if it is still playing after Play(), and a 2 ms wave was sometimes already over on
-    // a loaded CI runner, so the test found no cue to inspect.
+    // creates an actual SoundEffectInstance with a real MIX_Track. The wave must outlast PlayCue
+    // itself for the natural-completion test: PlayCue keeps a fire-and-forget cue only if it is
+    // still playing after Play(), and a 2 ms wave was sometimes already over on a loaded CI
+    // runner. Tests that inspect a playing cue use the looping fixture instead, whose lifetime
+    // does not depend on this length.
     std::vector<uint8_t> BuildApply3DXwbFixtureBytes()
     {
         constexpr uint32_t headerSize        = 48;
@@ -281,20 +282,32 @@ namespace
         return data;
     }
 
-    // Minimal .xsb with one wavebank reference, one simple sound (categoryIndex=0), and one
-    // simple cue "Apply3DCue" playing that sound.
-    std::vector<uint8_t> BuildApply3DXsbFixtureBytes()
+    // Minimal .xsb with one wavebank reference, one sound (categoryIndex=0), and one simple cue
+    // playing that sound. Without @p looping the cue is "Apply3DCue" and its sound is simple: the
+    // wave plays once and the cue finishes naturally. With @p looping the cue is "Apply3DLoopCue"
+    // and its sound is complex, one track whose zero-time PlayWave event has loop count 255,
+    // XACT's infinite sentinel: the voice never reaches its end, so the cue stays playing until it
+    // is stopped or its bank is disposed, however late the test inspects it.
+    std::vector<uint8_t> BuildApply3DXsbFixtureBytes(bool looping)
     {
         constexpr uint32_t headerSize   = 74;
         constexpr uint32_t bankNameSize = 64;
         constexpr uint32_t baseOffset   = headerSize + bankNameSize;
+        // Simple: the common 9 bytes plus the inline wave reference (u16 wave, u8 bank).
+        // Complex: the common 9 bytes, trackCount, one track record (volume, event code, filter,
+        // frequency) and its event block (count, then one 16-byte PlayWave event).
+        constexpr uint32_t simpleSoundSize  = 12;
+        constexpr uint32_t complexSoundSize = 9 + 1 + 9;
+        constexpr uint32_t eventBlockSize   = 1 + 16;
 
         const uint32_t wavebankNameOffset = baseOffset;
         const uint32_t soundOffset        = wavebankNameOffset + 64;
-        const uint32_t cueSimpleOffset    = soundOffset + 12;
+        const uint32_t eventBlockOffset   = soundOffset + complexSoundSize;
+        const uint32_t cueSimpleOffset    = looping ? eventBlockOffset + eventBlockSize
+                                                    : soundOffset + simpleSoundSize;
         const uint32_t cueNameIndexOffset = cueSimpleOffset + 5;
         const uint32_t cueNameStrOffset   = cueNameIndexOffset + 6;
-        const std::string cueName = "Apply3DCue";
+        const std::string cueName = looping ? "Apply3DLoopCue" : "Apply3DCue";
 
         std::vector<uint8_t> data;
         const char magic[4] = { 'S', 'D', 'B', 'K' };
@@ -328,14 +341,36 @@ namespace
         AppendPadded(data, "Apply3DSoundBank", bankNameSize);
         AppendPadded(data, kApply3DWaveBankName, 64);
 
-        AppendU8(data, 0);    // flags
+        AppendU8(data, looping ? 0x01 : 0x00); // flags: SOUND_FLAG_COMPLEX when looping
         AppendU16(data, 0);   // categoryIndex
         AppendU8(data, 0xFF); // volume raw byte
         AppendU16(data, 0);   // pitchCents
         AppendU8(data, 0);    // priority
         AppendU16(data, 0);   // soundLength (skipped)
-        AppendU16(data, 0);   // waveIdx
-        AppendU8(data, 0);    // wbIdx
+        if (looping)
+        {
+            AppendU8(data, 1);                 // trackCount
+            AppendU8(data, 180);               // track volume byte, about 0 dB
+            AppendU32(data, eventBlockOffset); // track event code
+            AppendU16(data, 0);                // filterData: no filter
+            AppendU16(data, 0);                // filter frequency
+
+            AppendU8(data, 1);    // eventCount
+            AppendU32(data, 1);   // info: FACTEVENT_PLAYWAVE, timestamp 0
+            AppendU16(data, 0);   // randomOffset
+            AppendU8(data, 0xFF); // event separator
+            AppendU8(data, 0);    // play flags
+            AppendU16(data, 0);   // waveIdx
+            AppendU8(data, 0);    // wbIdx
+            AppendU8(data, 255);  // loopCount: infinite
+            AppendU16(data, 0);   // position
+            AppendU16(data, 0);   // angle
+        }
+        else
+        {
+            AppendU16(data, 0);   // waveIdx
+            AppendU8(data, 0);    // wbIdx
+        }
 
         AppendU8(data, 0);
         AppendU32(data, soundOffset);
@@ -358,7 +393,14 @@ namespace
     const std::string& Apply3DXsbFixturePath()
     {
         static const std::string path = WriteFixture(
-            "cna_soundbank_test", "apply3d.xsb", BuildApply3DXsbFixtureBytes());
+            "cna_soundbank_test", "apply3d.xsb", BuildApply3DXsbFixtureBytes(false));
+        return path;
+    }
+
+    const std::string& Apply3DLoopXsbFixturePath()
+    {
+        static const std::string path = WriteFixture(
+            "cna_soundbank_test", "apply3d-loop.xsb", BuildApply3DXsbFixtureBytes(true));
         return path;
     }
 }
@@ -644,6 +686,11 @@ TEST(SoundBankTest, PlayCueThreeArgAfterDisposeThrowsRefreshRefusal)
 // fire-and-forget cue, not just accept listener/emitter without using them. XsbFixtureBytes'
 // wavebank-less "Explosion" cue can't exercise this (Cue::active_ stays empty), so this uses a
 // real WaveBank-backed fixture instead and reads back the actual SDL_mixer track gain.
+//
+// The cue loops forever, so PlayCue keeps it and its voices stay alive until the bank is
+// disposed: the gains are read from playing voices however late this thread runs. A finite cue
+// made the test depend on the wave outlasting PlayCue and the reads. Natural completion is
+// IsInUseFalseSoonAfterFireAndForgetCueNaturallyFinishes's.
 TEST(SoundBankTest, PlayCueThreeArgAppliesRealAttenuationToActiveInstance)
 {
     System::Environment::SetEnvironmentVariable("SDL_AUDIODRIVER", "dummy");
@@ -651,12 +698,12 @@ TEST(SoundBankTest, PlayCueThreeArgAppliesRealAttenuationToActiveInstance)
     try
     {
         (void)SharedApply3DWaveBank(); // must be registered with the engine before PlayCue()
-        SoundBank bank(&SharedEngine(), Apply3DXsbFixturePath());
+        SoundBank bank(&SharedEngine(), Apply3DLoopXsbFixturePath());
         AudioListener listener; // default position: origin
 
         AudioEmitter nearEmitter;
         nearEmitter.setPositionProperty({1.0f, 0.0f, 0.0f});
-        bank.PlayCue("Apply3DCue", listener, nearEmitter);
+        bank.PlayCue("Apply3DLoopCue", listener, nearEmitter);
 
         Cue* nearCue = SoundBankTestAccess::LastFireAndForgetCue(bank);
         ASSERT_NE(nearCue, nullptr);
@@ -672,7 +719,7 @@ TEST(SoundBankTest, PlayCueThreeArgAppliesRealAttenuationToActiveInstance)
 
         AudioEmitter farEmitter;
         farEmitter.setPositionProperty({10000.0f, 0.0f, 0.0f});
-        bank.PlayCue("Apply3DCue", listener, farEmitter);
+        bank.PlayCue("Apply3DLoopCue", listener, farEmitter);
 
         Cue* farCue = SoundBankTestAccess::LastFireAndForgetCue(bank);
         ASSERT_NE(farCue, nullptr);
@@ -683,6 +730,9 @@ TEST(SoundBankTest, PlayCueThreeArgAppliesRealAttenuationToActiveInstance)
         const float farGain = MIX_GetTrackGain(farTrack);
 
         EXPECT_LT(farGain, nearGain);
+        // The hold this test relies on: both cues are still playing after every read.
+        EXPECT_TRUE(nearCue->getIsPlayingProperty());
+        EXPECT_TRUE(farCue->getIsPlayingProperty());
     }
     catch (...)
     {
