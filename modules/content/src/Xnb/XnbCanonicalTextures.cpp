@@ -239,7 +239,8 @@ namespace CNA::Internal::Xnb
     }
 
     XnbTextureData DecodeTexture2DXnbData(
-        ContentReader& input, const std::uint32_t maximumDimension)
+        ContentReader& input, const std::uint32_t maximumDimension,
+        const XnbTextureConstruction& atConstruction)
     {
         XnbTextureData data;
         data.kind = XnbTextureKind::Texture2D;
@@ -271,6 +272,12 @@ namespace CNA::Internal::Xnb
         // leaves the remaining levels unset. A count past the chain stays CNA's own refusal.
         data.mipCount = mipCount > 0 ? static_cast<std::uint32_t>(mipCount) : 0u;
         data.platform = input.getPlatformProperty();
+        // Refresh Texture2DReader.Read IL_001f-002f constructs the texture here, before any level
+        // is read; CNA's own bounds below come after it.
+        if (atConstruction)
+        {
+            atConstruction(data);
+        }
         if (data.width > maximumDimension || data.height > maximumDimension)
         {
             throw ContentLoadException(

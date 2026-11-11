@@ -477,15 +477,27 @@ namespace CNA::Internal::Xnb
     };
 
     /**
+     * @brief Called with a texture's header -- format, size and level count, no level bytes --
+     *        once the decoder has read and checked it and before it reads any level.
+     *
+     * That is where Refresh's texture readers construct the texture (Texture2DReader.Read
+     * IL_001f-002f), so a reader that builds the runtime texture there meets the constructor's
+     * own refusals -- the profile's size limit among them -- before any level is read.
+     */
+    using XnbTextureConstruction = std::function<void(const XnbTextureData& header)>;
+
+    /**
      * @brief Reads and validates one Texture2D payload without constructing a GraphicsDevice object.
      *
      * @param input Content reader positioned at the first Texture2D field.
      * @param maximumDimension Optional caller-owned target limit checked before level bytes.
+     * @param atConstruction Optional call made with the header before any level is read.
      * @return Canonical source format, dimensions, mip count, and raw level bytes.
      */
     [[nodiscard]] XnbTextureData DecodeTexture2DXnbData(
         Microsoft::Xna::Framework::Content::ContentReader& input,
-        std::uint32_t maximumDimension = std::numeric_limits<std::uint32_t>::max());
+        std::uint32_t maximumDimension = std::numeric_limits<std::uint32_t>::max(),
+        const XnbTextureConstruction& atConstruction = {});
 
     /**
      * @brief Reads and validates one Texture3D payload without constructing a GPU resource.
@@ -510,12 +522,14 @@ namespace CNA::Internal::Xnb
      *
      * @param input Initialized content reader positioned at the first SpriteFont field.
      * @param maximumTextureDimension Optional target limit for the nested atlas.
+     * @param atlasConstruction Optional call made with the atlas header before its levels are read.
      * @return Canonical font and atlas CPU data.
      */
     [[nodiscard]] XnbSpriteFontData DecodeSpriteFontXnbData(
         Microsoft::Xna::Framework::Content::ContentReader& input,
         std::uint32_t maximumTextureDimension =
-            std::numeric_limits<std::uint32_t>::max());
+            std::numeric_limits<std::uint32_t>::max(),
+        const XnbTextureConstruction& atlasConstruction = {});
 
     /**
      * @brief Reads a SoundEffect payload into neutral WAVEFORMATEX and sample data.

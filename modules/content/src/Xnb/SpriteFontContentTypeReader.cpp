@@ -45,8 +45,15 @@ namespace CNA::Internal::Xnb
         }
         auto& device = CNA::Internal::ContentManagerAccess::GraphicsDeviceFromContentReader(input);
         const auto maximumDimension = static_cast<std::uint32_t>(device.GetMaxTextureDimension());
-        XnbSpriteFontData decoded = DecodeSpriteFontXnbData(input, maximumDimension);
-        Texture2D texture = CreateTexture2DFromXnbData(input, device, decoded.atlas);
+        // The atlas is read by Refresh's Texture2DReader, which constructs it once its header is
+        // read (IL_001f-002f) and before its levels.
+        std::optional<Texture2D> atlas;
+        XnbSpriteFontData decoded = DecodeSpriteFontXnbData(
+            input, maximumDimension, [&](const XnbTextureData& header) {
+                atlas.emplace(ConstructTexture2DForXnbData(device, header));
+            });
+        UploadTexture2DXnbData(*atlas, device, decoded.atlas);
+        Texture2D texture = std::move(*atlas);
         // Canonical decoding bypasses ReadObject<Texture2D>, but the atlas is
         // still a newly materialized disposable belonging to this read.
         input.RecordDisposable(texture);

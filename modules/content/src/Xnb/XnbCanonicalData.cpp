@@ -72,7 +72,8 @@ namespace CNA::Internal::Xnb
     }
 
     XnbSpriteFontData DecodeSpriteFontXnbData(
-        ContentReader& input, const std::uint32_t maximumTextureDimension)
+        ContentReader& input, const std::uint32_t maximumTextureDimension,
+        const XnbTextureConstruction& atlasConstruction)
     {
         RequireReader(
             XnbCanonicalReaderAccess::ReadReference(input),
@@ -80,7 +81,7 @@ namespace CNA::Internal::Xnb
             input.getAssetNameProperty());
 
         XnbSpriteFontData font;
-        font.atlas = DecodeTexture2DXnbData(input, maximumTextureDimension);
+        font.atlas = DecodeTexture2DXnbData(input, maximumTextureDimension, atlasConstruction);
         font.glyphs = ReadList<Microsoft::Xna::Framework::Rectangle>(
             input,
             "Microsoft.Xna.Framework.Content.ListReader`1[[Microsoft.Xna.Framework.Rectangle]]",

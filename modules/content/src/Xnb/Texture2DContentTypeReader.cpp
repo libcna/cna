@@ -41,6 +41,44 @@ namespace CNA::Internal::Xnb
         return existingInstance.value_or(nullptr);
     }
 
+    namespace
+    {
+        /// The format a decoded Texture2D is created and uploaded in.
+        struct Texture2DUpload
+        {
+            SurfaceFormat format = SurfaceFormat::Color;
+            bool keepCompressed = false;
+        };
+
+        [[nodiscard]] Texture2DUpload PlanTexture2DUpload(GraphicsDevice& device,
+                                                          const XnbTextureData& decoded)
+        {
+            const auto width = static_cast<int32_t>(decoded.width);
+            const auto height = static_cast<int32_t>(decoded.height);
+            const SurfaceFormat surfaceFormat = decoded.surfaceFormat;
+            // WEBGPU-144 Phase 2 (XNB-24's per-renderer capability query): keep DXT content
+            // compressed and upload the raw blocks when the active renderer opts in via
+            // LoadsCompressedContentNativelyEXT() AND transfers this format as blocks; otherwise
+            // CPU-decompress DXT to Color exactly as before (the historical default for every other
+            // renderer).
+            // XNA's content loader accepts authored DXT atlases with block-aligned NPOT dimensions
+            // under Reach (the Platformer Hud font is Dxt3, 128x132), although the public Reach
+            // Texture2D constructor refuses that shape. Use the existing lossless DXT-to-Color
+            // content path for such assets; do not weaken the public construction contract.
+            const bool reachNpotCompressed =
+                device.getGraphicsProfileProperty() == GraphicsProfile::Reach &&
+                (!std::has_single_bit(static_cast<unsigned int>(width)) ||
+                 !std::has_single_bit(static_cast<unsigned int>(height)));
+            Texture2DUpload upload;
+            upload.keepCompressed = IsCompressed(surfaceFormat) && !reachNpotCompressed
+                && device.GetRenderer().LoadsCompressedContentNativelyEXT()
+                && device.GetRenderer().IsCompressedTransferFormatEXT(static_cast<int>(surfaceFormat));
+            upload.format = (IsCompressed(surfaceFormat) && !upload.keepCompressed)
+                ? SurfaceFormat::Color : surfaceFormat;
+            return upload;
+        }
+    }
+
     Texture2D Texture2DReader::Read(ContentReader& input, std::optional<Texture2D> existingInstance)
     {
         GraphicsDevice* device = input.getContentManagerProperty()
@@ -52,9 +90,32 @@ namespace CNA::Internal::Xnb
                 "Texture2DReader: no GraphicsDevice available (ContentManager was not set on "
                 "this ContentReader).");
         }
+        // Refresh Texture2DReader.Read constructs the texture once the header is read
+        // (IL_001f-002f) -- the constructor's refusals, the profile's size limit among them, come
+        // before any level is read -- and then reads and sets the levels (IL_0035-0064).
+        std::optional<Texture2D> constructed;
+        const bool reload = existingInstance.has_value();
         const XnbTextureData decoded = DecodeTexture2DXnbData(
-            input, static_cast<std::uint32_t>(device->GetMaxTextureDimension()));
-        return CreateTexture2DFromXnbData(input, *device, decoded, std::move(existingInstance));
+            input, static_cast<std::uint32_t>(device->GetMaxTextureDimension()),
+            [&](const XnbTextureData& header) {
+                if (!reload)
+                {
+                    constructed.emplace(ConstructTexture2DForXnbData(*device, header));
+                }
+            });
+        if (!constructed)
+        {
+            return CreateTexture2DFromXnbData(input, *device, decoded, std::move(existingInstance));
+        }
+        UploadTexture2DXnbData(*constructed, *device, decoded);
+        return std::move(*constructed);
+    }
+
+    Texture2D ConstructTexture2DForXnbData(GraphicsDevice& device, const XnbTextureData& header)
+    {
+        return Texture2D(device, static_cast<int32_t>(header.width),
+                         static_cast<int32_t>(header.height), header.mipCount > 1,
+                         PlanTexture2DUpload(device, header).format);
     }
 
     Texture2D CreateTexture2DFromXnbData(
@@ -64,27 +125,8 @@ namespace CNA::Internal::Xnb
         const int32_t width = static_cast<int32_t>(decoded.width);
         const int32_t height = static_cast<int32_t>(decoded.height);
         const int32_t levelCount = static_cast<int32_t>(decoded.mipCount);
-        const SurfaceFormat surfaceFormat = decoded.surfaceFormat;
         GraphicsDevice* const device = &deviceReference;
-
-        // WEBGPU-144 Phase 2 (XNB-24's per-renderer capability query): keep DXT content compressed
-        // and upload the raw blocks when the active renderer opts in via
-        // LoadsCompressedContentNativelyEXT() AND transfers this format as blocks; otherwise
-        // CPU-decompress DXT to Color exactly as before (the historical default for every other
-        // renderer).
-        // XNA's content loader accepts authored DXT atlases with block-aligned NPOT dimensions
-        // under Reach (the Platformer Hud font is Dxt3, 128x132), although the public Reach
-        // Texture2D constructor refuses that shape. Use the existing lossless DXT-to-Color
-        // content path for such assets; do not weaken the public construction contract.
-        const bool reachNpotCompressed =
-            device->getGraphicsProfileProperty() == GraphicsProfile::Reach &&
-            (!std::has_single_bit(static_cast<unsigned int>(width)) ||
-             !std::has_single_bit(static_cast<unsigned int>(height)));
-        const bool keepCompressed = IsCompressed(surfaceFormat) && !reachNpotCompressed
-            && device->GetRenderer().LoadsCompressedContentNativelyEXT()
-            && device->GetRenderer().IsCompressedTransferFormatEXT(static_cast<int>(surfaceFormat));
-        const SurfaceFormat uploadFormat =
-            (IsCompressed(surfaceFormat) && !keepCompressed) ? SurfaceFormat::Color : surfaceFormat;
+        const SurfaceFormat uploadFormat = PlanTexture2DUpload(deviceReference, decoded).format;
         // Reject dimensions/mip counts the active renderer cannot actually
         // create, before any renderer-specific texture creation is attempted. Neither the native
         // graphics APIs' own validation (Vulkan's validation layer is advisory; wgpu-native
@@ -112,7 +154,19 @@ namespace CNA::Internal::Xnb
 
         Texture2D texture = existingInstance.has_value()
             ? std::move(*existingInstance)
-            : Texture2D(*device, width, height, levelCount > 1, uploadFormat);
+            : ConstructTexture2DForXnbData(deviceReference, decoded);
+        UploadTexture2DXnbData(texture, deviceReference, decoded);
+        return texture;
+    }
+
+    void UploadTexture2DXnbData(Texture2D& texture, GraphicsDevice& device,
+                                const XnbTextureData& decoded)
+    {
+        const int32_t width = static_cast<int32_t>(decoded.width);
+        const int32_t height = static_cast<int32_t>(decoded.height);
+        const int32_t levelCount = static_cast<int32_t>(decoded.mipCount);
+        const SurfaceFormat surfaceFormat = decoded.surfaceFormat;
+        const bool keepCompressed = PlanTexture2DUpload(device, decoded).keepCompressed;
 
         std::vector<std::vector<uint8_t>> uploadLevels;
         if (IsCompressed(surfaceFormat) && !keepCompressed)
@@ -158,8 +212,6 @@ namespace CNA::Internal::Xnb
 
             texture.SetData(level, nullptr, bytes.data(), 0, static_cast<int>(bytes.size()));
         }
-
-        return texture;
     }
 
     void RegisterTexture2DXnbReader()

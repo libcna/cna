@@ -32,6 +32,31 @@ namespace CNA::Internal::Xnb
             std::nullopt);
 
     /**
+     * @brief Constructs, without levels, the runtime Texture2D a decoded header describes.
+     *
+     * The constructor's own validation -- size, the profile's format list and size limit, and the
+     * renderer's -- runs here, which is where Refresh's Texture2DReader constructs it
+     * (IL_001f-002f).
+     *
+     * @param device The device the texture is created on.
+     * @param header Decoded format, size and level count; its levels are not used.
+     * @return A texture with a full mip chain when the header has more than one level.
+     */
+    [[nodiscard]] Microsoft::Xna::Framework::Graphics::Texture2D ConstructTexture2DForXnbData(
+        Microsoft::Xna::Framework::Graphics::GraphicsDevice& device, const XnbTextureData& header);
+
+    /**
+     * @brief Sets every decoded level of @p texture, constructed for @p decoded.
+     *
+     * @param texture The texture ConstructTexture2DForXnbData made for @p decoded.
+     * @param device The device it was created on.
+     * @param decoded Validated source texture data, levels included.
+     */
+    void UploadTexture2DXnbData(Microsoft::Xna::Framework::Graphics::Texture2D& texture,
+                                Microsoft::Xna::Framework::Graphics::GraphicsDevice& device,
+                                const XnbTextureData& decoded);
+
+    /**
      * @brief FNA's inert base `Microsoft.Xna.Framework.Content.TextureReader`.
      *
      * The reader exists in XNB manifests that contain a field declared as the abstract

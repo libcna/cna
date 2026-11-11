@@ -5,6 +5,11 @@
 // full end-to-end milestone test through ContentManager.
 
 #include <array>
+#include <utility>
+#include <iterator>
+#include <fstream>
+#include <cstring>
+#include <algorithm>
 #include <exception>
 #include <limits>
 #include <memory>
@@ -15,6 +20,7 @@
 
 #include "CNA/Internal/Renderers/Common/IGraphicsRenderer.hpp"
 #include "CNA/Internal/Xnb/Texture2DContentTypeReader.hpp"
+#include "CNA/Internal/Xnb/XnbBuiltInReaders.hpp"
 #include "CNA/RendererTestGate.hpp"
 #include "Microsoft/Xna/Framework/Content/ContentLoadException.hpp"
 #include "System/ArgumentOutOfRangeException.hpp"
@@ -29,6 +35,7 @@
 #include "Microsoft/Xna/Framework/Graphics/PackedVector/NormalizedByte2.hpp"
 #include "Microsoft/Xna/Framework/Graphics/PackedVector/NormalizedByte4.hpp"
 #include "Microsoft/Xna/Framework/Graphics/PresentationParameters.hpp"
+#include "Microsoft/Xna/Framework/Graphics/SpriteFont.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SurfaceFormat.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Texture.hpp"
 #include "System/IO/BinaryWriter.hpp"
@@ -599,7 +606,11 @@ TEST_F(Texture2DContentTypeReaderTest, LoadReportsANonPositiveSizeUnwrapped)
     }
 }
 
-TEST_F(Texture2DContentTypeReaderTest, AbsurdlyLargeDimensionsThrowContentLoadExceptionNotBadAlloc)
+// KI-CONTENT-OVERSIZE: Refresh's Texture2D.ValidateCreationParameters refuses a width or height
+// past the profile's MaxTextureSize with ProfileCapabilities.ThrowNotSupportedException
+// (IL_0062-0090), in the constructor Texture2DReader.Read calls before reading any level
+// (IL_001f-002f). These two used to expect CNA's own ContentLoadException.
+TEST_F(Texture2DContentTypeReaderTest, AbsurdlyLargeDimensionsThrowNotSupportedExceptionNotBadAlloc)
 {
     ContentManager cm;
     cm.setGraphicsDevice(gd);
@@ -619,7 +630,7 @@ TEST_F(Texture2DContentTypeReaderTest, AbsurdlyLargeDimensionsThrowContentLoadEx
     auto typeReader = ContentTypeReaderManager::CreateReader("Microsoft.Xna.Framework.Content.Texture2DReader");
     ASSERT_NE(typeReader, nullptr);
 
-    EXPECT_THROW(typeReader->ReadUntyped(reader, std::any{}), ContentLoadException);
+    EXPECT_THROW(typeReader->ReadUntyped(reader, std::any{}), System::NotSupportedException);
 }
 
 // Reproduces the fuzz-discovered shape exactly -- one axis huge enough to
@@ -627,7 +638,7 @@ TEST_F(Texture2DContentTypeReaderTest, AbsurdlyLargeDimensionsThrowContentLoadEx
 // the width*height*4 product stays comfortably under CheckDecodedByteSize's own 256MB ceiling
 // (confirmed: 500000*1*4 = 2,000,000 bytes). Before this task's fix, this shape reached
 // Texture2D's renderer-specific construction unchecked; the byte-size check alone never caught it.
-TEST_F(Texture2DContentTypeReaderTest, SingleAxisExceedingMaxTextureDimensionThrowsContentLoadException)
+TEST_F(Texture2DContentTypeReaderTest, SingleAxisExceedingMaxTextureDimensionThrowsNotSupportedException)
 {
     ContentManager cm;
     cm.setGraphicsDevice(gd);
@@ -647,7 +658,93 @@ TEST_F(Texture2DContentTypeReaderTest, SingleAxisExceedingMaxTextureDimensionThr
     auto typeReader = ContentTypeReaderManager::CreateReader("Microsoft.Xna.Framework.Content.Texture2DReader");
     ASSERT_NE(typeReader, nullptr);
 
-    EXPECT_THROW(typeReader->ReadUntyped(reader, std::any{}), ContentLoadException);
+    EXPECT_THROW(typeReader->ReadUntyped(reader, std::any{}), System::NotSupportedException);
+}
+
+TEST_F(Texture2DContentTypeReaderTest, AnOversizedTextureIsRefusedBeforeItsLevelsAreRead)
+{
+    // One texel past the profile's MaxTextureSize, on either axis, with no level bytes at all:
+    // the constructor refuses it before the reader asks for them.
+    const int32_t maximum = gd.GetRenderer().GetMaxTextureSizeForProfileEXT(
+        static_cast<int>(gd.getGraphicsProfileProperty()));
+    for (const auto& [width, height] : {std::pair<int32_t, int32_t>{maximum + 1, 1},
+                                        std::pair<int32_t, int32_t>{1, maximum + 1}})
+    {
+        SCOPED_TRACE(width);
+        const std::exception_ptr thrown =
+            ReadTexture2DHeaderOnly(gd, static_cast<int32_t>(SurfaceFormat::Color), width, height, 1);
+        ASSERT_NE(thrown, nullptr);
+        try
+        {
+            std::rethrow_exception(thrown);
+        }
+        catch (const System::NotSupportedException& error)
+        {
+            EXPECT_NE(error.getMessageProperty().find("maximum Texture2D size of " + std::to_string(maximum)),
+                      std::string::npos) << error.getMessageProperty();
+        }
+        catch (const std::exception& other)
+        {
+            ADD_FAILURE() << "expected NotSupportedException, got: " << other.what();
+        }
+    }
+    // The limit itself is a size the profile allows.
+    const std::exception_ptr atLimit =
+        ReadTexture2DHeaderOnly(gd, static_cast<int32_t>(SurfaceFormat::Color), maximum, 1, 1);
+    ASSERT_NE(atLimit, nullptr);
+    EXPECT_THROW(std::rethrow_exception(atLimit), System::IO::EndOfStreamException);
+}
+
+TEST_F(Texture2DContentTypeReaderTest, LoadReportsAnOversizedTextureAsNotSupported)
+{
+    const int32_t maximum = gd.GetRenderer().GetMaxTextureSizeForProfileEXT(
+        static_cast<int>(gd.getGraphicsProfileProperty()));
+    for (const bool strict : {false, true})
+    {
+        SCOPED_TRACE(strict);
+        ZeroWidthTextureManager manager(gd, strict, maximum + 1);
+        EXPECT_THROW((void)manager.Load<Texture2D>("texture"), System::NotSupportedException);
+    }
+}
+
+TEST_F(Texture2DContentTypeReaderTest, AnOversizedSpriteFontAtlasIsRefusedAsATexture2D)
+{
+    // Refresh's SpriteFontReader reads its atlas through Texture2DReader, so the same refusal.
+    CNA::Internal::Xnb::RegisterAllBuiltInXnbReaders();
+    std::ifstream in("tests/assets/xnb/cna/windows/uncompressed/spritefont_two_glyphs.xnb", std::ios::binary);
+    std::vector<uint8_t> file((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
+    ASSERT_FALSE(file.empty());
+    // The atlas header: Color, 8 x 8, one level.
+    const std::vector<uint8_t> header{0, 0, 0, 0, 8, 0, 0, 0, 8, 0, 0, 0, 1, 0, 0, 0};
+    const auto at = std::search(file.begin(), file.end(), header.begin(), header.end());
+    ASSERT_NE(at, file.end());
+    const int32_t maximum = gd.GetRenderer().GetMaxTextureSizeForProfileEXT(
+        static_cast<int>(gd.getGraphicsProfileProperty()));
+    const int32_t width = maximum + 1;
+    std::memcpy(&*(at + 4), &width, sizeof(width));
+
+    class FontManager final : public ContentManager
+    {
+    public:
+        explicit FontManager(std::vector<uint8_t> bytes) : bytes_(std::move(bytes))
+        {
+            RouteLoadsThroughOpenStreamEXT(true);
+        }
+
+    protected:
+        std::unique_ptr<System::IO::Stream> OpenStream(const std::string&) override
+        {
+            return std::make_unique<System::IO::MemoryStream>(
+                bytes_.data(), static_cast<int32_t>(bytes_.size()), false);
+        }
+
+    private:
+        std::vector<uint8_t> bytes_;
+    };
+    FontManager manager(file);
+    manager.setGraphicsDevice(gd);
+    EXPECT_THROW((void)manager.Load<Microsoft::Xna::Framework::Graphics::SpriteFont>("font"),
+                 System::NotSupportedException);
 }
 
 // Reproduces the fuzz-discovered "mipLevels=25 against a 15-level maximum"
