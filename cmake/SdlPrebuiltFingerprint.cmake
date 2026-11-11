@@ -217,7 +217,10 @@ function(cna_sdl_stage_patched_source)
     endif()
     file(REMOVE_RECURSE "${_S_DESTINATION}")
     file(MAKE_DIRECTORY "${_S_DESTINATION}")
-    file(COPY "${_S_SOURCE}/" DESTINATION "${_S_DESTINATION}" PATTERN ".git" EXCLUDE)
+    # A git worktree may carry the vendored checkout as a symlink to the main checkout's copy;
+    # file(COPY) duplicates such a source as the link itself instead of copying its contents.
+    file(REAL_PATH "${_S_SOURCE}" _source_contents)
+    file(COPY "${_source_contents}/" DESTINATION "${_S_DESTINATION}" PATTERN ".git" EXCLUDE)
     get_filename_component(_ceiling "${_S_DESTINATION}" DIRECTORY)
     foreach(_patch IN LISTS _S_PATCHES)
         get_filename_component(_patch_name "${_patch}" NAME)
