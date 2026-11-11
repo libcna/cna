@@ -5,6 +5,11 @@
 // full end-to-end milestone test through ContentManager.
 
 #include <array>
+#include <exception>
+#include <limits>
+#include <memory>
+#include <string>
+#include <vector>
 #include <stdexcept>
 #include <gtest/gtest.h>
 
@@ -12,6 +17,8 @@
 #include "CNA/Internal/Xnb/Texture2DContentTypeReader.hpp"
 #include "CNA/RendererTestGate.hpp"
 #include "Microsoft/Xna/Framework/Content/ContentLoadException.hpp"
+#include "System/ArgumentOutOfRangeException.hpp"
+#include "System/IO/EndOfStreamException.hpp"
 #include "System/NotSupportedException.hpp"
 #include "Microsoft/Xna/Framework/Content/ContentManager.hpp"
 #include "Microsoft/Xna/Framework/Content/ContentReader.hpp"
@@ -83,6 +90,60 @@ namespace
             "Microsoft.Xna.Framework.Content.Texture2DReader");
         if (!typeReader) return {};
         return std::any_cast<Texture2D>(typeReader->ReadUntyped(reader, std::any{}));
+    }
+}
+
+namespace
+{
+    /// Reads a Texture2D body holding only the four header fields and returns what it threw.
+    std::exception_ptr ReadTexture2DHeaderOnly(GraphicsDevice& device, const int32_t format,
+                                               const int32_t width, const int32_t height,
+                                               const int32_t levelCount)
+    {
+        System::IO::MemoryStream stream;
+        System::IO::BinaryWriter writer(&stream, true);
+        writer.Write(format);
+        writer.Write(width);
+        writer.Write(height);
+        writer.Write(levelCount);
+        writer.Flush();
+        const auto serialized = stream.ToArray();
+
+        ContentManager content;
+        content.setGraphicsDevice(device);
+        System::IO::MemoryStream body(serialized.data(), static_cast<int32_t>(serialized.size()));
+        ContentReader reader(&content, &body, "test", 5, 'w');
+        auto typeReader = ContentTypeReaderManager::CreateReader(
+            "Microsoft.Xna.Framework.Content.Texture2DReader");
+        try
+        {
+            (void)typeReader->ReadUntyped(reader, std::any{});
+        }
+        catch (...)
+        {
+            return std::current_exception();
+        }
+        return nullptr;
+    }
+
+    /// Expects Refresh's ArgumentOutOfRangeException for @p parameter, with its resource text.
+    void ExpectSizeRefusal(const std::exception_ptr& thrown, const std::string& parameter)
+    {
+        ASSERT_NE(thrown, nullptr);
+        try
+        {
+            std::rethrow_exception(thrown);
+        }
+        catch (const System::ArgumentOutOfRangeException& error)
+        {
+            EXPECT_EQ(error.getParamNameProperty(), parameter);
+            EXPECT_EQ(error.getMessageProperty().rfind("Resource size must be greater than zero.", 0), 0u)
+                << error.getMessageProperty();
+        }
+        catch (const std::exception& other)
+        {
+            ADD_FAILURE() << "expected ArgumentOutOfRangeException, got: " << other.what();
+        }
     }
 }
 
@@ -441,73 +502,101 @@ TEST_F(Texture2DContentTypeReaderTest, ByteCountMismatchedWithWidthHeightThrowsC
     EXPECT_THROW(typeReader->ReadUntyped(reader, std::any{}), ContentLoadException);
 }
 
-TEST_F(Texture2DContentTypeReaderTest, NegativeWidthThrowsContentLoadException)
+// KI-CONTENT-TEXDIM: Refresh's Texture2DReader.Read reads all four header fields (IL_0000-001e)
+// and constructs the texture (IL_002f), whose Texture2D.ValidateCreationParameters refuses a width
+// (IL_0000-0013) or height (IL_0014-0027) of zero or less with ArgumentOutOfRangeException and the
+// ResourcesMustBeGreaterThanZeroSize text, which ContentReader.ReadAsset does not wrap.
+TEST_F(Texture2DContentTypeReaderTest, NonPositiveWidthOrHeightThrowsArgumentOutOfRangeException)
 {
-    ContentManager cm;
-    cm.setGraphicsDevice(gd);
-
-    System::IO::MemoryStream ms;
-    System::IO::BinaryWriter writer(&ms, true);
-    writer.Write((int32_t)0);  // SurfaceFormat.Color
-    writer.Write((int32_t)-1); // width
-    writer.Write((int32_t)4);  // height
-    writer.Write((int32_t)1);  // levelCount
-    writer.Flush();
-    auto buf = ms.ToArray();
-
-    System::IO::MemoryStream ms2(buf.data(), (int32_t)buf.size());
-    ContentReader reader(&cm, &ms2, "test", 5, 'w');
-
-    auto typeReader = ContentTypeReaderManager::CreateReader("Microsoft.Xna.Framework.Content.Texture2DReader");
-    ASSERT_NE(typeReader, nullptr);
-
-    EXPECT_THROW(typeReader->ReadUntyped(reader, std::any{}), ContentLoadException);
+    const int32_t color = static_cast<int32_t>(SurfaceFormat::Color);
+    for (const int32_t value : {0, -1, std::numeric_limits<int32_t>::min()})
+    {
+        SCOPED_TRACE(value);
+        ExpectSizeRefusal(ReadTexture2DHeaderOnly(gd, color, value, 4, 1), "width");
+        ExpectSizeRefusal(ReadTexture2DHeaderOnly(gd, color, 4, value, 1), "height");
+    }
+    // Width is checked first (IL_0000), then height (IL_0014).
+    ExpectSizeRefusal(ReadTexture2DHeaderOnly(gd, color, 0, 0, 1), "width");
 }
 
-TEST_F(Texture2DContentTypeReaderTest, ZeroWidthThrowsContentLoadException)
+TEST_F(Texture2DContentTypeReaderTest, TheSizeIsRefusedBeforeTheFormatAndAfterTheWholeHeaderIsRead)
 {
+    // ValidateCreationParameters checks the size (IL_0000-0027) before the profile's format list
+    // (IL_0034-005d), and Texture2DReader.Read reads every header field before constructing.
+    ExpectSizeRefusal(ReadTexture2DHeaderOnly(gd, 999, 0, 4, 1), "width");
+    ExpectSizeRefusal(ReadTexture2DHeaderOnly(gd, 999, 4, -2, 1), "height");
+    // A positive size leaves the format refusal in place.
+    EXPECT_THROW(std::rethrow_exception(ReadTexture2DHeaderOnly(gd, 999, 4, 4, 1)),
+                 System::NotSupportedException);
+
+    // A header that ends after its format field ends the read before any validation.
     ContentManager cm;
     cm.setGraphicsDevice(gd);
-
     System::IO::MemoryStream ms;
     System::IO::BinaryWriter writer(&ms, true);
-    writer.Write((int32_t)0);  // SurfaceFormat.Color
-    writer.Write((int32_t)0);  // width -- zero, not just negative
-    writer.Write((int32_t)4);  // height
-    writer.Write((int32_t)1);  // levelCount
+    writer.Write((int32_t)999);
     writer.Flush();
-    auto buf = ms.ToArray();
-
-    System::IO::MemoryStream ms2(buf.data(), (int32_t)buf.size());
-    ContentReader reader(&cm, &ms2, "test", 5, 'w');
-
+    const auto buf = ms.ToArray();
+    System::IO::MemoryStream body(buf.data(), (int32_t)buf.size());
+    ContentReader reader(&cm, &body, "test", 5, 'w');
     auto typeReader = ContentTypeReaderManager::CreateReader("Microsoft.Xna.Framework.Content.Texture2DReader");
     ASSERT_NE(typeReader, nullptr);
-
-    EXPECT_THROW(typeReader->ReadUntyped(reader, std::any{}), ContentLoadException);
+    EXPECT_THROW(typeReader->ReadUntyped(reader, std::any{}), System::IO::EndOfStreamException);
 }
 
-TEST_F(Texture2DContentTypeReaderTest, ZeroHeightThrowsContentLoadException)
+namespace
 {
-    ContentManager cm;
-    cm.setGraphicsDevice(gd);
+    /// Serves one uncompressed Texture2D .xnb whose header declares @p width x 4.
+    class ZeroWidthTextureManager final : public ContentManager
+    {
+    public:
+        ZeroWidthTextureManager(GraphicsDevice& device, const bool strict, const int32_t width)
+        {
+            setGraphicsDevice(device);
+            RouteLoadsThroughOpenStreamEXT(strict);
+            System::IO::MemoryStream stream;
+            System::IO::BinaryWriter writer(&stream, true);
+            writer.Write7BitEncodedInt(1);
+            writer.Write(std::string("Microsoft.Xna.Framework.Content.Texture2DReader"));
+            writer.Write(int32_t{0});
+            writer.Write7BitEncodedInt(0);
+            writer.Write7BitEncodedInt(1);
+            writer.Write(static_cast<int32_t>(SurfaceFormat::Color));
+            writer.Write(width);
+            writer.Write(int32_t{4});
+            writer.Write(int32_t{1});
+            writer.Flush();
+            const auto body = stream.ToArray();
+            file_ = {'X', 'N', 'B', 'w', 5, 0, 0, 0, 0, 0};
+            file_.insert(file_.end(), body.begin(), body.end());
+            const auto total = static_cast<uint32_t>(file_.size());
+            for (int i = 0; i < 4; ++i) { file_[6 + i] = static_cast<uint8_t>(total >> (8 * i)); }
+        }
 
-    System::IO::MemoryStream ms;
-    System::IO::BinaryWriter writer(&ms, true);
-    writer.Write((int32_t)0);  // SurfaceFormat.Color
-    writer.Write((int32_t)4);  // width
-    writer.Write((int32_t)0);  // height -- zero, not just negative
-    writer.Write((int32_t)1);  // levelCount
-    writer.Flush();
-    auto buf = ms.ToArray();
+    protected:
+        std::unique_ptr<System::IO::Stream> OpenStream(const std::string&) override
+        {
+            return std::make_unique<System::IO::MemoryStream>(
+                file_.data(), static_cast<int32_t>(file_.size()), false);
+        }
 
-    System::IO::MemoryStream ms2(buf.data(), (int32_t)buf.size());
-    ContentReader reader(&cm, &ms2, "test", 5, 'w');
+    private:
+        std::vector<uint8_t> file_;
+    };
+}
 
-    auto typeReader = ContentTypeReaderManager::CreateReader("Microsoft.Xna.Framework.Content.Texture2DReader");
-    ASSERT_NE(typeReader, nullptr);
-
-    EXPECT_THROW(typeReader->ReadUntyped(reader, std::any{}), ContentLoadException);
+TEST_F(Texture2DContentTypeReaderTest, LoadReportsANonPositiveSizeUnwrapped)
+{
+    // ContentReader.ReadAsset<T> IL_0019 catches only IOException; Load<T> has no handler.
+    for (const bool strict : {false, true})
+    {
+        SCOPED_TRACE(strict);
+        ZeroWidthTextureManager manager(gd, strict, 0);
+        std::exception_ptr thrown;
+        try { (void)manager.Load<Texture2D>("texture"); }
+        catch (...) { thrown = std::current_exception(); }
+        ExpectSizeRefusal(thrown, "width");
+    }
 }
 
 TEST_F(Texture2DContentTypeReaderTest, AbsurdlyLargeDimensionsThrowContentLoadExceptionNotBadAlloc)

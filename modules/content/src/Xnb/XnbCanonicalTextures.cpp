@@ -29,6 +29,7 @@
 #include "Microsoft/Xna/Framework/CurveKey.hpp"
 #include "System/IO/BinaryReader.hpp"
 #include "System/IO/MemoryStream.hpp"
+#include "System/ArgumentOutOfRangeException.hpp"
 #include "System/NotSupportedException.hpp"
 
 namespace CNA::Internal::Xnb
@@ -100,13 +101,14 @@ namespace CNA::Internal::Xnb
             return static_cast<std::size_t>(width) * height * depth * bytesPerPixel;
         }
 
-        [[nodiscard]] SurfaceFormat ReadTexture2DFormat(ContentReader& input)
+        [[nodiscard]] SurfaceFormat Texture2DFormat(const ContentReader& input,
+                                                    const std::int32_t value)
         {
             if (input.getVersionProperty() >= 5)
             {
-                return static_cast<SurfaceFormat>(input.ReadInt32());
+                return static_cast<SurfaceFormat>(value);
             }
-            switch (input.ReadInt32())
+            switch (value)
             {
                 case 1: return SurfaceFormat::ColorBgraEXT;
                 case 28: return SurfaceFormat::Dxt1;
@@ -145,13 +147,20 @@ namespace CNA::Internal::Xnb
                 ": SurfaceFormat " + std::to_string(ordinal) + " is not supported.");
         }
 
-        [[nodiscard]] std::uint32_t PositiveDimension(
-            const std::int32_t value, const char* readerName, const char* field)
+        // Refresh's texture readers read every header field first (Texture2DReader.Read
+        // IL_0000-001e, Texture3DReader.Read IL_0000-0023, TextureCubeReader.Read IL_0000-0016) and
+        // then construct the texture, whose creation checks refuse a size of zero or less before the
+        // format: ArgumentOutOfRangeException(parameter, ResourcesMustBeGreaterThanZeroSize)
+        // (Texture2D.ValidateCreationParameters IL_0000-0027, Texture3D.CreateTexture
+        // IL_0013-004f, TextureCube.ValidateCreationParameters IL_0000-0013). ContentReader.ReadAsset
+        // wraps only IOException, so Load<T> reports it as is.
+        [[nodiscard]] std::uint32_t PositiveDimension(const std::int32_t value,
+                                                      const char* parameter)
         {
             if (value <= 0)
             {
-                throw ContentLoadException(
-                    std::string(readerName) + ": invalid " + field + ".");
+                throw System::ArgumentOutOfRangeException(
+                    parameter, "Resource size must be greater than zero.");
             }
             return static_cast<std::uint32_t>(value);
         }
@@ -241,7 +250,13 @@ namespace CNA::Internal::Xnb
     {
         XnbTextureData data;
         data.kind = XnbTextureKind::Texture2D;
-        data.surfaceFormat = ReadTexture2DFormat(input);
+        const std::int32_t format = input.ReadInt32();
+        const std::int32_t width = input.ReadInt32();
+        const std::int32_t height = input.ReadInt32();
+        const std::int32_t mipCount = input.ReadInt32();
+        data.width = PositiveDimension(width, "width");
+        data.height = PositiveDimension(height, "height");
+        data.surfaceFormat = Texture2DFormat(input, format);
         // ColorBgraEXT is how a version-4 container's legacy format 1 is read, not an XNA 4.0
         // SurfaceFormat: a version-5 container names XNA ordinals only (the writer refuses to put a
         // CNA extension format there, IsXnbWritableSurfaceFormat), and XNA's
@@ -255,11 +270,8 @@ namespace CNA::Internal::Xnb
                 " is not supported.");
         }
         RequireTextureFormat("Texture2DReader", data.surfaceFormat, XnbTextureKind::Texture2D);
-        data.width = PositiveDimension(input.ReadInt32(), "Texture2DReader", "width");
-        data.height = PositiveDimension(input.ReadInt32(), "Texture2DReader", "height");
         data.depth = 1u;
         data.faceCount = 1u;
-        const std::int32_t mipCount = input.ReadInt32();
         if (mipCount <= 0)
         {
             throw ContentLoadException("Texture2DReader: invalid mip level count.");
@@ -290,12 +302,15 @@ namespace CNA::Internal::Xnb
         XnbTextureData data;
         data.kind = XnbTextureKind::Texture3D;
         data.surfaceFormat = static_cast<SurfaceFormat>(input.ReadInt32());
-        RequireTextureFormat("Texture3DReader", data.surfaceFormat, XnbTextureKind::Texture3D);
-        data.width = PositiveDimension(input.ReadInt32(), "Texture3DReader", "width");
-        data.height = PositiveDimension(input.ReadInt32(), "Texture3DReader", "height");
-        data.depth = PositiveDimension(input.ReadInt32(), "Texture3DReader", "depth");
-        data.faceCount = 1u;
+        const std::int32_t width = input.ReadInt32();
+        const std::int32_t height = input.ReadInt32();
+        const std::int32_t depth = input.ReadInt32();
         const std::int32_t mipCount = input.ReadInt32();
+        data.width = PositiveDimension(width, "width");
+        data.height = PositiveDimension(height, "height");
+        data.depth = PositiveDimension(depth, "depth");
+        RequireTextureFormat("Texture3DReader", data.surfaceFormat, XnbTextureKind::Texture3D);
+        data.faceCount = 1u;
         if (mipCount <= 0)
         {
             throw ContentLoadException("Texture3DReader: invalid mip level count.");
@@ -319,12 +334,13 @@ namespace CNA::Internal::Xnb
         XnbTextureData data;
         data.kind = XnbTextureKind::TextureCube;
         data.surfaceFormat = static_cast<SurfaceFormat>(input.ReadInt32());
+        const std::int32_t size = input.ReadInt32();
+        const std::int32_t mipCount = input.ReadInt32();
+        data.width = PositiveDimension(size, "size");
         RequireTextureFormat("TextureCubeReader", data.surfaceFormat, XnbTextureKind::TextureCube);
-        data.width = PositiveDimension(input.ReadInt32(), "TextureCubeReader", "size");
         data.height = data.width;
         data.depth = 1u;
         data.faceCount = 6u;
-        const std::int32_t mipCount = input.ReadInt32();
         if (mipCount <= 0)
         {
             throw ContentLoadException("TextureCubeReader: invalid mip level count.");

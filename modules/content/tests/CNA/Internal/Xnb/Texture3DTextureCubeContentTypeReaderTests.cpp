@@ -12,6 +12,10 @@
 #include <array>
 #include <cstring>
 #include <fstream>
+#include <vector>
+#include <string>
+#include <limits>
+#include <exception>
 #include <gtest/gtest.h>
 #include <stdexcept>
 
@@ -37,6 +41,7 @@ using namespace CNA::Testing::Renderers;
 #include "Microsoft/Xna/Framework/Graphics/TextureCube.hpp"
 #include "System/IO/BinaryWriter.hpp"
 #include "System/IO/MemoryStream.hpp"
+#include "System/ArgumentOutOfRangeException.hpp"
 #include "System/NotSupportedException.hpp"
 
 using Microsoft::Xna::Framework::Color;
@@ -653,52 +658,89 @@ TEST_F(Texture3DTextureCubeContentTypeReaderTest, Texture3DReaderAbsurdlyLargeDi
     EXPECT_THROW(typeReader->ReadUntyped(reader, std::any{}), ContentLoadException);
 }
 
-TEST_F(Texture3DTextureCubeContentTypeReaderTest, Texture3DReaderZeroWidthThrowsContentLoadException)
+namespace
 {
-    System::IO::MemoryStream ms;
-    System::IO::BinaryWriter writer(&ms, true);
-    writer.Write(static_cast<int32_t>(SurfaceFormat::Color));
-    writer.Write(static_cast<int32_t>(0)); // width -- zero, not just negative
-    writer.Write(static_cast<int32_t>(4));
-    writer.Write(static_cast<int32_t>(4));
-    writer.Write(static_cast<int32_t>(1));
-    writer.Flush();
-    const auto buf = ms.ToArray();
-    const std::string fields(reinterpret_cast<const char*>(buf.data()), buf.size());
+    /// Reads a header-only body of @p readerName (format, then @p fields) and returns what it threw.
+    std::exception_ptr ReadTextureHeaderOnly(GraphicsDevice& device, const char* readerName,
+                                             const SurfaceFormat format,
+                                             const std::vector<int32_t>& fields)
+    {
+        System::IO::MemoryStream ms;
+        System::IO::BinaryWriter writer(&ms, true);
+        writer.Write(static_cast<int32_t>(format));
+        for (const int32_t field : fields) { writer.Write(field); }
+        writer.Flush();
+        const auto buf = ms.ToArray();
 
-    ContentManager cm;
-    cm.setGraphicsDevice(gd);
-    System::IO::MemoryStream body(
-        reinterpret_cast<const uint8_t*>(fields.data()), static_cast<int32_t>(fields.size()));
-    ContentReader reader(&cm, &body, "test", 5, 'w');
+        ContentManager cm;
+        cm.setGraphicsDevice(device);
+        System::IO::MemoryStream body(buf.data(), static_cast<int32_t>(buf.size()));
+        ContentReader reader(&cm, &body, "test", 5, 'w');
+        auto typeReader = ContentTypeReaderManager::CreateReader(readerName);
+        try
+        {
+            (void)typeReader->ReadUntyped(reader, std::any{});
+        }
+        catch (...)
+        {
+            return std::current_exception();
+        }
+        return nullptr;
+    }
 
-    auto typeReader = ContentTypeReaderManager::CreateReader("Microsoft.Xna.Framework.Content.Texture3DReader");
-    ASSERT_NE(typeReader, nullptr);
-    EXPECT_THROW(typeReader->ReadUntyped(reader, std::any{}), ContentLoadException);
+    /// Expects Refresh's ArgumentOutOfRangeException for @p parameter, with its resource text.
+    void ExpectSizeRefusal(const std::exception_ptr& thrown, const std::string& parameter)
+    {
+        ASSERT_NE(thrown, nullptr);
+        try
+        {
+            std::rethrow_exception(thrown);
+        }
+        catch (const System::ArgumentOutOfRangeException& error)
+        {
+            EXPECT_EQ(error.getParamNameProperty(), parameter);
+            EXPECT_EQ(error.getMessageProperty().rfind("Resource size must be greater than zero.", 0), 0u)
+                << error.getMessageProperty();
+        }
+        catch (const std::exception& other)
+        {
+            ADD_FAILURE() << "expected ArgumentOutOfRangeException, got: " << other.what();
+        }
+    }
+
+    constexpr char Texture3DReaderName[] = "Microsoft.Xna.Framework.Content.Texture3DReader";
+    constexpr char TextureCubeReaderName[] = "Microsoft.Xna.Framework.Content.TextureCubeReader";
 }
 
-TEST_F(Texture3DTextureCubeContentTypeReaderTest, Texture3DReaderZeroDepthThrowsContentLoadException)
+// KI-CONTENT-TEXDIM: Refresh's Texture3DReader.Read reads format, width, height, depth and level
+// count (IL_0000-0023), then constructs the texture (IL_0035); Texture3D.CreateTexture refuses a
+// width, height or depth of zero or less, in that order (IL_0013-004f), with
+// ArgumentOutOfRangeException and the ResourcesMustBeGreaterThanZeroSize text, before the
+// profile and format checks (IL_0050-00a4). ContentReader.ReadAsset does not wrap it.
+TEST_F(Texture3DTextureCubeContentTypeReaderTest, Texture3DReaderNonPositiveSizeThrowsArgumentOutOfRangeException)
 {
-    System::IO::MemoryStream ms;
-    System::IO::BinaryWriter writer(&ms, true);
-    writer.Write(static_cast<int32_t>(SurfaceFormat::Color));
-    writer.Write(static_cast<int32_t>(4));
-    writer.Write(static_cast<int32_t>(4));
-    writer.Write(static_cast<int32_t>(0)); // depth -- zero, not just negative
-    writer.Write(static_cast<int32_t>(1));
-    writer.Flush();
-    const auto buf = ms.ToArray();
-    const std::string fields(reinterpret_cast<const char*>(buf.data()), buf.size());
+    for (const int32_t value : {0, -1})
+    {
+        SCOPED_TRACE(value);
+        ExpectSizeRefusal(ReadTextureHeaderOnly(gd, Texture3DReaderName, SurfaceFormat::Color,
+                                                {value, 4, 4, 1}), "width");
+        ExpectSizeRefusal(ReadTextureHeaderOnly(gd, Texture3DReaderName, SurfaceFormat::Color,
+                                                {4, value, 4, 1}), "height");
+        ExpectSizeRefusal(ReadTextureHeaderOnly(gd, Texture3DReaderName, SurfaceFormat::Color,
+                                                {4, 4, value, 1}), "depth");
+    }
+    ExpectSizeRefusal(ReadTextureHeaderOnly(gd, Texture3DReaderName, SurfaceFormat::Color,
+                                            {4, 0, 0, 1}), "height");
+}
 
-    ContentManager cm;
-    cm.setGraphicsDevice(gd);
-    System::IO::MemoryStream body(
-        reinterpret_cast<const uint8_t*>(fields.data()), static_cast<int32_t>(fields.size()));
-    ContentReader reader(&cm, &body, "test", 5, 'w');
-
-    auto typeReader = ContentTypeReaderManager::CreateReader("Microsoft.Xna.Framework.Content.Texture3DReader");
-    ASSERT_NE(typeReader, nullptr);
-    EXPECT_THROW(typeReader->ReadUntyped(reader, std::any{}), ContentLoadException);
+TEST_F(Texture3DTextureCubeContentTypeReaderTest, Texture3DReaderRefusesTheSizeBeforeTheFormat)
+{
+    // Dxt1 is not a volume format (the format refusal below); a zero size still wins.
+    ExpectSizeRefusal(ReadTextureHeaderOnly(gd, Texture3DReaderName, SurfaceFormat::Dxt1,
+                                            {4, 4, 0, 1}), "depth");
+    EXPECT_THROW(std::rethrow_exception(ReadTextureHeaderOnly(
+                     gd, Texture3DReaderName, SurfaceFormat::Dxt1, {4, 4, 4, 1})),
+                 System::NotSupportedException);
 }
 
 // TextureCubeReader's own decoded-byte-size check (size*size*4) shares the
@@ -726,26 +768,21 @@ TEST_F(Texture3DTextureCubeContentTypeReaderTest, TextureCubeReaderAbsurdlyLarge
     EXPECT_THROW(typeReader->ReadUntyped(reader, std::any{}), ContentLoadException);
 }
 
-TEST_F(Texture3DTextureCubeContentTypeReaderTest, TextureCubeReaderZeroSizeThrowsContentLoadException)
+// KI-CONTENT-TEXDIM: Refresh's TextureCubeReader.Read reads format, size and level count
+// (IL_0000-0016), then constructs the cube (IL_0027); TextureCube.ValidateCreationParameters
+// refuses a size of zero or less (IL_0000-0013) with ArgumentOutOfRangeException("size") before
+// the format (IL_0014-004e).
+TEST_F(Texture3DTextureCubeContentTypeReaderTest, TextureCubeReaderNonPositiveSizeThrowsArgumentOutOfRangeException)
 {
-    System::IO::MemoryStream ms;
-    System::IO::BinaryWriter writer(&ms, true);
-    writer.Write(static_cast<int32_t>(SurfaceFormat::Color));
-    writer.Write(static_cast<int32_t>(0)); // size -- zero, not just negative
-    writer.Write(static_cast<int32_t>(1)); // levels
-    writer.Flush();
-    const auto buf = ms.ToArray();
-    const std::string fields(reinterpret_cast<const char*>(buf.data()), buf.size());
-
-    ContentManager cm;
-    cm.setGraphicsDevice(gd);
-    System::IO::MemoryStream body(
-        reinterpret_cast<const uint8_t*>(fields.data()), static_cast<int32_t>(fields.size()));
-    ContentReader reader(&cm, &body, "test", 5, 'w');
-
-    auto typeReader = ContentTypeReaderManager::CreateReader("Microsoft.Xna.Framework.Content.TextureCubeReader");
-    ASSERT_NE(typeReader, nullptr);
-    EXPECT_THROW(typeReader->ReadUntyped(reader, std::any{}), ContentLoadException);
+    for (const int32_t value : {0, -1, std::numeric_limits<int32_t>::min()})
+    {
+        SCOPED_TRACE(value);
+        ExpectSizeRefusal(ReadTextureHeaderOnly(gd, TextureCubeReaderName, SurfaceFormat::Color,
+                                                {value, 1}), "size");
+    }
+    // A cube format the profile refuses does not come first.
+    ExpectSizeRefusal(ReadTextureHeaderOnly(gd, TextureCubeReaderName, static_cast<SurfaceFormat>(999),
+                                            {0, 1}), "size");
 }
 
 TEST_F(Texture3DTextureCubeContentTypeReaderTest, Texture3DReaderRejectsCompressedSurfaceFormats)
