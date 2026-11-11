@@ -15,6 +15,7 @@
 #include <algorithm>
 #include <array>
 #include <atomic>
+#include <cstddef>
 #include <cstdio>
 #include <mutex>
 #include <optional>
@@ -51,10 +52,14 @@ namespace CNA::Platform::Sdl3 {
             return missing;
         }
 
-        // The connections that reported such a BadWindow during the import. The same numeric id
-        // on another X server is a different window, so the refusal also requires SDL's own
-        // display. Every matching connection is kept, so a later error from another server
-        // cannot overwrite SDL's; more than a handful during one import is not a real case.
+        // The connections that reported such a BadWindow during the import, each once. The same
+        // numeric id on another X server is a different window, so the refusal also requires
+        // SDL's own display. Every matching connection is kept, so a later error from another
+        // server cannot overwrite SDL's. More distinct connections than slots means SDL's may be
+        // among the unrecorded ones, so the import is refused rather than accepted unproven.
+        // A BadWindow for the same id from another thread's GetWindowAttributes on SDL's own,
+        // private connection is not told apart from SDL's (no serial check): that refuses a valid
+        // import, never accepts an invalid one.
         constexpr std::size_t kX11PendingErrorDisplaySlots = 8;
         std::array<std::atomic<void*>, kX11PendingErrorDisplaySlots>& X11PendingImportErrorDisplays()
         {
@@ -170,9 +175,18 @@ namespace CNA::Platform::Sdl3 {
                     if (e->error_code == BadWindow && e->request_code == X_GetWindowAttributes
                         && pending != 0 && e->resourceid == pending)
                     {
-                        const std::size_t slot = X11PendingImportErrorCount().fetch_add(1);
-                        if (slot < kX11PendingErrorDisplaySlots)
-                            X11PendingImportErrorDisplays()[slot].store(e->display);
+                        const auto& displays = X11PendingImportErrorDisplays();
+                        const std::size_t known = std::min(X11PendingImportErrorCount().load(),
+                                                           kX11PendingErrorDisplaySlots);
+                        const bool recorded = std::any_of(displays.begin(),
+                            displays.begin() + static_cast<std::ptrdiff_t>(known),
+                            [e](const std::atomic<void*>& display) { return display.load() == e->display; });
+                        if (!recorded)
+                        {
+                            const std::size_t slot = X11PendingImportErrorCount().fetch_add(1);
+                            if (slot < kX11PendingErrorDisplaySlots)
+                                X11PendingImportErrorDisplays()[slot].store(e->display);
+                        }
                         X11PendingImportMissing().store(true);
                     }
                     std::fprintf(stderr,
@@ -697,9 +711,9 @@ namespace CNA::Platform::Sdl3 {
         {
             void* const sdlDisplay = SDL_GetPointerProperty(
                 SDL_GetWindowProperties(imported), SDL_PROP_WINDOW_X11_DISPLAY_POINTER, nullptr);
-            const std::size_t recorded = std::min(X11PendingImportErrorCount().load(),
-                                                  kX11PendingErrorDisplaySlots);
-            for (std::size_t i = 0; i < recorded; ++i)
+            const std::size_t count = X11PendingImportErrorCount().load();
+            if (count > kX11PendingErrorDisplaySlots) return true;
+            for (std::size_t i = 0; i < count; ++i)
                 if (X11PendingImportErrorDisplays()[i].load() == sdlDisplay) return true;
             return false;
         };
