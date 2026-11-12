@@ -321,10 +321,6 @@ namespace CNA::Internal::Xnb
             atConstruction(data);
         }
         RequireTextureFormat("Texture3DReader", data.surfaceFormat, XnbTextureKind::Texture3D);
-        if (mipCount <= 0)
-        {
-            throw ContentLoadException("Texture3DReader: invalid mip level count.");
-        }
         input.CheckDecodedByteSize(
             CheckedMultiplyOrThrow(
                 {data.width, data.height, data.depth,
@@ -332,7 +328,10 @@ namespace CNA::Internal::Xnb
                      data.surfaceFormat)},
                 "Texture3DReader"),
             "Texture3DReader");
-        ValidateMipCount("Texture3DReader", data, 1u);
+        // Like Texture2DReader, Refresh Texture3DReader.Read asks for mipmaps only when the count
+        // is above one (IL_002b-0035) and loops `level < count` (IL_0087-008a): zero or less
+        // creates a one-level texture and reads no level.
+        ValidateMipCount("Texture3DReader", data, 0u);
         ReadTextureLevels(input, data, "Texture3DReader");
         return data;
     }
@@ -349,16 +348,14 @@ namespace CNA::Internal::Xnb
         data.height = data.width;
         data.depth = 1u;
         data.faceCount = 6u;
-        if (mipCount <= 0)
-        {
-            throw ContentLoadException("TextureCubeReader: invalid mip level count.");
-        }
-        data.mipCount = static_cast<std::uint32_t>(mipCount);
+        // Refresh TextureCubeReader.Read: mipmaps only above one level (IL_001e-0027), and the
+        // per-face loop `level < count` (IL_005f-0062) reads no level for zero or less.
+        data.mipCount = mipCount > 0 ? static_cast<std::uint32_t>(mipCount) : 0u;
         data.platform = input.getPlatformProperty();
         input.CheckDecodedByteSize(
             CheckedMultiplyOrThrow({data.width, data.height, 4u}, "TextureCubeReader"),
             "TextureCubeReader");
-        ValidateMipCount("TextureCubeReader", data, 1u);
+        ValidateMipCount("TextureCubeReader", data, 0u);
         ReadTextureLevels(input, data, "TextureCubeReader");
         return data;
     }

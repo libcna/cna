@@ -119,8 +119,7 @@ page under `docs/` (index: `docs/README.md`), deliberate divergences from FNA an
   lost with the effect that owned it.
 - C API: content tags of meshes/parts have no C route; HND-TQ-22 C route (ObjectValue handles, ABI 0.61)
   not done; `CNA::Net::SystemLinkDiscovery` (GALAXY-NET-01) has no C route (planned, CBIND-127).
-- Content: Texture3D/TextureCube level counts <= 0 are accepted by XNA (same loop as Texture2D), CNA
-  refuses; a level count past the full chain or a wrong level byte count is ContentLoadException in CNA
+- Content: a level count past the full chain or a wrong level byte count is ContentLoadException in CNA
   where XNA fails inside SetData (type unconfirmed); the TextureCube reader still decodes before it
   constructs, so the profile's cube refusals come after the levels; Reach NPOT DXT textures are
   uploaded as Color by CNA although XNA's Texture2D constructor refuses them (IL_00d0-0122); XNA's

@@ -863,3 +863,60 @@ TEST_F(Texture3DTextureCubeContentTypeReaderTest, Texture3DReaderRejectsCompress
         EXPECT_THROW(typeReader->ReadUntyped(reader, std::any{}), System::NotSupportedException);
     }
 }
+
+// Refresh Texture3DReader.Read and TextureCubeReader.Read construct with mipMap = count > 1 and loop
+// `level < count` (Texture3D IL_002b-0035/0087-008a, TextureCube IL_001e-0027/005f-0062), as
+// Texture2DReader does: a count of zero or less creates a one-level texture and reads no level.
+TEST_F(Texture3DTextureCubeContentTypeReaderTest, ANonPositiveLevelCountCreatesAOneLevelTextureAndReadsNoLevel)
+{
+    for (const int32_t count : {0, -1, std::numeric_limits<int32_t>::min()})
+    {
+        for (const bool cube : {false, true})
+        {
+            SCOPED_TRACE(std::to_string(count) + (cube ? " cube" : " volume"));
+            System::IO::MemoryStream stream;
+            System::IO::BinaryWriter writer(&stream, true);
+            writer.Write(static_cast<int32_t>(SurfaceFormat::Color));
+            writer.Write(static_cast<int32_t>(4));
+            if (!cube)
+            {
+                writer.Write(static_cast<int32_t>(4));
+                writer.Write(static_cast<int32_t>(4));
+            }
+            writer.Write(count);
+            writer.Write(static_cast<int32_t>(0x5eed));
+            writer.Flush();
+            const auto serialized = stream.ToArray();
+            ContentManager content;
+            content.setGraphicsDevice(gd);
+            System::IO::MemoryStream body(serialized.data(), static_cast<int32_t>(serialized.size()));
+            ContentReader reader(&content, &body, "test", 5, 'w');
+            auto typeReader = ContentTypeReaderManager::CreateReader(
+                cube ? "Microsoft.Xna.Framework.Content.TextureCubeReader"
+                     : "Microsoft.Xna.Framework.Content.Texture3DReader");
+            ASSERT_NE(typeReader, nullptr);
+            if ((cube && !CubeStorageSupported()) ||
+                (!cube && !gd.SupportsCapability(CNA::GraphicsCapability::Texture3D)))
+            {
+                // The construction is reached (no level-count refusal before it) and refused.
+                EXPECT_THROW(typeReader->ReadUntyped(reader, std::any{}), System::NotSupportedException);
+                continue;
+            }
+            std::any result = typeReader->ReadUntyped(reader, std::any{});
+            if (cube)
+            {
+                const auto& texture = std::any_cast<const TextureCube&>(result);
+                EXPECT_EQ(texture.getSizeProperty(), 4);
+                EXPECT_EQ(texture.getLevelCountProperty(), 1);
+            }
+            else
+            {
+                const auto texture = std::any_cast<std::shared_ptr<Texture3D>>(result);
+                ASSERT_NE(texture, nullptr);
+                EXPECT_EQ(texture->getDepthProperty(), 4);
+                EXPECT_EQ(texture->getLevelCountProperty(), 1);
+            }
+            EXPECT_EQ(reader.ReadInt32(), 0x5eed) << "a level was read";
+        }
+    }
+}
