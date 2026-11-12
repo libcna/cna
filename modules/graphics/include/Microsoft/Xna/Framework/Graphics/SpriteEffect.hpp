@@ -65,6 +65,7 @@ namespace Microsoft::Xna::Framework::Graphics
 
         void CacheEffectParameters();
 
+        EffectParameter* textureParam_ = nullptr;
         EffectParameter* matrixParam_ = nullptr;
     };
 }

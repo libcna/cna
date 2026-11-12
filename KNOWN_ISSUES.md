@@ -98,16 +98,14 @@ page under `docs/` (index: `docs/README.md`), deliberate divergences from FNA an
   SkinnedEffect throw NullReferenceException in `Effect..ctor(Effect)`; Refresh is unmeasured, which
   bears on the HND-TQ-25 D9 premise.
 - Graphics, from an independent review of the Apply latch (d07de8c49, c5afd4874, 0d97c3033) on
-  2026-11-11, source-traced and not yet reproduced by a test: (1) the five stock classes latch their
+  2026-11-11, source-traced and not yet reproduced by a test: the five stock classes latch their
   properties at Apply, not the final parameter values, so a raw `Parameters["DiffuseColor"]`,
   `["WorldViewProj"]`, `["FogVector"]` or `["ShaderIndex"]` write that the next OnApply does not
   overwrite (its dirty bit is clear) never reaches the draw, where XNA's pass commits it; Basic,
   EnvironmentMap and Skinned also rebuild light values and lighting transforms from fields (the
   renderers take World/View/Projection and material fields, not WVP, so a fix crosses every renderer
   interface; base-Effect and EffectMaterial clones already read raw storage, so a source and its clone
-  can render differently); (2) SpriteEffect (CNAEXT,
-  FNA's) reflects no `Texture` parameter, so a clone cannot carry or bind FNA's texture at Apply and
-  draws device slot 0 (SpriteBatch rebinds slot 0 and hides this).
+  can render differently).
 - Graphics, compiled-effect passes that omit a shader stage (review rv-stage, 2026-11-12, source
   analysis): XNA keeps the device's shader and constants for a stage a pass does not assign.
   `RunCompiledEffectInheritedVertexStageContract` passes on Software, EasyGL (OPENGL33) and WebGPU,

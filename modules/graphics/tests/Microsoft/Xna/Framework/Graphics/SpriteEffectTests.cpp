@@ -26,6 +26,9 @@
 #include "Microsoft/Xna/Framework/Graphics/EffectParameterClass.hpp"
 #include "Microsoft/Xna/Framework/Graphics/EffectParameterCollection.hpp"
 #include "Microsoft/Xna/Framework/Graphics/EffectParameterType.hpp"
+#include "Microsoft/Xna/Framework/Graphics/EffectMaterial.hpp"
+#include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
+#include "Microsoft/Xna/Framework/Graphics/TextureCollection.hpp"
 #include "Microsoft/Xna/Framework/Graphics/EffectPass.hpp"
 #include "Microsoft/Xna/Framework/Graphics/EffectPassCollection.hpp"
 #include "Microsoft/Xna/Framework/Graphics/EffectTechnique.hpp"
@@ -41,6 +44,8 @@ using Microsoft::Xna::Framework::Graphics::Effect;
 using Microsoft::Xna::Framework::Graphics::EffectParameter;
 using Microsoft::Xna::Framework::Graphics::EffectParameterClass;
 using Microsoft::Xna::Framework::Graphics::EffectParameterType;
+using Microsoft::Xna::Framework::Graphics::EffectMaterial;
+using Microsoft::Xna::Framework::Graphics::Texture2D;
 using Microsoft::Xna::Framework::Graphics::GraphicsAdapter;
 using Microsoft::Xna::Framework::Graphics::GraphicsDevice;
 using Microsoft::Xna::Framework::Graphics::GraphicsProfile;
@@ -117,6 +122,36 @@ TEST_F(SpriteEffectMatrixTest, ExposesFnasMatrixTransformParameter)
     EXPECT_EQ(parameter->getParameterTypeProperty(), EffectParameterType::Single);
     EXPECT_EQ(parameter->getRowCountProperty(), 4);
     EXPECT_EQ(parameter->getColumnCountProperty(), 4);
+}
+
+// FNA's SpriteEffect.fx declares Texture (Texture2D) beside MatrixTransform. FNA's Apply binds a
+// non-null effect texture to its sampler (Effect.cs:719-727), and a clone -- its own Clone or an
+// EffectMaterial -- copies the reference (:303-305).
+TEST_F(SpriteEffectMatrixTest, TheTextureParameterIsBoundAtApplyAndCarriedByClones)
+{
+    SpriteEffect fx(gd);
+    EffectParameter* texture = fx.getParametersProperty()["Texture"];
+    ASSERT_NE(texture, nullptr);
+    EXPECT_EQ(texture->getParameterTypeProperty(), EffectParameterType::Texture2D);
+    Texture2D red(gd, 1, 1);
+    Texture2D blue(gd, 1, 1);
+    gd.getTexturesProperty()(0, &blue);
+    ApplyFirstPass(fx);
+    EXPECT_EQ(gd.getTexturesProperty()[0], &blue) << "a null effect texture left s0";
+    texture->SetValue(&red);
+    ApplyFirstPass(fx);
+    EXPECT_EQ(gd.getTexturesProperty()[0], &red);
+
+    std::unique_ptr<Effect> clone(fx.Clone());
+    EffectMaterial material(fx);
+    for (Effect* copy : {clone.get(), static_cast<Effect*>(&material)})
+    {
+        ASSERT_NE(copy->getParametersProperty()["Texture"], nullptr);
+        EXPECT_EQ(copy->getParametersProperty()["Texture"]->GetValueTexture2D(), &red);
+        gd.getTexturesProperty()(0, &blue);
+        ApplyFirstPass(*copy);
+        EXPECT_EQ(gd.getTexturesProperty()[0], &red);
+    }
 }
 
 TEST_F(SpriteEffectMatrixTest, ApplySetsTheViewportMatrixEveryTime)

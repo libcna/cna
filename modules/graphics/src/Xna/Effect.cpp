@@ -1415,8 +1415,11 @@ namespace Microsoft::Xna::Framework::Graphics
                 BindStockTextureInternal(1, snapshot->texture1);
                 break;
             case StockEffectKindInternal::Sprite:
-                // CNA's SpriteEffect has no Texture parameter, so the sprite pixel shader samples
-                // whatever s0 holds: SpriteBatch's texture, or the device's.
+                // FNA binds a non-null Texture to s0 at Apply (Effect.cs:719-727); a null one
+                // leaves the device's s0, which SpriteBatch fills with each sprite's texture.
+                if (snapshot->texture0 != nullptr)
+                    BindStockTextureInternal(0, snapshot->texture0);
+                break;
             case StockEffectKindInternal::None:
                 break;
         }
