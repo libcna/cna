@@ -29,16 +29,13 @@ namespace Microsoft::Xna::Framework::Media
         {
             using Microsoft::Xna::Framework::FrameworkDispatcher;
             MediaPlayer::Update();
-            if (FrameworkDispatcher::ActiveSongChanged)
-            {
-                MediaPlayer::OnActiveSongChanged();
-                FrameworkDispatcher::ActiveSongChanged = false;
-            }
-            if (FrameworkDispatcher::MediaStateChanged)
-            {
-                MediaPlayer::OnMediaStateChanged();
-                FrameworkDispatcher::MediaStateChanged = false;
-            }
+            // XNA's FrameworkDispatcher.Update copies and clears its pending calls before invoking
+            // any (IL_001b-005a, then IL_00b3-00c4): a change a handler makes -- Pause inside
+            // MediaStateChanged -- is owed to the next Update instead of being cleared with this one.
+            const bool songChanged = std::exchange(FrameworkDispatcher::ActiveSongChanged, false);
+            const bool stateChanged = std::exchange(FrameworkDispatcher::MediaStateChanged, false);
+            if (songChanged) MediaPlayer::OnActiveSongChanged();
+            if (stateChanged) MediaPlayer::OnMediaStateChanged();
         }
 
         // Every change the dispatcher must report passes here, so the media step is installed

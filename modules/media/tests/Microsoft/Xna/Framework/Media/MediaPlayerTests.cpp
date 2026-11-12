@@ -280,6 +280,30 @@ TEST_F(MediaPlayerTest, ActiveSongChangedAndMediaStateChangedFireThroughFramewor
     MediaPlayer::MediaStateChanged.Remove(mediaStateToken);
 }
 
+// RV-MEDIA review #4: XNA's FrameworkDispatcher.Update copies and clears its pending calls before
+// invoking them (IL_001b-005a, IL_00b3-00c4), so a state change a handler makes is reported by the
+// next Update. CNA cleared each flag after its handler ran and lost the Pause made inside it.
+TEST_F(MediaPlayerTest, AStateChangeMadeInsideAMediaHandlerIsReportedByTheNextUpdate)
+{
+    using Microsoft::Xna::Framework::Media::MediaState;
+    std::vector<MediaState> seen;
+    auto token = MediaPlayer::MediaStateChanged.Add(
+        [&seen](System::Object*, const System::EventArgs&)
+        {
+            seen.push_back(MediaPlayer::getStateProperty());
+            if (seen.size() == 1) MediaPlayer::Pause();
+        });
+    Microsoft::Xna::Framework::FrameworkDispatcher::ActiveSongChanged = false;
+    Microsoft::Xna::Framework::FrameworkDispatcher::MediaStateChanged = false;
+    Song song(kFixtureA, "A");
+    MediaPlayer::Play(&song);
+    Microsoft::Xna::Framework::FrameworkDispatcher::Update();
+    Microsoft::Xna::Framework::FrameworkDispatcher::Update();
+    MediaPlayer::MediaStateChanged.Remove(token);
+    EXPECT_EQ(seen, (std::vector<MediaState>{MediaState::Playing, MediaState::Paused}))
+        << "the Pause made inside the first notification was not reported";
+}
+
 // MEDIA-84/188/189/190: IsVisualizationEnabled/GetVisualizationData.
 //
 // This test previously asserted the STUB behavior as if it were the specification -- that the
