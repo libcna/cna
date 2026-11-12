@@ -160,3 +160,45 @@ namespace
         ::testing::ValuesIn(RejectedCases()),
         [](const ::testing::TestParamInfo<Rejected>& info) { return info.param.name; });
 }
+
+// Review rv-sfx #10: XNA's kernel validates the format the parser kept, after WavFile.Open has
+// closed the stream: an 18- or 50-byte format once shorter ones are zero-extended to 18
+// (KernelSoundEffectBase.Initialize IL_0012-0022, AudioHelper.LocalizeFormat IL_000e-0024), a PCM
+// cbSize of 0 (ValidateWaveformatEx IL_0029-0038) and a byte rate of rate * block align
+// (IL_0057-006e). Its E_FAIL is InvalidOperationException("An unexpected error has occurred.").
+TEST(SoundEffectXnaWaveKernelFormatTest, RefusesWhatTheKernelRejectsAfterClosingTheStream)
+{
+    const auto data = Chunk("data", Bytes(16, 0));
+    const auto fmt = [](unsigned avgBytes, std::vector<unsigned> extension) {
+        Bytes bytes;
+        U16(bytes, 1); U16(bytes, 1); U32(bytes, 8000); U32(bytes, avgBytes); U16(bytes, 2); U16(bytes, 16);
+        for (unsigned word : extension) U16(bytes, word);
+        return Chunk("fmt ", bytes);
+    };
+    for (const auto& accepted : {fmt(16000, {}), fmt(16000, {0})})
+    {
+        TrackedStream stream(Wave({accepted, data}));
+        std::unique_ptr<SoundEffect> sound;
+        EXPECT_NO_THROW(sound.reset(SoundEffect::FromStream(stream))) << "fmt16 and fmt18 with cbSize 0";
+    }
+    const std::pair<const char*, Bytes> refused[] = {
+        {"byte rate 0", fmt(0, {})},
+        {"cbSize 1", fmt(16000, {1})},
+        {"20-byte format", fmt(16000, {0, 0})},
+    };
+    for (const auto& [what, format] : refused)
+    {
+        TrackedStream stream(Wave({format, data}));
+        try
+        {
+            std::unique_ptr<SoundEffect> sound(SoundEffect::FromStream(stream));
+            ADD_FAILURE() << what << " was accepted";
+        }
+        catch (const System::InvalidOperationException& error)
+        {
+            EXPECT_EQ(typeid(error), typeid(System::InvalidOperationException)) << what;
+            EXPECT_EQ(std::string(error.what()), "An unexpected error has occurred.") << what;
+        }
+        EXPECT_EQ(stream.closes, 1) << what << ": WavFile.Open closed it before the kernel refused";
+    }
+}

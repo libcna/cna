@@ -970,6 +970,11 @@ namespace Microsoft::Xna::Framework::Audio
             SharpRuntime::intcs channels = 0;
             SharpRuntime::intcs bitsPerSample = 0;
             SharpRuntime::intcs blockAlign = 0;
+            // What XNA's AudioFormat keeps of the fmt chunk for the kernel's validation: the bytes
+            // read, the declared byte rate and the WAVEFORMATEX extension size (cbSize).
+            std::size_t formatSize = 0;
+            std::uint32_t avgBytesPerSec = 0;
+            std::uint32_t extensionSize = 0;
             std::vector<SharpRuntime::bytecs> data;
             SharpRuntime::intcs loopStart = 0;
             SharpRuntime::intcs loopLength = 0;
@@ -1089,6 +1094,12 @@ namespace Microsoft::Xna::Framework::Audio
                 wave_.sampleRate = Le32(format, 4);
                 wave_.blockAlign = Le16(format, 12);
                 wave_.bitsPerSample = Le16(format, 14);
+                wave_.formatSize = format.size();
+                wave_.avgBytesPerSec = static_cast<std::uint32_t>(Le32(format, 8));
+                // AudioHelper.LocalizeFormat (IL_000e-0024) zero-extends a shorter format to 18
+                // bytes, so cbSize keeps whatever of it was read.
+                wave_.extensionSize = (format.size() > 16 ? static_cast<std::uint32_t>(format[16]) : 0u) |
+                                      (format.size() > 17 ? static_cast<std::uint32_t>(format[17]) << 8 : 0u);
                 if (tag != 1 || (wave_.channels != 1 && wave_.channels != 2) ||
                     wave_.sampleRate < 8000 || wave_.sampleRate > 48000 ||
                     (wave_.bitsPerSample != 8 && wave_.bitsPerSample != 16) ||
@@ -1181,6 +1192,19 @@ namespace Microsoft::Xna::Framework::Audio
             throw System::ArgumentNullException("source");
         XnaWave wave = XnaWaveParser(stream).Parse();
         stream.Close();
+        // XNA's SoundEffect constructor hands the parsed format to the kernel after WavFile.Open
+        // has closed the stream: KernelSoundEffectBase.Initialize (IL_0012-0022) accepts an 18- or
+        // 50-byte format once shorter ones are zero-extended to 18, and ValidateWaveformatEx
+        // requires a PCM cbSize of 0 (IL_0029-0038) and a byte rate of sample rate * block align
+        // (IL_0057-006e). Its E_FAIL reaches Helpers.GetExceptionFromResult's default,
+        // InvalidOperationException(UnexpectedError).
+        const std::size_t localizedFormatSize = std::max<std::size_t>(wave.formatSize, 18);
+        if ((localizedFormatSize != 18 && localizedFormatSize != 50) || wave.extensionSize != 0 ||
+            wave.avgBytesPerSec != static_cast<std::uint32_t>(wave.sampleRate) *
+                                       static_cast<std::uint32_t>(wave.blockAlign))
+        {
+            throw System::InvalidOperationException("An unexpected error has occurred.");
+        }
 
         auto implPtr = std::make_shared<Impl>();
         const auto frames = static_cast<std::int64_t>(wave.data.size()) / wave.blockAlign;
