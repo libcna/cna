@@ -1354,8 +1354,9 @@ namespace Microsoft::Xna::Framework::Graphics
             // Refresh Framework Helpers::CheckDisposed IL_000d-001d uses runtime type Name.
             throw System::ObjectDisposedException(indexBuffer->GetTypeName().substr(indexBuffer->GetTypeName().find_last_of('.') + 1));
         if (indexBuffer && indexBuffer->getGraphicsDeviceProperty() != this)
+            // XNA's FrameworkResources.InvalidDevice (review rv-gfxstate F9).
             throw System::InvalidOperationException(
-                "SetIndexBuffer: the index buffer belongs to a different GraphicsDevice.");
+                "Resources can only be used on the GraphicsDevice that they were created on. This resource was not created on this GraphicsDevice.");
         currentIndexBuffer_ = indexBuffer;
     }
 
@@ -2083,10 +2084,10 @@ namespace Microsoft::Xna::Framework::Graphics
                 if (binding.getVertexBufferProperty() != nullptr &&
                     binding.getInstanceFrequencyProperty() != 0)
                 {
+                    // XNA's NonZeroInstanceFrequency (DrawPrimitives IL_005d-0067).
                     throw System::InvalidOperationException(
-                        std::string(operation) +
-                        ": a bound VertexBufferBinding has a non-zero InstanceFrequency; "
-                        "draw it with DrawInstancedPrimitives.");
+                        "Non-instanced draw calls are not valid when a vertex buffer is bound "
+                        "with a non-zero instance frequency.");
                 }
             }
         }
@@ -2108,10 +2109,10 @@ namespace Microsoft::Xna::Framework::Graphics
             }
             if (!perVertex || !perInstance)
             {
+                // XNA's InvalidInstanceStreams (DrawInstancedPrimitives IL_036f-0374).
                 throw System::InvalidOperationException(
-                    "GraphicsDevice::DrawInstancedPrimitives: the bound vertex buffers must "
-                    "include at least one per-vertex stream and at least one stream with a "
-                    "non-zero InstanceFrequency.");
+                    "Instanced draw calls require at least one vertex buffer with an instance "
+                    "frequency of zero and at least one with a non-zero instance frequency.");
             }
         }
     }
@@ -5810,9 +5811,7 @@ namespace Microsoft::Xna::Framework::Graphics
             // Microsoft XNA SetRenderTargets IL_0147-0151: `new ArgumentException(message)`,
             // so the exception carries no ParamName.
             if (!texture)
-                throw System::ArgumentException(
-                    "SetRenderTargets: binding " + std::to_string(i)
-                    + " has a null render target.");
+                throw System::ArgumentException("This method does not accept null for this parameter.");
             if (texture->getIsDisposedProperty())
                 throw System::ObjectDisposedException(texture->GetTypeName().substr(texture->GetTypeName().find_last_of('.') + 1));
             // SOFTWARE-221: XNA resources are owned by one GraphicsDevice. Accepting a target
@@ -5820,7 +5819,7 @@ namespace Microsoft::Xna::Framework::Graphics
             // context and must be rejected before either public or renderer binding state changes.
             if (texture->getGraphicsDeviceProperty() != this)
                 throw System::InvalidOperationException(
-                    "SetRenderTargets: the render target belongs to a different GraphicsDevice.");
+                    "Resources can only be used on the GraphicsDevice that they were created on. This resource was not created on this GraphicsDevice.");
 
             // Link boundary: RenderTarget2D and RenderTargetCube describe their own binding, so
             // that binding a 2D target does not link the cube-map classes.
@@ -5848,24 +5847,27 @@ namespace Microsoft::Xna::Framework::Graphics
             for (std::size_t previous = 0; previous < i; ++previous)
             {
                 if (publicTargets[i] == publicTargets[previous])
+                    // XNA's CannotSetAlreadyUsedRenderTarget (SetRenderTargets IL_015d-0167).
                     throw System::ArgumentException(
-                        "SetRenderTargets: the same render target cannot be bound to more than "
-                        "one slot.");
+                        "The render target has already been set on another index. Each render "
+                        "target may only be set on a single index at a time.");
             }
             if (descriptors[i].GetWidth() != descriptors[0].GetWidth()
                 || descriptors[i].GetHeight() != descriptors[0].GetHeight())
+                // XNA's RenderTargetsMustMatch (SetRenderTargets IL_0168-0172), for size,
+                // multisample and bit-depth mismatches alike.
                 throw System::ArgumentException(
-                    "SetRenderTargets: render targets must have matching dimensions.");
+                    "All active render targets must be the same size with the same multisample type and bit depth.");
             if (descriptors[i].GetAppliedMultiSampleCount()
                 != descriptors[0].GetAppliedMultiSampleCount())
                 throw System::ArgumentException(
-                    "SetRenderTargets: render targets must have matching applied sample counts.");
+                    "All active render targets must be the same size with the same multisample type and bit depth.");
             if (Texture::GetFormatSizeEXT(
                     renderTargets[i].getRenderTargetProperty()->getFormatProperty())
                 != Texture::GetFormatSizeEXT(
                     renderTargets[0].getRenderTargetProperty()->getFormatProperty()))
                 throw System::ArgumentException(
-                    "SetRenderTargets: render targets must have matching pixel sizes.");
+                    "All active render targets must be the same size with the same multisample type and bit depth.");
         }
 
         // Like Clear and Reset, binding outside this device's frame must lease
@@ -5957,7 +5959,7 @@ namespace Microsoft::Xna::Framework::Graphics
             throw System::ObjectDisposedException(vertexBuffer->GetTypeName().substr(vertexBuffer->GetTypeName().find_last_of('.') + 1));
         if (vertexBuffer->getGraphicsDeviceProperty() != this)
             throw System::InvalidOperationException(
-                "SetVertexBuffer: the vertex buffer belongs to a different GraphicsDevice.");
+                "Resources can only be used on the GraphicsDevice that they were created on. This resource was not created on this GraphicsDevice.");
 
         currentVertexBuffer_ = vertexBuffer;
         currentVertexBuffers_.clear();
@@ -5986,13 +5988,13 @@ namespace Microsoft::Xna::Framework::Graphics
                 const VertexBufferBinding& binding = vertexBuffers[processed];
                 const VertexBuffer* const buffer = binding.getVertexBufferProperty();
                 if (buffer == nullptr)
-                    throw System::ArgumentException(
-                        "SetVertexBuffers: null vertex-buffer bindings are not allowed.");
+                    // XNA's NullNotAllowed (SetVertexBuffers IL_005c-0066).
+                    throw System::ArgumentException("This method does not accept null for this parameter.");
                 if (buffer->getIsDisposedProperty())
                     throw System::ObjectDisposedException(buffer->GetTypeName().substr(buffer->GetTypeName().find_last_of('.') + 1));
                 if (buffer->getGraphicsDeviceProperty() != this)
                     throw System::InvalidOperationException(
-                        "SetVertexBuffers: a vertex buffer belongs to a different GraphicsDevice.");
+                        "Resources can only be used on the GraphicsDevice that they were created on. This resource was not created on this GraphicsDevice.");
 
                 if (processed < currentVertexBuffers_.size())
                     currentVertexBuffers_[processed] = binding;

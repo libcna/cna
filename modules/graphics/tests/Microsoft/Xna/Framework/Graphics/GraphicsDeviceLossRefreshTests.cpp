@@ -15,6 +15,11 @@
 #include "Microsoft/Xna/Framework/Graphics/PresentationParameters.hpp"
 #include "Microsoft/Xna/Framework/Graphics/RenderTarget2D.hpp"
 #include "Microsoft/Xna/Framework/Graphics/RenderTargetCube.hpp"
+#include "Microsoft/Xna/Framework/Graphics/RenderTargetBinding.hpp"
+#include "Microsoft/Xna/Framework/Graphics/VertexBuffer.hpp"
+#include "Microsoft/Xna/Framework/Graphics/VertexBufferBinding.hpp"
+#include "Microsoft/Xna/Framework/Graphics/VertexPositionColor.hpp"
+#include "Microsoft/Xna/Framework/Graphics/BufferUsage.hpp"
 #include "System/ArgumentException.hpp"
 #include "System/ArgumentNullException.hpp"
 #include "System/ArgumentOutOfRangeException.hpp"
@@ -61,6 +66,34 @@ namespace
             EXPECT_EQ(std::string(e.what()), body);
         }
     }
+}
+
+// rv-gfxstate review F9: the binding refusals carry XNA's resource strings -- NullNotAllowed
+// (SetVertexBuffers IL_005c-0066, SetRenderTargets IL_0147-0151), CannotSetAlreadyUsedRenderTarget
+// (IL_015d-0167), RenderTargetsMustMatch (IL_0168-0172), InvalidDevice (SetVertexBuffers
+// IL_0089-0093) -- not CNA's own wording.
+TEST(GraphicsDeviceLossRefreshTest, BindingRefusalsCarryXnasMessages)
+{
+    GraphicsDevice d(GraphicsAdapter::getDefaultAdapterProperty(), GraphicsProfile::HiDef, Parameters());
+    GraphicsDevice other(GraphicsAdapter::getDefaultAdapterProperty(), GraphicsProfile::HiDef, Parameters());
+    Refusal<System::ArgumentException>("This method does not accept null for this parameter.",
+        [&] { d.SetVertexBuffers({VertexBufferBinding()}); });
+    Refusal<System::ArgumentException>("This method does not accept null for this parameter.",
+        [&] { d.SetRenderTargets({RenderTargetBinding()}); });
+    RenderTarget2D a(d, 8, 8);
+    RenderTarget2D b(d, 16, 8);
+    Refusal<System::ArgumentException>(
+        "The render target has already been set on another index. Each render target may only be "
+        "set on a single index at a time.",
+        [&] { d.SetRenderTargets({RenderTargetBinding(&a), RenderTargetBinding(&a)}); });
+    Refusal<System::ArgumentException>(
+        "All active render targets must be the same size with the same multisample type and bit depth.",
+        [&] { d.SetRenderTargets({RenderTargetBinding(&a), RenderTargetBinding(&b)}); });
+    VertexBuffer foreign(other, VertexPositionColor::getVertexDeclarationStatic(), 3, BufferUsage::None);
+    Refusal<System::InvalidOperationException>(
+        "Resources can only be used on the GraphicsDevice that they were created on. This resource "
+        "was not created on this GraphicsDevice.",
+        [&] { d.SetVertexBuffer(&foreign); });
 }
 
 // RV-TEX review #3: a render target's IsContentLost latches its device's loss when read, as XNA's

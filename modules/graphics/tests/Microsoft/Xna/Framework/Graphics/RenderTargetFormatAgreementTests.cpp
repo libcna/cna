@@ -574,8 +574,10 @@ TEST(RenderTargetFormatAgreement, AnMrtSetKeyedOnEverySlotsFormat)
     // clean exception.
     if (!mixed.empty())
     {
+        // XNA's own refusal (RenderTargetsMustMatch) speaks of "bit depth".
         EXPECT_TRUE(mixed.find("format") != std::string::npos ||
-                    mixed.find("pixel size") != std::string::npos)
+                    mixed.find("pixel size") != std::string::npos ||
+                    mixed.find("bit depth") != std::string::npos)
             << RendererName() << " refused a mixed-format MRT set without saying it was about the "
                "formats: \"" << mixed << '"';
     }

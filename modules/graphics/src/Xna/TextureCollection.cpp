@@ -93,8 +93,9 @@ namespace Microsoft::Xna::Framework::Graphics
             && texture->getGraphicsDeviceProperty() != nullptr
             && texture->getGraphicsDeviceProperty() != graphicsDevice_)
         {
+            // XNA's FrameworkResources.InvalidDevice (review rv-gfxstate F9).
             throw System::InvalidOperationException(
-                "The texture belongs to a different GraphicsDevice.");
+                "Resources can only be used on the GraphicsDevice that they were created on. This resource was not created on this GraphicsDevice.");
         }
         Texture*& slot = textures_[static_cast<std::size_t>(index)];
         if (slot != texture)
