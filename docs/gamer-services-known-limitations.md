@@ -438,7 +438,10 @@ Same-machine host-identity replacement is separate from machine migration. **CNA
   rate counts the probes that arrived, first to last arrival; a train from an older CNA has no
   identifier and is told apart by its probe indices, which a lost first probe can still blur. The
   host's responder reports a train once all of it arrived or 20 ms after its last probe, and never
-  reports a train a second time or one with fewer than two probes. PlayerMatch/Ranked listings from a service advertising
+  reports one with fewer than two probes: a lone first probe waits up to the 150 ms search window
+  for the rest of its train. A reported train is remembered for a second (at most 1024 of them, the
+  oldest evicted first), so its stragglers in that time send no second report; a straggler after a
+  second, or after 1024 other reports within it, can report again. PlayerMatch/Ranked listings from a service advertising
   `qos-prejoin-v1` start bounded asynchronous probes over a separate verified WSS
   channel through that service to the current host and back, before joining.
   Poll the listing's `QualityOfService` again until `IsAvailable` becomes true;

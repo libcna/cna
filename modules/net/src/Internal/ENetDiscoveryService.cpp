@@ -17,6 +17,7 @@
 #include <array>
 #include <atomic>
 #include <chrono>
+#include <deque>
 #include <enet/enet.h>
 #include <memory>
 #include <random>
@@ -237,26 +238,44 @@ namespace CNA::Internal::Net
             // A train is reported once every probe arrived, or this long after its last arrival
             // (its tail was lost); the receive wait shortens to the next such moment.
             static constexpr auto TrainIdle = std::chrono::milliseconds(20);
+            // A lone first probe measures nothing, so nothing is gained by giving up on it early:
+            // it waits a whole search for the rest of its train (a delivery stall after the first
+            // datagram), and gives its slot to a new train only when every slot is taken.
+            static constexpr auto LoneProbeIdle = std::chrono::milliseconds(kSearchWindowMs);
 
             // Identified trains already reported: a straggler or duplicate of one must not open a
-            // new record whose report would replace the measurement.
+            // new record whose report would replace the measurement. A report matters only within
+            // the querier's search, so one is remembered for a second; the bound evicts the oldest
+            // only past 1024 reports in that second.
             struct ReportedTrain
             {
                 enet_uint32 Host = 0;
                 enet_uint16 Port = 0;
                 std::uint32_t TrainId = 0;
+                std::chrono::steady_clock::time_point At;
             };
-            std::vector<ReportedTrain> reported_;
+            static constexpr std::size_t MaxReported = 1024;
+            static constexpr auto ReportedMemory = std::chrono::seconds(1);
+            std::deque<ReportedTrain> reported_;
 
-            void Report(const Train& train)
+            static std::chrono::steady_clock::duration IdleFor(const Train& train)
             {
+                return train.Received < 2 ? std::chrono::steady_clock::duration(LoneProbeIdle)
+                                          : std::chrono::steady_clock::duration(TrainIdle);
+            }
+
+            void Report(const Train& train, std::chrono::steady_clock::time_point now)
+            {
+                // One probe measures nothing; reporting 0 would only overwrite a real result, and
+                // remembering it would drop the rest of its train should that still arrive.
+                if (train.Received < 2) return;
                 if (train.TrainId != 0)
                 {
-                    if (reported_.size() >= MaxTrains) reported_.erase(reported_.begin());
-                    reported_.push_back(ReportedTrain{train.From.host, train.From.port, train.TrainId});
+                    while (!reported_.empty()
+                           && (reported_.size() >= MaxReported || now - reported_.front().At >= ReportedMemory))
+                        reported_.pop_front();
+                    reported_.push_back(ReportedTrain{train.From.host, train.From.port, train.TrainId, now});
                 }
-                // One probe measures nothing; reporting 0 would only overwrite a real result.
-                if (train.Received < 2) return;
                 DiscoveryUpstreamReportMessage report;
                 report.ConnectPort = connectPort_;
                 report.BytesPerSecond = TrainRate(0, train.Received - 1, train.First, train.Last);
@@ -274,7 +293,7 @@ namespace CNA::Internal::Net
                     for (const Train& train : trains)
                     {
                         const auto due = std::chrono::duration_cast<std::chrono::milliseconds>(
-                            train.Last + TrainIdle - before).count() + 1;
+                            train.Last + IdleFor(train) - before).count() + 1;
                         waitMs = std::min<enet_uint32>(waitMs, static_cast<enet_uint32>(std::max<long long>(due, 1)));
                     }
                     if (enet_socket_wait(socket_, &condition, waitMs) == 0 && (condition & ENET_SOCKET_WAIT_RECEIVE))
@@ -303,8 +322,8 @@ namespace CNA::Internal::Net
                     const auto now = std::chrono::steady_clock::now();
                     for (auto train = trains.begin(); train != trains.end();)
                     {
-                        if (now - train->Last < TrainIdle) { ++train; continue; }
-                        Report(*train);
+                        if (now - train->Last < IdleFor(*train)) { ++train; continue; }
+                        Report(*train, now);
                         train = trains.erase(train);
                     }
                 }
@@ -329,13 +348,22 @@ namespace CNA::Internal::Net
                     // An identified train's duplicate is ignored. An older querier's index seen
                     // again is its next train: report this one, then time the new one.
                     if (probe.TrainId != 0) return;
-                    Report(*train);
+                    Report(*train, at);
                     trains.erase(train);
                     train = trains.end();
                 }
                 if (train == trains.end())
                 {
-                    if (trains.size() >= MaxTrains) return;
+                    if (trains.size() >= MaxTrains)
+                    {
+                        // Every slot taken: the oldest lone probe, which measures nothing yet,
+                        // makes room; a train already measuring keeps its slot.
+                        const auto lone = std::min_element(trains.begin(), trains.end(),
+                            [](const Train& a, const Train& b)
+                            { return (a.Received < 2) != (b.Received < 2) ? a.Received < 2 : a.Last < b.Last; });
+                        if (lone->Received >= 2) return;
+                        trains.erase(lone);
+                    }
                     Train fresh;
                     fresh.From = from;
                     fresh.TrainId = probe.TrainId;
@@ -349,7 +377,7 @@ namespace CNA::Internal::Net
                 train->Last = at;
                 if (train->Received == train->Count)
                 {
-                    Report(*train);
+                    Report(*train, at);
                     trains.erase(train);
                 }
             }

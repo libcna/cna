@@ -598,4 +598,45 @@ TEST(ENetDiscoveryServiceTest, AReportedTrainsStragglersSendNoSecondReport) {
     EXPECT_TRUE(querier.Receive(DiscoveryMessageTag::UpstreamReport, std::chrono::milliseconds(300)).empty())
         << "the late probe replaced the report";
 }
+
+// RV-NET-13 review N17: a lone first probe, then a delivery stall longer than the 20 ms idle time,
+// then the rest of the train. The first probe measures nothing, so it is neither reported nor
+// remembered as reported; it waits for the rest, and the one report times all eight arrivals.
+TEST(ENetDiscoveryServiceTest, ALoneFirstProbeAheadOfADeliveryStallJoinsTheRestOfItsTrain) {
+    SystemLinkSessionFixture host("HostPlayer");
+    UpstreamQuerier querier(*host.session);
+    ASSERT_NE(querier.invite.ResponderPort, 0);
+    querier.SendProbe(0, 0x9190u);
+    std::this_thread::sleep_for(std::chrono::milliseconds(30));
+    for (uint8_t index = 1; index < kQosProbeCount; ++index) {
+        std::this_thread::sleep_for(std::chrono::milliseconds(1));
+        querier.SendProbe(index, 0x9190u);
+    }
+    const auto bytes = querier.Receive(DiscoveryMessageTag::UpstreamReport, std::chrono::milliseconds(500));
+    ASSERT_FALSE(bytes.empty()) << "the train behind its lone first probe was dropped";
+    // Seven probe intervals over at least 30 ms: at most 7 * 1200 B / 0.030 s = 280,000 B/s. The
+    // seven probes after the stall alone, at most 6 ms apart nominally, would measure far more.
+    EXPECT_LE(NetDiscoveryProtocol::DecodeUpstreamReport(bytes).BytesPerSecond, 280000)
+        << "the first probe's receipt was not part of the measurement";
+    EXPECT_TRUE(querier.Receive(DiscoveryMessageTag::UpstreamReport, std::chrono::milliseconds(300)).empty());
+}
+
+// RV-NET-13 review N18: a reported train stays reported while other queriers' reports go by -- the
+// responder's memory is not 64 entries that 64 other trains evict.
+TEST(ENetDiscoveryServiceTest, AReportedTrainStaysReportedPastSixtyFourOtherReports) {
+    SystemLinkSessionFixture host("HostPlayer");
+    UpstreamQuerier querier(*host.session);
+    ASSERT_NE(querier.invite.ResponderPort, 0);
+    const auto sendTrain = [&](uint32_t trainId) {
+        for (uint8_t index = 0; index < kQosProbeCount; ++index) querier.SendProbe(index, trainId);
+        return !querier.Receive(DiscoveryMessageTag::UpstreamReport, std::chrono::milliseconds(500)).empty();
+    };
+    ASSERT_TRUE(sendTrain(0xA000u));
+    for (uint32_t other = 1; other <= 64; ++other) ASSERT_TRUE(sendTrain(0xA000u + other)) << other;
+    // Two stragglers of the first train: a record of them would be reported 20 ms later.
+    querier.SendProbe(kQosProbeCount - 2, 0xA000u);
+    querier.SendProbe(kQosProbeCount - 1, 0xA000u);
+    EXPECT_TRUE(querier.Receive(DiscoveryMessageTag::UpstreamReport, std::chrono::milliseconds(300)).empty())
+        << "the first train's stragglers were reported as a train of their own";
+}
 #endif
