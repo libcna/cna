@@ -413,6 +413,34 @@ namespace CNA::Internal::Renderers::Software
                         result.samplers.push_back(SoftwareShaderSamplerEXT{
                             static_cast<std::uint8_t>(symbol.register_index), type});
                 }
+                // A ps_1_x shader declares no dimension, and a generic CTAB sampler names none;
+                // MojoShader then infers it from the Effect texture parameter the sampler maps
+                // to (TQ-FORK-PIN-02), as the D3D9 runtime samples the bound texture's type.
+                for (int samplerIndex = 0;
+                     result.majorVersion < 2u && samplerIndex < parseData.sampler_count;
+                     ++samplerIndex)
+                {
+                    const MOJOSHADER_sampler& sampler = parseData.samplers[samplerIndex];
+                    SoftwareShaderSamplerTypeEXT type = SoftwareShaderSamplerTypeEXT::Unknown;
+                    if (sampler.type == MOJOSHADER_SAMPLER_2D)
+                        type = SoftwareShaderSamplerTypeEXT::Texture2D;
+                    else if (sampler.type == MOJOSHADER_SAMPLER_CUBE)
+                        type = SoftwareShaderSamplerTypeEXT::Cube;
+                    else if (sampler.type == MOJOSHADER_SAMPLER_VOLUME)
+                        type = SoftwareShaderSamplerTypeEXT::Volume;
+                    if (type == SoftwareShaderSamplerTypeEXT::Unknown || sampler.index < 0 ||
+                        sampler.index >= 16)
+                        continue;
+                    const bool known = std::any_of(
+                        result.samplers.begin(), result.samplers.end(),
+                        [&sampler](const SoftwareShaderSamplerEXT& candidate)
+                        {
+                            return candidate.registerNumber == sampler.index;
+                        });
+                    if (!known)
+                        result.samplers.push_back(SoftwareShaderSamplerEXT{
+                            static_cast<std::uint8_t>(sampler.index), type});
+                }
             }
             return result;
         }
