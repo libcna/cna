@@ -35,6 +35,8 @@ using namespace CNA::Testing::Renderers;
 #include "Microsoft/Xna/Framework/Graphics/SpriteBatch.hpp"
 #include "Microsoft/Xna/Framework/Graphics/PresentationParameters.hpp"
 #include "Microsoft/Xna/Framework/Graphics/RenderTarget2D.hpp"
+#include "Microsoft/Xna/Framework/Graphics/ResourceCreatedEventArgs.hpp"
+#include "Microsoft/Xna/Framework/Graphics/ResourceDestroyedEventArgs.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsAdapter.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsProfile.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Texture.hpp"
@@ -2334,6 +2336,42 @@ protected:
                std::abs(c.getBProperty() - b) <= tolerance;
     }
 };
+
+// RV-TEX review #1: XNA's stream constructor registers the texture with its device (Texture2D
+// stream .ctor IL_00c7-00e1 -> DeviceResourceManager.AddTrackedObject IL_00dc-00e3 raises
+// ResourceCreated; ReleaseNativeObject IL_002f-003c -> ReleaseAllReferences IL_0043-0057 raises
+// ResourceDestroyed). A FromStream texture was never registered, so neither event was raised.
+TEST_F(Texture2DFromStreamFormatTest, FromStreamRegistersTheTextureWithItsDevice)
+{
+    // The handlers' records outlive the device and every resource that can raise them.
+    std::vector<System::Object*> created;
+    std::vector<std::string> destroyed;
+    GraphicsDevice device;
+    Texture2D src(device, 1, 1);
+    const Color pixel(10, 20, 30, 255);
+    src.SetData(&pixel, 1);
+    MemoryStream writeStream;
+    src.SaveAsPng(&writeStream, 1, 1);
+    auto bytes = writeStream.GetBuffer();
+
+    device.ResourceCreated += [&](System::Object*, const Microsoft::Xna::Framework::Graphics::ResourceCreatedEventArgs& args)
+    { created.push_back(args.getResourceProperty()); };
+    device.ResourceDestroyed += [&](System::Object*, const Microsoft::Xna::Framework::Graphics::ResourceDestroyedEventArgs& args)
+    { destroyed.push_back(args.getNameProperty()); };
+
+    MemoryStream readStream(bytes.data(), static_cast<System::IO::intcs>(bytes.size()));
+    Texture2D loaded = Texture2D::FromStream(device, readStream);
+    ASSERT_EQ(created.size(), 1u) << "FromStream raised no ResourceCreated";
+    EXPECT_EQ(created.back(), static_cast<System::Object*>(&loaded));
+    EXPECT_EQ(loaded.getGraphicsDeviceProperty(), &device);
+    Color read;
+    loaded.GetData(&read, 1);
+    EXPECT_EQ(read, pixel);
+    loaded.setNameProperty("rv-tex-1-from-stream");
+    loaded.Dispose();
+    ASSERT_EQ(destroyed.size(), 1u) << "disposing a FromStream texture raised no ResourceDestroyed";
+    EXPECT_EQ(destroyed.back(), "rv-tex-1-from-stream");
+}
 
 TEST_F(Texture2DFromStreamFormatTest, PngRoundTripDecodesCorrectSizeAndColor)
 {

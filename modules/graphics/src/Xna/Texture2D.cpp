@@ -2801,12 +2801,14 @@ namespace Microsoft::Xna::Framework::Graphics
         img.mipLevels = static_cast<int>(rgbaLevels.size());
         img.pixels = std::move(rgbaLevels[0]);
 
-        Texture2D tex;
-        tex.graphicsDevice_ = &device;
-        tex.width           = w;
-        tex.height          = h;
-        tex.levelCount_      = img.mipLevels;
-        tex.renderer_        = device.GetRenderer().CreateTexture(img);
+        // Built through the device constructor, as XNA's stream constructor registers the texture
+        // with its device (IL_00c7-00e1, raising ResourceCreated): it holds the device's lifetime,
+        // leases its renderer context for later transfers and reports its destruction. That
+        // constructor belongs to RenderTarget2D, so its GPU-only flag is cleared again, as
+        // ReconstructFromCache does.
+        auto renderer = device.GetRenderer().CreateTexture(img);
+        Texture2D tex(device, w, h, SurfaceFormat::Color, img.mipLevels, std::move(renderer));
+        tex.gpuOnlyContent_ = false;
         tex.cpuPixels_      = std::make_shared<std::vector<uint8_t>>(std::move(img.pixels));
         tex.renderer_->ShareCpuPixels(tex.cpuPixels_);
 
@@ -2827,6 +2829,7 @@ namespace Microsoft::Xna::Framework::Graphics
             }
         }
         tex.MaybeFreeCpuPixels();
+        CNA::Internal::Graphics::PublishResourceCreated(tex);
         return tex;
     }
 
