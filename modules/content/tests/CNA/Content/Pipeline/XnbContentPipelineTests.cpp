@@ -17,6 +17,7 @@
 #include <vector>
 
 #include <gtest/gtest.h>
+#include <limits>
 
 #include "CNA/Content/Cnb/CnbCurveCodec.hpp"
 #include "CNA/Content/Cnb/CnbDocument.hpp"
@@ -940,6 +941,36 @@ TEST(XnbContentPipelineTest, Texture3DHandBuiltWireRoutePreservesEveryMipByte)
     const Pipeline::ContentBuildResult built = Build(scratch.Path(), "volume.xnb", "Volumes/v");
     EXPECT_EQ(built.output.assetTypeId, Cnb::CnbAssetTypeId::Texture3D);
     ExpectTextureEqual(expected, Cnb::DecodeTexture3DFromCnb(ParseOutput(built)));
+}
+
+// The runtime readers take a level count of zero or less as one empty level (Refresh Texture3DReader
+// and TextureCubeReader loop `level < count`), but an import has no voxels or faces to convert:
+// the build refuses it instead of reading an empty level list.
+TEST(XnbContentPipelineTest, AVolumeOrCubeWithoutLevelsIsRefusedCleanly)
+{
+    ScratchDirectory scratch("texture-no-levels");
+    for (const std::int32_t count : {0, -1, std::numeric_limits<std::int32_t>::min()})
+    {
+        SCOPED_TRACE(count);
+        ByteWriter volume;
+        volume.I32(0);
+        volume.I32(1);
+        volume.I32(1);
+        volume.I32(1);
+        volume.I32(count);
+        WriteBytes(scratch.Path() / "volume.xnb",
+                   MakeXnb({"Microsoft.Xna.Framework.Content.Texture3DReader"}, volume.bytes));
+        EXPECT_THROW(static_cast<void>(Build(scratch.Path(), "volume.xnb", "volume")),
+                     Pipeline::ContentPipelineError);
+        ByteWriter cube;
+        cube.I32(0);
+        cube.I32(1);
+        cube.I32(count);
+        WriteBytes(scratch.Path() / "cube.xnb",
+                   MakeXnb({"Microsoft.Xna.Framework.Content.TextureCubeReader"}, cube.bytes));
+        EXPECT_THROW(static_cast<void>(Build(scratch.Path(), "cube.xnb", "cube")),
+                     Pipeline::ContentPipelineError);
+    }
 }
 
 TEST(XnbContentPipelineTest, CurveUsesTheExistingNativeCurveSchemaWithoutASecondRepresentation)

@@ -264,6 +264,14 @@ namespace CNA::Content::Pipeline
         {
             const Cnb::CnbTextureData texture = ConvertXnbTextureToCnbRgba8(
                 std::get<XnbTextureData>(asset.value));
+            // The runtime reader accepts a level count of zero or less (one empty level), but an
+            // import needs the voxels, as the 2D import does (ImportedImageFromTexture).
+            if (texture.representations.size() != 1u ||
+                texture.representations.front().levels.empty())
+            {
+                throw ContentLoadException(
+                    "XnbImporter: canonical Texture3D does not contain one Rgba8 representation.");
+            }
             ImportedTexture3D imported;
             imported.width = texture.width;
             imported.height = texture.height;
