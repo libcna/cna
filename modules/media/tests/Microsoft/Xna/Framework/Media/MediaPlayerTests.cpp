@@ -342,6 +342,36 @@ TEST_F(MediaPlayerTest, PlayPositionIsAWholeNumberOfMilliseconds)
     EXPECT_EQ(ticks % System::TimeSpan::TicksPerMillisecond, 0) << ticks;
 }
 
+// rv-fix6 review #4: XNA appends newly pending calls to the surviving copy (FrameworkDispatcher.Update
+// IL_0031-0037) without merging them into an earlier one of the same kind, so a song change queued by
+// the handler that then throws is delivered on its own after the retried one.
+TEST_F(MediaPlayerTest, ARetriedBatchKeepsANewCallOfTheSameKindSeparate)
+{
+    int songs = 0;
+    int states = 0;
+    auto songToken = MediaPlayer::ActiveSongChanged.Add(
+        [&songs](System::Object*, const System::EventArgs&)
+        {
+            if (++songs == 1)
+            {
+                Microsoft::Xna::Framework::FrameworkDispatcher::ActiveSongChanged = true;
+                throw std::runtime_error("first song notification");
+            }
+        });
+    auto stateToken = MediaPlayer::MediaStateChanged.Add(
+        [&states](System::Object*, const System::EventArgs&) { ++states; });
+    Microsoft::Xna::Framework::FrameworkDispatcher::ActiveSongChanged = false;
+    Microsoft::Xna::Framework::FrameworkDispatcher::MediaStateChanged = false;
+    Song song(kFixtureA, "A");
+    MediaPlayer::Play(&song);
+    EXPECT_THROW(Microsoft::Xna::Framework::FrameworkDispatcher::Update(), std::runtime_error);
+    Microsoft::Xna::Framework::FrameworkDispatcher::Update();
+    MediaPlayer::ActiveSongChanged.Remove(songToken);
+    MediaPlayer::MediaStateChanged.Remove(stateToken);
+    EXPECT_EQ(songs, 3) << "the retried song call and the new one were merged";
+    EXPECT_EQ(states, 1);
+}
+
 // MEDIA-84/188/189/190: IsVisualizationEnabled/GetVisualizationData.
 //
 // This test previously asserted the STUB behavior as if it were the specification -- that the

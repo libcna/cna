@@ -457,6 +457,7 @@ namespace Microsoft::Xna::Framework::Audio
     SoundEffect::SoundEffect(SoundEffect&& other) noexcept
         : System::Object(std::move(other)), impl_(std::move(other.impl_)),
           name_(std::move(other.name_)), isDisposed_(other.isDisposed_),
+          disposedDurationTicks_(other.disposedDurationTicks_),
           loopStart_(other.loopStart_), loopLength_(other.loopLength_),
           contentOwnership_(this, std::move(other.contentOwnership_)) { }
 
@@ -468,6 +469,7 @@ namespace Microsoft::Xna::Framework::Audio
             impl_ = std::move(other.impl_);
             name_ = std::move(other.name_);
             isDisposed_ = other.isDisposed_;
+            disposedDurationTicks_ = other.disposedDurationTicks_;
             loopStart_ = other.loopStart_;
             loopLength_ = other.loopLength_;
             contentOwnership_ = std::move(other.contentOwnership_);

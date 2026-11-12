@@ -179,6 +179,17 @@ TEST(Sdl3MouseTest, WheelEventsAccumulateInXnaUnitsIncludingFractionsOfANotch)
     EXPECT_EQ(precise.GetSnapshot().scrollY, 240);
 }
 
+// rv-fix6 review #3: a huge event saturates the total but leaves no huge sum behind, so the next
+// ordinary event still moves it.
+TEST(Sdl3MouseTest, AHugeWheelEventLeavesLaterEventsEffective)
+{
+    CNA::Platform::Sdl3::Sdl3Mouse mouse;
+    mouse.ObserveEvent(MouseWheelEvent{17, 0.0f, std::numeric_limits<float>::max()});
+    EXPECT_EQ(mouse.GetSnapshot().scrollY, std::numeric_limits<int>::max());
+    mouse.ObserveEvent(MouseWheelEvent{17, 0.0f, -0.5f});
+    EXPECT_EQ(mouse.GetSnapshot().scrollY, std::numeric_limits<int>::max() - 60);
+}
+
 // RV-FIX5 review #1: an event that moves only the other axis adds nothing to this one. A carried
 // remainder rounded at a half unit flipped sign and moved the total 8, 7, 8, 7.
 TEST(Sdl3MouseTest, AWheelEventOfZeroOnOneAxisLeavesThatAxisAlone)

@@ -5288,7 +5288,9 @@ namespace CNA::Internal::Renderers::SdlGpu
                 command.addressW = captured->addressW;
                 command.maxAnisotropy = captured->maxAnisotropy;
                 command.maxMipLevel = captured->maxMipLevel;
-                command.lodBias = captured->lodBias;
+                // A shader that applies the bias itself gets none from the native sampler, as the
+                // compiled binder's own samplers do: the bias is applied once.
+                command.lodBias = command.compiledEffect.pixelUsesLodBias ? 0.0f : captured->lodBias;
             }
         }
 #endif

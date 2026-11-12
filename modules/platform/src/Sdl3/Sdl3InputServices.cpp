@@ -96,16 +96,17 @@ namespace CNA::Platform::Sdl3 {
 
         // XNA adds each WM_MOUSEWHEEL delta, in 1/120-notch units, as it comes
         // (MouseMessageHooker.WndProc IL_0008-001b): a precision wheel's half notch is 60, two of
-        // them 120. SDL reports notches as a float; the exact running sum of their units is kept,
-        // and each event adds the change of its rounded value -- the total stays exact and an
-        // event of zero (the other axis moving) adds zero.
-        void AccumulateWheel(int& total, double& exact, const float notches)
+        // them 120. SDL reports notches as a float; each event adds its units rounded half up, and
+        // the remainder -- always in [-0.5, 0.5) -- is carried to the next event, so the total
+        // stays exact, an event of zero (the other axis moving) adds zero, and a huge event leaves
+        // no huge carry behind.
+        void AccumulateWheel(int& total, double& carry, const float notches)
         {
             if (!std::isfinite(notches)) return;
-            const double before = std::round(exact);
-            exact += static_cast<double>(notches) * 120.0;
-            const long long delta =
-                static_cast<long long>(std::clamp(std::round(exact) - before, -4.0e18, 4.0e18));
+            const double units = carry + static_cast<double>(notches) * 120.0;
+            const double whole = std::floor(units + 0.5);
+            carry = units - whole;
+            const long long delta = static_cast<long long>(std::clamp(whole, -4.0e18, 4.0e18));
             const long long next = static_cast<long long>(total) + delta;
             total = static_cast<int>(std::clamp(
                 next,

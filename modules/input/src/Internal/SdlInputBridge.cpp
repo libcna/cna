@@ -38,16 +38,18 @@ namespace
 
     // XNA adds each WM_MOUSEWHEEL delta, in 1/120-notch units, as it comes
     // (MouseMessageHooker.WndProc IL_0008-001b): a precision wheel's half notch is 60. SDL reports
-    // notches as a float; the exact running sum of their units is kept, and each event adds the
-    // change of its rounded value -- so the total stays exact and an event of zero adds zero.
+    // notches as a float; each event adds its units rounded half up, and the remainder -- always
+    // in [-0.5, 0.5) -- is carried to the next event, so the total stays exact, an event of zero
+    // adds zero, and a huge event leaves no huge carry behind.
     double g_wheelExactX = 0.0;
     double g_wheelExactY = 0.0;
-    int WheelUnits(double& exact, const float notches)
+    int WheelUnits(double& carry, const float notches)
     {
         if (!std::isfinite(notches)) return 0;
-        const double before = std::round(exact);
-        exact += static_cast<double>(notches) * 120.0;
-        return static_cast<int>(std::clamp(std::round(exact) - before, -2147483648.0, 2147483647.0));
+        const double units = carry + static_cast<double>(notches) * 120.0;
+        const double whole = std::floor(units + 0.5);
+        carry = units - whole;
+        return static_cast<int>(std::clamp(whole, -2147483648.0, 2147483647.0));
     }
     bool g_textInputControlDown[7] = {};
     bool g_textInputSuppress = false;

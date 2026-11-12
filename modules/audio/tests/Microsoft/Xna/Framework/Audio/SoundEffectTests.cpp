@@ -321,6 +321,21 @@ TEST(SoundEffectTest, DurationSurvivesDispose)
     EXPECT_EQ(effect.getDurationProperty(), before);
 }
 
+// rv-fix6 review #5: a move carries the duration a disposed effect kept.
+TEST(SoundEffectTest, AMovedDisposedEffectKeepsItsDuration)
+{
+    std::vector<SharpRuntime::bytecs> one(16000, 0);
+    std::vector<SharpRuntime::bytecs> two(32000, 0);
+    SoundEffect source(one, 8000, AudioChannels::Mono);
+    source.Dispose();
+    SoundEffect moved(std::move(source));
+    EXPECT_EQ(moved.getDurationProperty(), System::TimeSpan::FromSeconds(1.0));
+    SoundEffect target(two, 8000, AudioChannels::Mono);
+    target.Dispose();
+    target = std::move(moved);
+    EXPECT_EQ(target.getDurationProperty(), System::TimeSpan::FromSeconds(1.0));
+}
+
 // RV-SFX review #7: XNA's MasterVolume getter reads its cached field (IL_0000-0005); the value set
 // last is what reads back.
 TEST(SoundEffectTest, MasterVolumeReadsBackTheValueLastSet)

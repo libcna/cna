@@ -7,6 +7,7 @@
 #include <atomic>
 #include <stdexcept>
 #include <utility>
+#include <vector>
 
 #include "CNA/Internal/Media/VisualizationCapture.hpp"
 #include "CNA/Internal/Media/VisualizationFFT.hpp"
@@ -25,9 +26,14 @@ namespace Microsoft::Xna::Framework::Media
     namespace
     {
         // FrameworkDispatcher::Update()'s media step: the song tracking, then the events it owes.
-        // The batch the media step is dispatching: XNA's static pendingCallsCopy.
-        bool batchSongChanged = false;
-        bool batchStateChanged = false;
+        // The batch the media step is dispatching: XNA's static pendingCallsCopy, a list that new
+        // calls are appended to even when an earlier one of the same kind is still in it.
+        enum class MediaCall : unsigned char { ActiveSongChanged, MediaStateChanged };
+        std::vector<MediaCall>& MediaBatch()
+        {
+            static std::vector<MediaCall> batch;
+            return batch;
+        }
 
         void UpdateFrameworkMedia()
         {
@@ -38,12 +44,18 @@ namespace Microsoft::Xna::Framework::Media
             // MediaStateChanged -- is owed to the next Update. The copy is cleared only after every
             // call returned (IL_0112-0117); a handler that throws leaves it for the next Update,
             // which dispatches it again.
-            batchSongChanged |= std::exchange(FrameworkDispatcher::ActiveSongChanged, false);
-            batchStateChanged |= std::exchange(FrameworkDispatcher::MediaStateChanged, false);
-            if (batchSongChanged) MediaPlayer::OnActiveSongChanged();
-            if (batchStateChanged) MediaPlayer::OnMediaStateChanged();
-            batchSongChanged = false;
-            batchStateChanged = false;
+            auto& batch = MediaBatch();
+            if (std::exchange(FrameworkDispatcher::ActiveSongChanged, false))
+                batch.push_back(MediaCall::ActiveSongChanged);
+            if (std::exchange(FrameworkDispatcher::MediaStateChanged, false))
+                batch.push_back(MediaCall::MediaStateChanged);
+            const std::vector<MediaCall> calls = batch;
+            for (const MediaCall call : calls)
+            {
+                if (call == MediaCall::ActiveSongChanged) MediaPlayer::OnActiveSongChanged();
+                else MediaPlayer::OnMediaStateChanged();
+            }
+            batch.clear();
         }
 
         // Every change the dispatcher must report passes here, so the media step is installed
@@ -551,6 +563,11 @@ namespace Microsoft::Xna::Framework::Media
         auto entry = std::make_unique<Song>(*song);
         entry->contentOwnership_.Detach();
         entry->isDisposed_ = false;
+        // Album, Artist and Genre point into the MediaLibrary that scanned the song, which the
+        // queue does not keep alive: the entry does not carry them.
+        entry->album_ = nullptr;
+        entry->artist_ = nullptr;
+        entry->genre_ = nullptr;
         queue_.Add(entry.release());
     }
 
