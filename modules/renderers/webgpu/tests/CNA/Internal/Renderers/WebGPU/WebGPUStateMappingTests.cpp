@@ -32,6 +32,7 @@
 #include <gtest/gtest.h>
 
 #include <array>
+#include <limits>
 #include <cstdint>
 #include <set>
 #include <stdexcept>
@@ -555,6 +556,27 @@ TEST(WebGPUStateMapping, MaxMipLevelIsALowerLodClampThatNeverExceedsTheUpperOne)
         EXPECT_GE(d.lodMinClamp, 0.0f) << maxMipLevel;
         EXPECT_LE(d.lodMinClamp, d.lodMaxClamp) << maxMipLevel;
     }
+}
+
+// RV-MIX3 review #3: the slot-sampler cache key is the descriptor's, so MaxMipLevel 256 does not
+// share level 0's sampler (a byte mask of the raw value did) while levels past the last one, which
+// build the same descriptor, may share. Equal keys exactly when the lower clamps are equal.
+TEST(WebGPUStateMapping, TheSlotSamplerKeyDistinguishesExactlyTheDescriptorsMaxMipLevelProduces)
+{
+    EXPECT_NE(WGPUSlotSamplerKey(1, 0, 0, 0, 0, 1), WGPUSlotSamplerKey(1, 0, 0, 0, 256, 1));
+    EXPECT_NE(WGPUSlotSamplerKey(1, 0, 0, 0, 1, 1), WGPUSlotSamplerKey(1, 0, 0, 0, 257, 1));
+    const std::array<int, 12> levels{{std::numeric_limits<int>::min(), -1, 0, 1, 31, 32, 33, 255, 256,
+                                      257, 1 << 20, std::numeric_limits<int>::max()}};
+    for (const int a : levels)
+        for (const int b : levels)
+        {
+            WGPUSamplerDescriptor da{};
+            WGPUSamplerDescriptor db{};
+            FillWGPUSamplerDescriptor(da, 1, 0, 0, 0, a, 1);
+            FillWGPUSamplerDescriptor(db, 1, 0, 0, 0, b, 1);
+            EXPECT_EQ(WGPUSlotSamplerKey(1, 0, 0, 0, a, 1) == WGPUSlotSamplerKey(1, 0, 0, 0, b, 1),
+                      da.lodMinClamp == db.lodMinClamp) << a << " vs " << b;
+        }
 }
 
 // ---------------------------------------------------------------------------------------------

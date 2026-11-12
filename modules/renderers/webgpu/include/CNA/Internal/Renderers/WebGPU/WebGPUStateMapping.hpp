@@ -616,6 +616,30 @@ namespace CNA::Internal::Renderers::WebGPU
         return key;
     }
 
+    // The level-of-detail lower clamp a SamplerState's MaxMipLevel names, within the upper clamp of
+    // 32 (see FillWGPUSamplerDescriptor): XNA writes the field to Direct3D 9's UNSIGNED
+    // MaxMipLevel, so a negative value names the last level, as 99 does.
+    [[nodiscard]] inline int WGPUSamplerMinLodLevel(int maxMipLevel)
+    {
+        return maxMipLevel < 0 ? 32 : std::min(maxMipLevel, 32);
+    }
+
+    // The slot-sampler cache key: every FillWGPUSamplerDescriptor input as the descriptor reads it,
+    // so two sampler states share one native sampler exactly when their descriptors agree. A byte of
+    // the raw MaxMipLevel aliased 256 onto 0 although their descriptors differ (RV-MIX3 review).
+    // 64-bit because filter, U, V, W, anisotropy and the level take a byte each (WEBGPU-160/161).
+    [[nodiscard]] inline std::uint64_t WGPUSlotSamplerKey(int filter, int addressU, int addressV,
+                                                          int addressW, int maxMipLevel,
+                                                          int maxAnisotropy)
+    {
+        return (static_cast<std::uint64_t>(filter) & 0xFFull)
+             | ((static_cast<std::uint64_t>(addressU) & 0xFFull) << 8)
+             | ((static_cast<std::uint64_t>(addressV) & 0xFFull) << 16)
+             | (static_cast<std::uint64_t>(std::clamp(maxAnisotropy, 1, 16)) << 24)
+             | ((static_cast<std::uint64_t>(addressW) & 0xFFull) << 32)
+             | (static_cast<std::uint64_t>(WGPUSamplerMinLodLevel(maxMipLevel)) << 40);
+    }
+
     // WEBGPU-82: fills a full WGPUSamplerDescriptor (address modes, mag/min/mipmap filter,
     // anisotropy) from a real XNA SamplerState -- shared translation used by
     // GetOrCreateSlotSampler() (magFilter/minFilter split per XNA TextureFilter value).
@@ -667,10 +691,7 @@ namespace CNA::Internal::Renderers::WebGPU
         // UNSIGNED MaxMipLevel, so -1 arrives as a very large level and names the LAST one,
         // exactly as 99 does. Folding it to 0 with std::max selected the most detailed level
         // instead -- the opposite end of the chain.
-        descriptor.lodMinClamp =
-            maxMipLevel < 0
-                ? descriptor.lodMaxClamp
-                : std::min(static_cast<float>(maxMipLevel), descriptor.lodMaxClamp);
+        descriptor.lodMinClamp = static_cast<float>(WGPUSamplerMinLodLevel(maxMipLevel));
         // WebGPU requires maxAnisotropy==1 unless mag/min/mipmap are all Linear (true only for
         // filter==2 above).
         descriptor.maxAnisotropy = enableAniso

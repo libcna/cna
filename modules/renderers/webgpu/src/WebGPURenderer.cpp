@@ -12219,26 +12219,10 @@ fn cnaInverseTranspose3(m: mat3x3f) -> mat3x3f {
                                                                int maxAnisotropy, const char* family)
     {
         const int clampedAniso = std::clamp(maxAnisotropy, 1, 16);
-        // WEBGPU-160: the key is 64-bit because the 32-bit one was exactly full -- filter, U, V and
-        // anisotropy took a byte each. A W axis folded into it would have aliased two genuinely
-        // different samplers onto one cache entry, which is worse than not honouring W at all.
-        const std::uint64_t key = (static_cast<std::uint64_t>(filter) & 0xFFull)
-                                 | ((static_cast<std::uint64_t>(addressU) & 0xFFull) << 8)
-                                 | ((static_cast<std::uint64_t>(addressV) & 0xFFull) << 16)
-                                 | ((static_cast<std::uint64_t>(clampedAniso) & 0xFFull) << 24)
-                                 | ((static_cast<std::uint64_t>(addressW) & 0xFFull) << 32)
-                                 // WEBGPU-161: a changed MaxMipLevel must produce a NEW sampler
-                                 // rather than mutate a live one, so it belongs in the key.
-                                 // WGF-0005: keyed the way the
-                                 // descriptor READS it. `std::max(0, ...)` folded every negative
-                                 // onto level 0, so a sampler asking for the last level (XNA's
-                                 // unsigned-negative spelling) collided with one asking for the
-                                 // most detailed, and the cache handed back whichever was built
-                                 // first -- the descriptor's own clamp could never be reached.
-                                 | ((static_cast<std::uint64_t>(
-                                         maxMipLevel < 0 ? 0xFFull
-                                                         : (static_cast<std::uint64_t>(maxMipLevel)
-                                                            & 0xFFull))) << 40);
+        // Keyed by what the descriptor reads (WEBGPU-160/161, WGF-0005): a different key for every
+        // different descriptor, the same one for the same descriptor.
+        const std::uint64_t key = WGPUSlotSamplerKey(filter, addressU, addressV, addressW,
+                                                     maxMipLevel, maxAnisotropy);
         const auto it = slotSamplerCache_.find(key);
         const bool hit = it != slotSamplerCache_.end();
 
