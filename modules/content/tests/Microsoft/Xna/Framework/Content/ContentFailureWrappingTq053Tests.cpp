@@ -113,6 +113,25 @@ namespace
         std::exception_ptr cause_;
         bool length_;
     };
+    // A stream whose CanRead (or, readable, CanSeek) getter fails.
+    class CapabilityFaultStream final : public System::IO::MemoryStream
+    {
+    public:
+        CapabilityFaultStream(std::exception_ptr cause, bool canRead) : cause_(cause), canRead_(canRead) {}
+        bool getCanReadProperty() const override
+        {
+            if (canRead_) std::rethrow_exception(cause_);
+            return true;
+        }
+        bool getCanSeekProperty() const override
+        {
+            if (!canRead_) std::rethrow_exception(cause_);
+            return true;
+        }
+    private:
+        std::exception_ptr cause_;
+        bool canRead_;
+    };
     template<class Action>
     void ExpectFailure(Action action, std::exception_ptr cause, bool wrap)
     {
@@ -267,6 +286,23 @@ TEST_F(ContentFailureWrappingTq053Test, EagerStreamReadWrapsOnlyIoFromLengthAndR
                 EmptyProvider provider; StreamManager manager(provider);
                 manager.RouteLoadsThroughOpenStreamEXT(route == 1);
                 manager.open = [&] { return std::make_unique<FaultStream>(failure.cause,length); };
+                ExpectFailure([&] { if (route == 2) (void)manager.ReadAsset<int>("asset", {});
+                                   else (void)manager.Load<int>("asset"); }, failure.cause, failure.wrap);
+            }
+}
+
+TEST_F(ContentFailureWrappingTq053Test, CapabilityGetterIoFailuresKeepTheBadXnbBoundary)
+{
+    // Refresh PrepareStream's IO handler (IL_00f1-0106) also covers BinaryReader's CanRead query
+    // (IL_0000-0001, mscorlib ctor IL_0022-0039) and PrepareStream's CanSeek (IL_009f-00a5): an
+    // IOException from either getter is wrapped as BadXnb; any other exception propagates.
+    for (const auto& failure : Failures())
+        for (bool canRead : {true,false})
+            for (int route : {0,1,2})
+            {
+                EmptyProvider provider; StreamManager manager(provider);
+                manager.RouteLoadsThroughOpenStreamEXT(route == 1);
+                manager.open = [&] { return std::make_unique<CapabilityFaultStream>(failure.cause,canRead); };
                 ExpectFailure([&] { if (route == 2) (void)manager.ReadAsset<int>("asset", {});
                                    else (void)manager.Load<int>("asset"); }, failure.cause, failure.wrap);
             }

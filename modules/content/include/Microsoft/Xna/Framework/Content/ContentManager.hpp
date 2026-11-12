@@ -197,8 +197,19 @@ namespace Microsoft::Xna::Framework::Content
             StreamReadState state;
             try
             {
-                RequireReadableStream(stream);
-                state.canSeek = stream.getCanSeekProperty();
+                // BinaryReader's construction asks CanRead and PrepareStream asks CanSeek inside
+                // the IO handler that wraps Length and Read (Refresh PrepareStream IL_0000-0001,
+                // 009f-00a5, 00f1-0106): an IOException from either getter is BadXnb too.
+                try
+                {
+                    RequireReadableStream(stream);
+                    state.canSeek = stream.getCanSeekProperty();
+                }
+                catch (const System::IO::IOException&)
+                {
+                    throw ContentLoadException(
+                        "Error loading \"" + assetName + "\".", std::current_exception());
+                }
                 const std::vector<std::uint8_t> bytes =
                     ReadStreamToEnd(stream, assetName, state.canSeek);
                 result.emplace(read(bytes, state));
