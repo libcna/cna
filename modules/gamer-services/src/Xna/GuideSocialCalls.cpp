@@ -46,6 +46,15 @@ namespace Microsoft::Xna::Framework::GamerServices
             if(index<0||index>3)throw System::ArgumentOutOfRangeException("player");
         }
         void RequireInitialized() { CNA::Internal::GamerServices::throwIfGamerServicesNotInitialized(); }
+        // .NET String.Length of UTF-8 text: one unit per character, two for a supplementary one.
+        std::size_t Utf16Length(const std::string& text) {
+            std::size_t units=0;
+            for(const unsigned char byte:text) {
+                if((byte&0xC0u)==0x80u)continue;
+                units+=(byte&0xF8u)==0xF0u?2:1;
+            }
+            return units;
+        }
         SignedInGamer* SocialActor(PlayerIndex player) {
             const auto index=static_cast<int>(player);
             if(index<0||index>3)throw System::ArgumentOutOfRangeException("player");
@@ -107,8 +116,10 @@ namespace Microsoft::Xna::Framework::GamerServices
         }
     }
     void Guide::ShowComposeMessage(PlayerIndex player,const std::string& text,const std::vector<Gamer*>& recipients) {
-        // Reference: text shorter than 256 characters, then the recipient list, then the Guide.
-        if(text.size()>=256)throw System::ArgumentException("Text is too long.","text");
+        // XNA Refresh ShowComposeMessage: the player (IL_0000-000d), text shorter than 256 UTF-16
+        // units (IL_0018-0023), the recipient list, then the kernel packet (IL_0066).
+        RequirePlayer(player);
+        if(Utf16Length(text)>=256)throw System::ArgumentException("Text is too long.","text");
         ValidateRecipients(recipients);
         RequireInitialized(); // XNA ShowComposeMessage IL_0060-0065
         if(CNA::Internal::GamerServices::guideIsVisible())throw GuideAlreadyVisibleException("The function cannot be completed at this time: the Guide UI is already active. Wait until Guide.IsVisible is false before issuing this call.");

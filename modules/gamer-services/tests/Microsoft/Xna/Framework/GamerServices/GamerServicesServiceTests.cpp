@@ -1421,6 +1421,13 @@ TEST_F(GuideTest, UninitializedGamerServicesRefuseTheKernelCalls) {
     EXPECT_THROW(Guide::ShowPlayerReview(PlayerIndex::One, nullptr), System::ArgumentNullException);
     EXPECT_THROW(Guide::ShowComposeMessage(PlayerIndex::One, std::string(256, 'a'), {}),
                  System::ArgumentException);
+    // ShowComposeMessage checks the player first (IL_0000-000d) and counts UTF-16 units
+    // (IL_0018-0023): 100 CJK characters are 300 UTF-8 bytes but only 100 units.
+    EXPECT_THROW(Guide::ShowComposeMessage(undefined, "", {}), System::ArgumentOutOfRangeException);
+    std::string cjk;
+    for (int i = 0; i < 100; ++i) cjk += "\xe4\xb8\x80";
+    ExpectNotInitialized([&] { Guide::ShowComposeMessage(PlayerIndex::One, cjk, {}); },
+                         "ShowComposeMessage with 100 UTF-16 units");
     EXPECT_THROW(Guide::ShowGameInvite(PlayerIndex::One, std::vector<Gamer*>{nullptr}),
                  System::ArgumentException);
     EXPECT_THROW(Guide::ShowGameInvite(std::string("session-id")), System::NotSupportedException)
