@@ -891,6 +891,22 @@ TEST(SpriteFontTest, InvalidContentFallbackReportsTheUnresolvableFallbackInBothO
             }, "character", absentQuestion);
 }
 
+TEST(SpriteFontTest, MissingSupplementaryCharacterNamesItsHighSurrogateWithValidUtf8)
+{
+    // XNA iterates UTF-16 units (StringProxy.get_Item IL_0008-001c), so the first missing unit of
+    // U+1F600 is the high surrogate 0xd83d (GetIndexForCharacter IL_006a-009c). A lone surrogate
+    // has no UTF-8 form: the diagnostic shows U+FFFD and keeps the unit's hex, so it stays valid
+    // UTF-8 for the C API's error text.
+    const auto font = makeFontA();
+    const char* expected = "The character '\xef\xbf\xbd' (0xd83d) is not available in this SpriteFont. "
+        "If applicable, adjust the font's start and end CharacterRegions to include this character.";
+    for (const bool builder : {false, true})
+        expectFontRefusal<System::ArgumentException>([&] {
+            (void)(builder ? font.MeasureString(StringBuilder("\xf0\x9f\x98\x80"))
+                           : font.MeasureString("\xf0\x9f\x98\x80"));
+        }, "character", expected);
+}
+
 TEST(SpriteFontTest, MissingBmpCharacterUsesItsUtf8TextAndFourDigitLowercaseHex)
 {
     // Same Refresh resource/format as above; U+03A9 is Omega, decimal 937, hex 03a9.

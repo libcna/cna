@@ -23,7 +23,13 @@ namespace Microsoft::Xna::Framework::Graphics
             std::string digits(4, '0');
             for (unsigned int i = 0; i < 4; ++i)
                 digits[3 - i] = hex[(code >> (4 * i)) & 15];
-            return "The character '" + System::Char::ToString(character) + "' (0x" + digits +
+            // XNA formats the missing UTF-16 unit itself; a lone surrogate (half of a supplementary
+            // character) has no UTF-8 form, so the display character becomes U+FFFD while the hex
+            // still names the unit.
+            const bool surrogate = code >= 0xD800u && code <= 0xDFFFu;
+            return "The character '" +
+                (surrogate ? std::string("\xEF\xBF\xBD") : System::Char::ToString(character)) +
+                "' (0x" + digits +
                 ") is not available in this SpriteFont. If applicable, adjust the font's "
                 "start and end CharacterRegions to include this character.";
         }
