@@ -21,6 +21,7 @@
 
 #include "Microsoft/Xna/Framework/Graphics/AlphaTestEffect.hpp"
 #include "Microsoft/Xna/Framework/Graphics/BasicEffect.hpp"
+#include "Microsoft/Xna/Framework/Graphics/TextureCube.hpp"
 #include "Microsoft/Xna/Framework/Graphics/DualTextureEffect.hpp"
 #include "Microsoft/Xna/Framework/Graphics/EffectParameter.hpp"
 #include "Microsoft/Xna/Framework/Graphics/EffectParameterClass.hpp"
@@ -201,6 +202,27 @@ TEST_F(StockEffectReflectionTest, EveryStockEffectHasOneTechniqueWithOneUnnamedP
 // IL_0000-000b, set_Texture IL_0000-000c; SkinnedEffect and DualTextureEffect alike, and Texture2
 // through its own parameter). There is no separate field, so a raw parameter write is what the
 // property returns.
+// A parameter holds one texture whichever SetValue overload wrote it (XNA GetValueTexture2D
+// IL_001e-0098 reads the one native texture and QueryInterfaces it): a Texture2D set through the
+// Texture overload is the stock effect's texture, and a cube set the same way reads back as no 2D
+// texture.
+TEST_F(StockEffectReflectionTest, ATextureSetThroughTheBaseOverloadIsTheParametersOneTexture)
+{
+    Texture2D flat(device, 1, 1);
+    TextureCube cube(device, 1, false, SurfaceFormat::Color);
+    BasicEffect basic(device);
+    EffectParameter& parameter = RequireReflectedParameter(basic, "Texture");
+    parameter.SetValue(static_cast<Texture*>(&flat));
+    EXPECT_EQ(parameter.GetValueTexture2D(), &flat);
+    EXPECT_EQ(basic.getTextureProperty(), &flat);
+    parameter.SetValue(static_cast<Texture*>(&cube));
+    EXPECT_EQ(parameter.GetValueTexture2D(), nullptr);
+    EXPECT_EQ(parameter.GetValueTextureCube(), &cube);
+    parameter.SetValue(&flat);
+    EXPECT_EQ(parameter.GetValueTextureCube(), nullptr) << "the 2D write left the cube in place";
+    EXPECT_EQ(parameter.GetValueTexture2D(), &flat);
+}
+
 TEST_F(StockEffectReflectionTest, TexturePropertiesAreTheirParameters)
 {
     Texture2D first(device, 1, 1);

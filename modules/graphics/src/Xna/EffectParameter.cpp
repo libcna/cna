@@ -1123,7 +1123,13 @@ namespace Microsoft::Xna::Framework::Graphics
             compiledStorage_->dirty = true;
             return;
         }
+        // One texture slot, as XNA's native parameter has (GetValueTexture2D IL_001e-0098 reads it
+        // back and QueryInterfaces the type it asks for): whichever overload set it, the getter of
+        // the texture's own type returns it, and another type's getter returns null.
         textureData_ = v;
+        texture2DData_ = dynamic_cast<Texture2D*>(v);
+        texture3DData_ = dynamic_cast<Texture3D*>(v);
+        textureCubeData_ = dynamic_cast<TextureCube*>(v);
     }
     void EffectParameter::SetValue(Texture2D* v)
     {
@@ -1137,7 +1143,11 @@ namespace Microsoft::Xna::Framework::Graphics
             RequireTextureValueUsable(v);
             RequireTextureSetterParameter();
         }
+        // The parameter's one texture slot (see SetValue(Texture*)); the type is known here.
+        textureData_ = v;
         texture2DData_ = v;
+        texture3DData_ = nullptr;
+        textureCubeData_ = nullptr;
     }
     void EffectParameter::SetValue(Texture3D* v)
     {
@@ -1151,7 +1161,11 @@ namespace Microsoft::Xna::Framework::Graphics
             RequireTextureValueUsable(v);
             RequireTextureSetterParameter();
         }
+        // The parameter's one texture slot (see SetValue(Texture*)); the type is known here.
+        textureData_ = v;
         texture3DData_ = v;
+        texture2DData_ = nullptr;
+        textureCubeData_ = nullptr;
     }
     void EffectParameter::SetValue(TextureCube* v)
     {
@@ -1165,7 +1179,11 @@ namespace Microsoft::Xna::Framework::Graphics
             RequireTextureValueUsable(v);
             RequireTextureSetterParameter();
         }
+        // The parameter's one texture slot (see SetValue(Texture*)); the type is known here.
+        textureData_ = v;
         textureCubeData_ = v;
+        texture2DData_ = nullptr;
+        texture3DData_ = nullptr;
     }
 
     void EffectParameter::SetValue(const Matrix& m)

@@ -88,9 +88,7 @@ page under `docs/` (index: `docs/README.md`), deliberate divergences from FNA an
   Unmeasured: volume/filter NEW_ON_LOOP, ADD operators, type 6 with both NEW_ON_LOOP kinds, per-pass
   pitch values, Ordered From Random / Random No Immediate Repeats, more than two candidates, raw 255,
   streaming, cross-bank candidates.
-- Graphics: a stock parameter's `SetValue(Texture*)` and `SetValue(Texture2D*)` write separate storage,
-  so `Parameters["Texture"].SetValue((Texture*)t)` is not seen by `GetValueTexture2D` or the stock draw;
-  a SpriteEffect passed to `SpriteBatch.Begin` does not run its own matrix (FNA ignores
+- Graphics: a SpriteEffect passed to `SpriteBatch.Begin` does not run its own matrix (FNA ignores
   `transformMatrix` there); `SpriteBatch.Draw`'s disposed-texture refusal names the texture's Name
   (unchecked against XNA). Out-of-range ShaderIndex on a stock clone (measured on XNA 4.0 under Wine,
   `tests/reference/xna40/stock-clone-shader-index/`): CNA matches XNA's InvalidOperationException
