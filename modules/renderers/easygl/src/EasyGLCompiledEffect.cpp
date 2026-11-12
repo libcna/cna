@@ -636,6 +636,12 @@ namespace CNA::Internal::Renderers::EasyGL
         std::memset(&stateChanges_, 0, sizeof(stateChanges_));
         unsigned int passCount = 0;
         MOJOSHADER_effectBegin(effectData_, &passCount, /*saveShaderState=*/0, &stateChanges_);
+        // MojoShader's BeginPass starts from the effect's previous raw shaders: for a stage the
+        // new pass omits it would copy the effect's current parameters into that stage's shared
+        // registers and re-run an earlier array selector. An omitted stage keeps the shader and
+        // constants the device has (XNA EffectPass.Apply IL_006d-009f applies only the pass).
+        effectData_->current_vert_raw = nullptr;
+        effectData_->current_pixl_raw = nullptr;
         MOJOSHADER_effectBeginPass(effectData_, passIndex);
         passActive_ = true;
 

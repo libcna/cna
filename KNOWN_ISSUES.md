@@ -112,12 +112,12 @@ page under `docs/` (index: `docs/README.md`), deliberate divergences from FNA an
   draws device slot 0 (SpriteBatch rebinds slot 0 and hides this).
 - Graphics, compiled-effect passes that omit a shader stage (review rv-stage, 2026-11-12, source
   analysis): XNA keeps the device's shader and constants for a stage a pass does not assign.
-  `RunCompiledEffectInheritedVertexStageContract` is registered for Software only. EasyGL, FNA3D,
-  SDLGPU, WebGPU and DIRECTX9 are predicted to fail its other-effect and last-assigner cases:
-  MojoShader's BeginPass starts from the effect's previous raw shaders, so CommitChanges writes the
-  applying effect's parameters into the inherited stage's registers. Software resets those raw
-  sources before BeginPass; the other four backends can do the same before their BeginPass, FNA3D
-  needs it in the fork. Software itself refuses (InvalidOperationException) a pass without a vertex
+  `RunCompiledEffectInheritedVertexStageContract` passes on Software, EasyGL (OPENGL33) and WebGPU,
+  which reset MojoShader's raw stage sources before BeginPass. SDLGPU and DIRECTX9 are predicted to
+  fail its other-effect and last-assigner cases (BeginPass starts from the effect's previous raw
+  shaders, so CommitChanges writes the applying effect's parameters into the inherited stage's
+  registers); the same two-line reset fits them, but no local tree runs their compiled effects on a
+  GPU (SDLGPU) or without Wine (DIRECTX9). FNA3D needs it in the fork. Software itself refuses (InvalidOperationException) a pass without a vertex
   shader after a stock, ShaderEffect or plain-sprite draw, where XNA would inherit the stock shader;
   its stage record splits when `RecreateRendererForMultiSampleCount` replaces the renderer, and is
   lost with the effect that owned it.

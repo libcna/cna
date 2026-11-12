@@ -484,10 +484,10 @@ namespace CNA::Internal::Renderers::WebGPU
         if (passIndex >= technique.pass_count)
             throw std::out_of_range("WebGPU compiled effect: pass index is out of range.");
 
-        // FX-101: `stateChanges_` is deliberately NOT cleared between applications.
-        // MojoShader writes it only in effectBeginPass, so a repeated application of the same pass
-        // must keep the pointers the previous one left -- clearing them makes a repeat apply
-        // publish no render state, no sampler state and no texture binding at all.
+        // Every application ends the active pass and begins this one again, so BeginPass rewrites
+        // the state changes of each stage the pass assigns (FX-101's repeat apply included). They
+        // are cleared first: once the raw sources below are reset, a stage the pass omits would
+        // otherwise replay the sampler changes of an earlier pass.
         unsigned int passCount = 0;
         if (passActive_)
         {
@@ -495,7 +495,14 @@ namespace CNA::Internal::Renderers::WebGPU
             MOJOSHADER_effectEnd(effectData_);
             passActive_ = false;
         }
+        std::memset(&stateChanges_, 0, sizeof(stateChanges_));
         MOJOSHADER_effectBegin(effectData_, &passCount, 0, &stateChanges_);
+        // MojoShader's BeginPass starts from the effect's previous raw shaders: for a stage the
+        // new pass omits it would copy the effect's current parameters into that stage's shared
+        // registers and re-run an earlier array selector. An omitted stage keeps the shader and
+        // constants the device has (XNA EffectPass.Apply IL_006d-009f applies only the pass).
+        effectData_->current_vert_raw = nullptr;
+        effectData_->current_pixl_raw = nullptr;
         MOJOSHADER_effectBeginPass(effectData_, passIndex);
         passActive_ = true;
 

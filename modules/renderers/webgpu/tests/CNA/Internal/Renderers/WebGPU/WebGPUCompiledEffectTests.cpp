@@ -383,6 +383,14 @@ TEST(WebGPUCompiledEffectDrawTest, SharedPassSelectionContract)
     CNA::TestSupport::RunCompiledEffectPassSelectionContract(device);
 }
 
+TEST(WebGPUCompiledEffectDrawTest, SharedInheritedVertexStageContract)
+{
+    GraphicsDevice device;
+    if (!CNA::TestSupport::SupportsCompiledEffects(device))
+        GTEST_SKIP() << "selected renderer does not execute XNA Effect Framework bytecode";
+    CNA::TestSupport::RunCompiledEffectInheritedVertexStageContract(device);
+}
+
 TEST(WebGPUCompiledEffectDrawTest, SharedStockDrawIsolationContract)
 {
     GraphicsDevice device;
