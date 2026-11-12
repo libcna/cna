@@ -1388,15 +1388,18 @@ private:
       int relativeComponent = 0;
       const Operand source = DecodeSource(tokens, cursor, program_.majorVersion,
                                           relativeType, relativeComponent);
+      // _bx2 is the one source modifier ps_1_x allows here, and each instruction of the
+      // sequence applies its own (TQ-TEXM3X2DEPTH-01).
       if (destination.type != RegisterType::Texture || source.relative ||
-          source.type != RegisterType::Texture || source.sourceModifier != 0u ||
+          source.type != RegisterType::Texture ||
+          (source.sourceModifier != 0u && source.sourceModifier != 4u) ||
           source.swizzle != 0xE4u || destination.number <= source.number ||
           cursor != tokens.size())
         throw std::runtime_error(
             "Software pixel shader: invalid TEXM3X2PAD register sequence.");
       legacyTextureMatrix2Dot_ =
           Dot(ReadRaw(destination.type, destination.number),
-              ReadRaw(source.type, source.number), 3);
+              ReadSourceFromOperand(source), 3);
       legacyTextureMatrix2Source_ = source.number;
       legacyTextureMatrix2PadDestination_ = destination.number;
       return;
@@ -1446,14 +1449,15 @@ private:
       const Operand source = DecodeSource(tokens, cursor, program_.majorVersion,
                                           relativeType, relativeComponent);
       if (destination.type != RegisterType::Texture || source.relative ||
-          source.type != RegisterType::Texture || source.sourceModifier != 0u ||
+          source.type != RegisterType::Texture ||
+          (source.sourceModifier != 0u && source.sourceModifier != 4u) ||
           source.swizzle != 0xE4u || source.number != legacyTextureMatrix2Source_ ||
           destination.number != legacyTextureMatrix2PadDestination_ + 1 ||
           cursor != tokens.size())
         throw std::runtime_error(
             "Software pixel shader: invalid TEXM3X2DEPTH register sequence.");
       const float divisor = Dot(ReadRaw(destination.type, destination.number),
-                                ReadRaw(source.type, source.number), 3);
+                                ReadSourceFromOperand(source), 3);
       depthOutput_ = divisor == 0.0f ? 1.0f : legacyTextureMatrix2Dot_ / divisor;
       depthWritten_ = true;
       legacyTextureMatrix2Source_ = -1;
