@@ -135,7 +135,6 @@ namespace Microsoft::Xna::Framework::Audio
     private:
         friend class SoundBank;
         friend class AudioEngine;
-        friend class WaveBank; // reads lifetime_ in its disposal cascade
         Cue(std::string name, SoundBank* bank, uint16_t cueIndex);
 
         enum class State { Created, Preparing, Prepared, Playing, Stopping, Stopped };

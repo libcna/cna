@@ -98,16 +98,16 @@ namespace Microsoft::Xna::Framework::Audio
 
     void SoundBank::DetachRemainingInternal()
     {
-        std::vector<std::pair<Cue*, std::weak_ptr<char>>> cues;
-        for (auto* cue : activeCues_)
-            if (cue) cues.emplace_back(cue, cue->lifetime_);
-        for (auto& [cue, alive] : cues)
+        // Straight from the live registry, so nothing is allocated here: a cue another handler
+        // destroys unregisters itself and is never reached.
+        while (!activeCues_.empty())
         {
-            if (alive.expired()) continue;
+            Cue* const cue = activeCues_.front();
+            activeCues_.erase(activeCues_.begin());
+            if (cue == nullptr) continue;
             try { cue->Dispose(); }
             catch (...) {}
         }
-        activeCues_.clear();
         // Cue callbacks may have disposed banks already; snapshot only after those cascades have
         // removed their reciprocal registrations.
         auto resolved = std::move(resolvedWaveBanks_);
@@ -298,24 +298,21 @@ namespace Microsoft::Xna::Framework::Audio
 
             // P12-BANK-001: force-stop every cue still associated with this bank, including ones
             // the caller obtained via GetCue() and is still holding -- matches
-            // FACTSoundBank_Destroy (FACT.c:1311-1327). Snapshot first: Cue::Dispose() below
-            // calls back into UnregisterCue(), which would otherwise invalidate a live range-for
-            // over activeCues_ mid-iteration (same hazard as AudioEngine::StopCategoryInternal).
-            // A cue's Disposing handler may destroy another cue (skipped through its lifetime
-            // token) or throw; the cascade still detaches every cue, and the first exception is
-            // rethrown once this bank references nothing.
-            std::vector<std::pair<Cue*, std::weak_ptr<char>>> cues;
-            for (auto* cue : activeCues_)
-                if (cue) cues.emplace_back(cue, cue->lifetime_);
-            // A handler may also destroy this bank: then nothing of it may be touched again.
-            // Its destructor then finished the teardown (DetachRemainingInternal).
+            // FACTSoundBank_Destroy (FACT.c:1311-1327). Cues are taken one at a time from the live
+            // registry (nothing to allocate): one that a Disposing handler destroys unregisters
+            // itself first and is never reached. A handler that throws does not stop the cascade;
+            // the first exception is rethrown once this bank references nothing. A handler may
+            // also destroy this bank: its destructor then finishes the teardown
+            // (DetachRemainingInternal) and nothing of it is touched here again.
             const std::weak_ptr<char> self = lifetime_;
             std::exception_ptr failure;
             cascading_ = true;
-            for (auto& [cue, alive] : cues)
+            while (!activeCues_.empty())
             {
-                if (alive.expired()) continue;
-                try { cue->Dispose(); } // idempotent; safe even if the caller already disposed it
+                Cue* const cue = activeCues_.front();
+                activeCues_.erase(activeCues_.begin());
+                if (cue == nullptr) continue;
+                try { cue->Dispose(); } // idempotent; safe even if already disposed elsewhere
                 catch (...) { if (!failure) failure = std::current_exception(); }
                 if (self.expired())
                 {

@@ -717,6 +717,25 @@ TEST(AudioEngineTest, ACueHandlerThatDestroysItsBankAndThrowsEndsTheCascade)
     EXPECT_TRUE(cue->getIsDisposedProperty());
 }
 
+// A category's engine is its identity: a category saved from an engine since destroyed is not equal to
+// the same-index category of a new engine built at the same address (Xact IL typed Equals IL_0010-001c
+// compares the managed parent). Placement construction makes the reused address certain.
+TEST(AudioEngineTest, ACategoryOfADestroyedEngineIsNotEqualToOneOfItsSuccessorAtTheSameAddress)
+{
+    alignas(AudioEngine) unsigned char storage[sizeof(AudioEngine)];
+    auto* first = new (storage) AudioEngine(XgsFixturePath());
+    const AudioCategory saved = first->GetCategory("Default");
+    const AudioCategory copy = saved;
+    first->~AudioEngine();
+    auto* second = new (storage) AudioEngine(XgsFixturePath());
+    const AudioCategory fresh = second->GetCategory("Default");
+    EXPECT_FALSE(saved.Equals(fresh));
+    EXPECT_FALSE(saved == fresh);
+    EXPECT_TRUE(saved.Equals(copy)) << "copies of one category stay equal after their engine is gone";
+    EXPECT_TRUE(fresh.Equals(second->GetCategory("Default")));
+    second->~AudioEngine();
+}
+
 // During a bank's teardown in its destructor (a handler destroyed it), another handler destroys the
 // engine; a cue disposed after that must not reach the freed engine through the bank.
 TEST(AudioEngineTest, AnEngineDestroyedDuringABanksTeardownIsNotReachedAfterwards)

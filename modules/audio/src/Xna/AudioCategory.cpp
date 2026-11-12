@@ -78,7 +78,10 @@ namespace Microsoft::Xna::Framework::Audio
 
     bool AudioCategory::Equals(const AudioCategory& other) const
     {
-        return parent_ == other.parent_ && index_ == other.index_;
+        // The engine's identity is its lifetime token, which a later engine at the same address
+        // does not share (XNA compares the managed parent, typed Equals IL_0010-001c).
+        return !parentLifetime_.owner_before(other.parentLifetime_) &&
+               !other.parentLifetime_.owner_before(parentLifetime_) && index_ == other.index_;
     }
 
     int AudioCategory::GetHashCode() const
