@@ -60,7 +60,13 @@ namespace CNA::Internal::Xnb
             static_cast<std::int32_t>(sound.loopStart),
             static_cast<std::int32_t>(sound.loopLength),
             SoundEffect::RateRange::Content);
-        result.setNameProperty(input.getAssetNameProperty());
+        // XNA reads the duration as a signed int32 of milliseconds and stores it unchanged
+        // (SoundEffectReader.Read IL_0031-0044, SoundEffect.Create IL_0025-0028): Duration is the
+        // .xnb's, not one derived from the samples. The reader sets no Name (IL_0044-0049), so a
+        // loaded effect's Name stays empty.
+        result.SetStoredDurationInternal(
+            System::TimeSpan::FromMilliseconds(static_cast<double>(
+                static_cast<std::int32_t>(decoded.storedDurationMs))).getTicksProperty());
         return result;
     }
 

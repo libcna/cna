@@ -122,18 +122,8 @@ namespace CNA::Internal::Xnb
                 throw ContentLoadException(
                     "'" + origin + "': SoundEffect loop region lies outside decoded frames.");
             }
-            if (source.storedDurationMs == 0u || frameCount == 0u) { return; }
-            const double decodedMs =
-                static_cast<double>(frameCount) * 1000.0 / source.sampleRate;
-            const double ratio = decodedMs / source.storedDurationMs;
-            if (ratio > 2.0 || ratio < 0.5)
-            {
-                throw ContentLoadException(
-                    "'" + origin + "': decoded audio duration (" +
-                    std::to_string(decodedMs) +
-                    "ms) disagrees drastically with the .xnb's own stored duration (" +
-                    std::to_string(source.storedDurationMs) + "ms).");
-            }
+            // The stored duration is not compared with the samples: XNA keeps it as given
+            // (SoundEffectReader.Read IL_0031-0044), so a file whose duration disagrees still loads.
         }
     }
 

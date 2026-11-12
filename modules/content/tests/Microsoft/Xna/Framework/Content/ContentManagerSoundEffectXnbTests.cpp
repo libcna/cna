@@ -44,7 +44,8 @@ TEST_F(ContentManagerSoundEffectXnbTest, LoadRealMonoGameFixtureEndToEnd)
 
     SoundEffect effect = cm.Load<SoundEffect>("tone_mono_44khz_16bit");
 
-    EXPECT_EQ(effect.getNameProperty(), "tone_mono_44khz_16bit");
+    // XNA's SoundEffectReader sets no Name (Read IL_0044-0049).
+    EXPECT_EQ(effect.getNameProperty(), "");
     EXPECT_GT(effect.getDurationProperty().getTicksProperty(), 0);
 }
 #endif  // SOUND_ENABLED

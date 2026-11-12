@@ -80,6 +80,11 @@ namespace Microsoft::Xna::Framework::Audio
 
         friend class CNA::Internal::Xnb::SoundEffectReader;
         friend class WaveBank;
+        // The duration the content reader read from the .xnb, which XNA's SoundEffect stores
+        // unchanged (SoundEffectReader.Read IL_0031-0044, SoundEffect.Create IL_0025-0028).
+        void SetStoredDurationInternal(std::int64_t ticks) const;
+        // The duration of the decoded samples, whatever duration the effect reports.
+        [[nodiscard]] System::TimeSpan GetDecodedDurationInternal() const;
 
         // Instance-tracking + Dispose cascade (T-3G, matches FNA's SoundEffect.Instances):
         // SoundEffectInstance registers itself here on construction against the type-erased

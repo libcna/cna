@@ -46,6 +46,7 @@
 #include "System/IO/MemoryStream.hpp"
 
 #include "../../../../../audio/tests/Microsoft/Xna/Framework/Audio/SoundEffectInstanceTestAccess.hpp"
+#include "../../../../../audio/tests/Microsoft/Xna/Framework/Audio/SoundEffectTestAccess.hpp"
 
 using Microsoft::Xna::Framework::Content::ContentLoadException;
 using Microsoft::Xna::Framework::Content::ContentManager;
@@ -108,7 +109,7 @@ TEST_F(SoundEffectContentTypeReaderTest, IsRegisteredUnderRealFnaCanonicalName)
 TEST_F(SoundEffectContentTypeReaderTest, Pcm16BitMonoLoadsSuccessfully)
 {
     auto effect = LoadFixture(std::string(kAudioDir) + "tone_mono_44khz_16bit.xnb");
-    EXPECT_EQ(effect.getNameProperty(), "test");
+    EXPECT_EQ(effect.getNameProperty(), "") << "XNA's SoundEffectReader sets no Name";
     EXPECT_GT(effect.getDurationProperty().getTicksProperty(), 0);
 }
 #endif  // SOUND_ENABLED
@@ -118,7 +119,7 @@ TEST_F(SoundEffectContentTypeReaderTest, Pcm16BitMonoLoadsSuccessfully)
 TEST_F(SoundEffectContentTypeReaderTest, Pcm16BitStereoLoadsSuccessfully)
 {
     auto effect = LoadFixture(std::string(kAudioDir) + "tone_stereo_44khz_16bit.xnb");
-    EXPECT_EQ(effect.getNameProperty(), "test");
+    EXPECT_EQ(effect.getNameProperty(), "") << "XNA's SoundEffectReader sets no Name";
     EXPECT_GT(effect.getDurationProperty().getTicksProperty(), 0);
 }
 #endif  // SOUND_ENABLED
@@ -130,7 +131,7 @@ TEST_F(SoundEffectContentTypeReaderTest, Pcm16BitStereoLoadsSuccessfully)
 TEST_F(SoundEffectContentTypeReaderTest, Pcm8BitLoadsSuccessfully)
 {
     auto effect = LoadFixture(std::string(kAudioDir) + "tone_mono_44khz_8bit.xnb");
-    EXPECT_EQ(effect.getNameProperty(), "test");
+    EXPECT_EQ(effect.getNameProperty(), "") << "XNA's SoundEffectReader sets no Name";
     EXPECT_GT(effect.getDurationProperty().getTicksProperty(), 0);
 }
 #endif  // SOUND_ENABLED
@@ -142,7 +143,7 @@ TEST_F(SoundEffectContentTypeReaderTest, Pcm8BitLoadsSuccessfully)
 TEST_F(SoundEffectContentTypeReaderTest, IeeeFloatLoadsSuccessfully)
 {
     auto effect = LoadFixture(std::string(kAudioDir) + "tone_mono_44khz_float.xnb");
-    EXPECT_EQ(effect.getNameProperty(), "test");
+    EXPECT_EQ(effect.getNameProperty(), "") << "XNA's SoundEffectReader sets no Name";
     EXPECT_GT(effect.getDurationProperty().getTicksProperty(), 0);
 }
 #endif  // SOUND_ENABLED
@@ -156,7 +157,7 @@ TEST_F(SoundEffectContentTypeReaderTest, IeeeFloatLoadsSuccessfully)
 TEST_F(SoundEffectContentTypeReaderTest, MsAdpcmLoadsSuccessfully)
 {
     auto effect = LoadFixture(std::string(kAudioDir) + "tone_mono_44khz_msadpcm.xnb");
-    EXPECT_EQ(effect.getNameProperty(), "test");
+    EXPECT_EQ(effect.getNameProperty(), "") << "XNA's SoundEffectReader sets no Name";
     EXPECT_GT(effect.getDurationProperty().getTicksProperty(), 0);
 }
 #endif  // SOUND_ENABLED
@@ -168,7 +169,7 @@ TEST_F(SoundEffectContentTypeReaderTest, MsAdpcmLoadsSuccessfully)
 TEST_F(SoundEffectContentTypeReaderTest, ImaAdpcmLoadsSuccessfully)
 {
     auto effect = LoadFixture(std::string(kAudioDir) + "tone_mono_44khz_imaadpcm.xnb");
-    EXPECT_EQ(effect.getNameProperty(), "test");
+    EXPECT_EQ(effect.getNameProperty(), "") << "XNA's SoundEffectReader sets no Name";
     EXPECT_GT(effect.getDurationProperty().getTicksProperty(), 0);
 }
 #endif  // SOUND_ENABLED
@@ -220,6 +221,45 @@ TEST_F(SoundEffectContentTypeReaderTest, Xma2IsRejected)
     body_ = std::make_unique<System::IO::MemoryStream>(bytes.data(), static_cast<int32_t>(bytes.size()));
     reader_ = std::make_unique<ContentReader>(&cm_, body_.get(), "test", 5, 'w');
     EXPECT_THROW(reader_->ReadAsset<Microsoft::Xna::Framework::Audio::SoundEffect>(), ContentLoadException);
+}
+
+// rv-reader review R01/R02: XNA's SoundEffectReader reads the duration as a signed int32 of
+// milliseconds and stores it unchanged (Read IL_0031-0044, SoundEffect.Create IL_0025-0028) -- a file
+// declaring 1500 ms for one second of samples reports 1500 ms and is not refused -- and sets no Name
+// (IL_0044-0049).
+TEST_F(SoundEffectContentTypeReaderTest, TheStoredDurationIsTheDurationAndNoNameIsSet)
+{
+    const std::string readerName = "Microsoft.Xna.Framework.Content.SoundEffectReader";
+    std::vector<uint8_t> bytes;
+    auto w16 = [&bytes](uint16_t v) { bytes.push_back(static_cast<uint8_t>(v)); bytes.push_back(static_cast<uint8_t>(v >> 8)); };
+    auto w32 = [&bytes](uint32_t v) {
+        bytes.push_back(static_cast<uint8_t>(v)); bytes.push_back(static_cast<uint8_t>(v >> 8));
+        bytes.push_back(static_cast<uint8_t>(v >> 16)); bytes.push_back(static_cast<uint8_t>(v >> 24));
+    };
+    bytes.push_back(1);
+    bytes.push_back(static_cast<uint8_t>(readerName.size()));
+    bytes.insert(bytes.end(), readerName.begin(), readerName.end());
+    w32(0);
+    bytes.push_back(0);
+    bytes.push_back(1);
+    w32(18);      // formatLength
+    w16(1);       // PCM
+    w16(1);       // mono
+    w32(8000);    // nSamplesPerSec
+    w32(16000);   // nAvgBytesPerSec
+    w16(2);       // nBlockAlign
+    w16(16);      // wBitsPerSample
+    w16(0);       // cbSize
+    w32(16000);   // one second of samples
+    bytes.insert(bytes.end(), 16000, 0);
+    w32(0);       // loopStart
+    w32(0);       // loopLength
+    w32(1500);    // stored duration, ms
+    body_ = std::make_unique<System::IO::MemoryStream>(bytes.data(), static_cast<int32_t>(bytes.size()));
+    reader_ = std::make_unique<ContentReader>(&cm_, body_.get(), "tone", 5, 'w');
+    const auto effect = reader_->ReadAsset<Microsoft::Xna::Framework::Audio::SoundEffect>();
+    EXPECT_EQ(effect.getDurationProperty(), System::TimeSpan::FromMilliseconds(1500));
+    EXPECT_EQ(effect.getNameProperty(), "");
 }
 
 // AUD-06-013 (2026-07-17 deep audit): a malformed XNB claiming nSamplesPerSec=0 for one of the
@@ -340,7 +380,7 @@ TEST_F(SoundEffectContentTypeReaderTest, XboxPlatformByteSwapsWaveFormatFieldsCo
     reader_ = std::make_unique<ContentReader>(&cm_, body_.get(), "test", 5, 'x'); // platform='x': Xbox 360
     auto effect = reader_->ReadAsset<Microsoft::Xna::Framework::Audio::SoundEffect>();
 
-    EXPECT_NEAR(effect.getDurationProperty().getTotalSecondsProperty(), 1024.0 / 44100.0, 1e-6);
+    EXPECT_NEAR(Microsoft::Xna::Framework::Audio::SoundEffectTestAccess::DecodedDuration(effect).getTotalSecondsProperty(), 1024.0 / 44100.0, 1e-6);
 }
 #endif  // SOUND_ENABLED
 
@@ -386,7 +426,7 @@ TEST_F(SoundEffectContentTypeReaderTest, AContentSampleRateAboveFromBuffersRange
     reader_ = std::make_unique<ContentReader>(&cm_, body_.get(), "test", 5, 'w');
     auto effect = reader_->ReadAsset<Microsoft::Xna::Framework::Audio::SoundEffect>();
 
-    EXPECT_NEAR(effect.getDurationProperty().getTotalSecondsProperty(), 1024.0 / rate, 1e-6);
+    EXPECT_NEAR(Microsoft::Xna::Framework::Audio::SoundEffectTestAccess::DecodedDuration(effect).getTotalSecondsProperty(), 1024.0 / rate, 1e-6);
     EXPECT_THROW(Microsoft::Xna::Framework::Audio::SoundEffect(pcm, static_cast<int32_t>(rate),
                      Microsoft::Xna::Framework::Audio::AudioChannels::Mono),
                  System::ArgumentOutOfRangeException)
@@ -657,7 +697,7 @@ TEST_F(SoundEffectContentTypeReaderTest, IncoherentBlockAlignForPcm8IsIgnoredNot
     reader_ = std::make_unique<ContentReader>(&cm_, body_.get(), "test", 5, 'w');
     auto effect = reader_->ReadAsset<Microsoft::Xna::Framework::Audio::SoundEffect>();
 
-    EXPECT_NEAR(effect.getDurationProperty().getTotalSecondsProperty(), 10.0 / 44100.0, 1e-6);
+    EXPECT_NEAR(Microsoft::Xna::Framework::Audio::SoundEffectTestAccess::DecodedDuration(effect).getTotalSecondsProperty(), 10.0 / 44100.0, 1e-6);
 }
 #endif  // SOUND_ENABLED
 
@@ -672,7 +712,10 @@ TEST_F(SoundEffectContentTypeReaderTest, IncoherentBlockAlignForPcm8IsIgnoredNot
 
 #ifdef SOUND_ENABLED
 // Needs the decoder: see this file's SOUND_ENABLED note above.
-TEST_F(SoundEffectContentTypeReaderTest, DrasticDurationOracleDisagreementThrowsWithBothValues)
+// rv-reader review R01: XNA keeps the stored duration as given (SoundEffectReader.Read IL_0031-0044)
+// and never compares it with the samples, so a file declaring 5000 ms for 50 ms of audio loads and
+// reports 5000 ms. CNA used to refuse it.
+TEST_F(SoundEffectContentTypeReaderTest, AStoredDurationFarFromTheSamplesLoadsAsDeclared)
 {
     std::vector<uint8_t> bytes;
     auto w16 = [&bytes](uint16_t v) { bytes.push_back(static_cast<uint8_t>(v)); bytes.push_back(static_cast<uint8_t>(v >> 8)); };
@@ -706,18 +749,10 @@ TEST_F(SoundEffectContentTypeReaderTest, DrasticDurationOracleDisagreementThrows
     body_ = std::make_unique<System::IO::MemoryStream>(bytes.data(), static_cast<int32_t>(bytes.size()));
     reader_ = std::make_unique<ContentReader>(&cm_, body_.get(), "test", 5, 'w');
 
-    try
-    {
-        reader_->ReadAsset<Microsoft::Xna::Framework::Audio::SoundEffect>();
-        FAIL() << "expected ContentLoadException";
-    }
-    catch (const ContentLoadException& ex)
-    {
-        const std::string what = ex.what();
-        EXPECT_NE(what.find("'test'"), std::string::npos) << what;
-        EXPECT_NE(what.find("5000"), std::string::npos) << what;
-        EXPECT_NE(what.find("50"), std::string::npos) << what; // the decoded ~50ms value
-    }
+    const auto effect = reader_->ReadAsset<Microsoft::Xna::Framework::Audio::SoundEffect>();
+    EXPECT_EQ(effect.getDurationProperty(), System::TimeSpan::FromMilliseconds(5000));
+    EXPECT_NEAR(Microsoft::Xna::Framework::Audio::SoundEffectTestAccess::DecodedDuration(effect)
+                    .getTotalMillisecondsProperty(), 50.0, 0.1);
 }
 #endif  // SOUND_ENABLED
 
@@ -828,7 +863,7 @@ TEST_F(SoundEffectContentTypeReaderTest, ImaAdpcmLoopPointsSurviveAsDecodedFrame
 
     auto effect = reader_->ReadAsset<Microsoft::Xna::Framework::Audio::SoundEffect>();
 
-    const double decodedFrames = effect.getDurationProperty().getTotalSecondsProperty() * 44100.0;
+    const double decodedFrames = Microsoft::Xna::Framework::Audio::SoundEffectTestAccess::DecodedDuration(effect).getTotalSecondsProperty() * 44100.0;
     EXPECT_NEAR(decodedFrames, kDecodedFrames, 1.0)
         << "sanity check: the fixture must really compress ~4:1 (1024 bytes -> ~2020 frames) for "
            "the byte-vs-frame distinction below to mean anything";
@@ -889,7 +924,7 @@ TEST_F(SoundEffectContentTypeReaderTest, FormatLength16BareWaveFormatConsumesExa
     reader_ = std::make_unique<ContentReader>(&cm_, body_.get(), "test", 5, 'w');
     auto effect = reader_->ReadAsset<Microsoft::Xna::Framework::Audio::SoundEffect>();
 
-    const double decodedFrames = effect.getDurationProperty().getTotalSecondsProperty() * 44100.0;
+    const double decodedFrames = Microsoft::Xna::Framework::Audio::SoundEffectTestAccess::DecodedDuration(effect).getTotalSecondsProperty() * 44100.0;
     EXPECT_NEAR(decodedFrames, kFrames, 1.0);
 }
 #endif  // SOUND_ENABLED
@@ -938,7 +973,7 @@ TEST_F(SoundEffectContentTypeReaderTest, FormatLength18WithZeroCbSizeConsumesExa
     reader_ = std::make_unique<ContentReader>(&cm_, body_.get(), "test", 5, 'w');
     auto effect = reader_->ReadAsset<Microsoft::Xna::Framework::Audio::SoundEffect>();
 
-    const double decodedFrames = effect.getDurationProperty().getTotalSecondsProperty() * 44100.0;
+    const double decodedFrames = Microsoft::Xna::Framework::Audio::SoundEffectTestAccess::DecodedDuration(effect).getTotalSecondsProperty() * 44100.0;
     EXPECT_NEAR(decodedFrames, kDecodedFrames, 1.0);
 }
 #endif  // SOUND_ENABLED
@@ -999,7 +1034,7 @@ TEST_F(SoundEffectContentTypeReaderTest, ExtendedFormatLengthWithRealCoefficient
     reader_ = std::make_unique<ContentReader>(&cm_, body_.get(), "test", 5, 'w');
     auto effect = reader_->ReadAsset<Microsoft::Xna::Framework::Audio::SoundEffect>();
 
-    const double decodedFrames = effect.getDurationProperty().getTotalSecondsProperty() * 44100.0;
+    const double decodedFrames = Microsoft::Xna::Framework::Audio::SoundEffectTestAccess::DecodedDuration(effect).getTotalSecondsProperty() * 44100.0;
     EXPECT_NEAR(decodedFrames, kDecodedFrames, 1.0);
 }
 #endif  // SOUND_ENABLED

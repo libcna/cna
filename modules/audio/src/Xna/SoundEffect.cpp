@@ -501,6 +501,11 @@ namespace Microsoft::Xna::Framework::Audio
 
     // --- properties ---
 
+    void SoundEffect::SetStoredDurationInternal(std::int64_t ticks) const
+    {
+        if (impl_) impl_->durationTicks = ticks;
+    }
+
     void SoundEffect::ReleaseKeepingDuration() const
     {
         if (!isDisposed_) disposedDurationTicks_ = getDurationProperty().getTicksProperty();
@@ -513,6 +518,11 @@ namespace Microsoft::Xna::Framework::Audio
         if (isDisposed_ && !impl_) return System::TimeSpan(disposedDurationTicks_);
         if (impl_ && impl_->durationTicks >= 0)
             return System::TimeSpan(impl_->durationTicks);
+        return GetDecodedDurationInternal();
+    }
+
+    System::TimeSpan SoundEffect::GetDecodedDurationInternal() const
+    {
 #ifdef SOUND_ENABLED
         if (impl_ && impl_->audio && impl_->sampleRate > 0)
         {

@@ -17,5 +17,11 @@ namespace Microsoft::Xna::Framework::Audio
         {
             return effect.GetLiveInstanceCountInternal();
         }
+
+        /** @brief The duration of the decoded samples, whatever duration the effect reports. */
+        static System::TimeSpan DecodedDuration(const SoundEffect& effect)
+        {
+            return effect.GetDecodedDurationInternal();
+        }
     };
 }

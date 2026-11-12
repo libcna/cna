@@ -160,7 +160,9 @@ namespace Microsoft::Xna::Framework::Content
                     static_cast<SharpRuntime::intcs>(data.loopStart),
                     static_cast<SharpRuntime::intcs>(data.loopLength));
             }
-            result->setNameProperty(assetName);
+            // No Name, as XNA's SoundEffectReader sets none (Read IL_0044-0049) and the .xnb this
+            // .cnb was built from loads without one.
+            (void)assetName;
             return result;
         }
     } // anonymous namespace
