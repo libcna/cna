@@ -63,15 +63,21 @@ namespace CNA::Internal::Net
             double RoundtripMs = 0.0;
             // One probe train per path the host answered by: two paths' trains never mix, since
             // splicing them would time one train's tail by another's start.
+            // Probes carry no train identifier, so a train is told apart by its indices: each index
+            // arrives once per train, in any order.
             struct ProbeTrain
             {
                 std::string Address;
-                int FirstIndex = -1, LastIndex = -1;
-                // Probes recorded: the span alone would rank two of eight probes like eight.
+                // Indices received; Received counts them (the span alone would rank two of eight
+                // probes like eight).
+                std::uint32_t Seen = 0;
                 int Received = 0;
-                // A second train began on this path (the host answered two copies of the query);
-                // its later probes would time the first train's tail by the second's.
+                int MinIndex = 0, MaxIndex = 0;
+                // An index arrived a second time: the host's repeated train (it answered two
+                // copies of the query) has begun on this path, and its probes would time this
+                // train's tail by the repeat's.
                 bool Closed = false;
+                // The first and the last arrival, whatever their order.
                 std::chrono::steady_clock::time_point FirstArrival, LastArrival;
             };
             std::vector<ProbeTrain> Trains;
@@ -103,24 +109,30 @@ namespace CNA::Internal::Net
 
         // Records one probe of the first train that came by one of a host's paths; a repeated train
         // on that path (the host answered the broadcast and the loopback copy of the query) is
-        // ignored.
+        // ignored from the first index it repeats.
         void RecordProbe(Found& found, const std::string& address, const DiscoveryQosProbeMessage& probe,
                          std::chrono::steady_clock::time_point at)
         {
-            const auto train = std::find_if(found.Trains.begin(), found.Trains.end(),
+            if (probe.Index >= kQosProbeCount) return;
+            auto train = std::find_if(found.Trains.begin(), found.Trains.end(),
                 [&](const Found::ProbeTrain& candidate) { return candidate.Address == address; });
             if (train == found.Trains.end())
             {
-                found.Trains.push_back(Found::ProbeTrain{address, probe.Index, probe.Index, 1, false, at, at});
-                return;
+                found.Trains.push_back(Found::ProbeTrain{address});
+                train = std::prev(found.Trains.end());
             }
             if (train->Closed) return;
-            // Index 0 is a train's first probe: after later ones it starts a repeated train.
-            if (probe.Index == 0 && train->LastIndex > 0) { train->Closed = true; return; }
-            if (probe.Index <= train->LastIndex) return;
-            train->LastIndex = probe.Index;
+            const std::uint32_t bit = 1u << probe.Index;
+            if ((train->Seen & bit) != 0) { train->Closed = true; return; }
+            train->Seen |= bit;
+            if (train->Received++ == 0)
+            {
+                train->MinIndex = train->MaxIndex = probe.Index;
+                train->FirstArrival = at;
+            }
+            train->MinIndex = std::min<int>(train->MinIndex, probe.Index);
+            train->MaxIndex = std::max<int>(train->MaxIndex, probe.Index);
             train->LastArrival = at;
-            ++train->Received;
         }
 
         // Bytes per second of a train: the probes after the first over the time they took to arrive.
@@ -134,24 +146,25 @@ namespace CNA::Internal::Net
             return static_cast<int>(std::min(rate, 2147483647.0));
         }
 
-        // The host's train with the most probes received, then the longest; on a tie, the one by
-        // the address it is listed with.
+        // The host's train with the most probes received, then the widest; on a tie, the one by
+        // the address it is listed with. Its rate is the received probes after the first over the
+        // time between the first and the last arrival, so reordering inside the train does not
+        // change it and a lost probe is not counted as received.
         int DownstreamEstimate(const Found& found)
         {
             const Found::ProbeTrain* best = nullptr;
             for (const Found::ProbeTrain& train : found.Trains)
             {
                 if (best == nullptr) { best = &train; continue; }
-                const int span = train.LastIndex - train.FirstIndex;
-                const int bestSpan = best->LastIndex - best->FirstIndex;
+                const int span = train.MaxIndex - train.MinIndex;
+                const int bestSpan = best->MaxIndex - best->MinIndex;
                 if (train.Received != best->Received ? train.Received > best->Received
                     : span != bestSpan ? span > bestSpan
                     : train.Address == found.Address)
                     best = &train;
             }
-            return best != nullptr
-                ? TrainRate(best->FirstIndex, best->LastIndex, best->FirstArrival, best->LastArrival)
-                : 0;
+            if (best == nullptr || best->Received < 2) return 0;
+            return TrainRate(0, best->Received - 1, best->FirstArrival, best->LastArrival);
         }
 
         // A hosting machine's upstream responder: its own socket and thread, so a querier's train is

@@ -844,6 +844,99 @@ TEST_F(SystemLinkDiscoveryTest, ARepeatedTrainByOneAddressDoesNotExtendAPartialO
     EXPECT_GT(Downstream(found, "FarHost"), 300'000) << "the repeated train extended the first one";
 }
 
+// Probes of one train can arrive out of order; each index still counts once, and the train is
+// timed from its first to its last arrival.
+TEST_F(SystemLinkDiscoveryTest, AReorderedTrainIsMeasuredWhole)
+{
+    FakeFarHost far("127.0.0.1");
+    ASSERT_TRUE(far.Ready());
+    SystemLinkDiscovery::setExtraSearchAddressesProperty({far.SearchAddress()});
+
+    auto host = std::async(std::launch::async, [&]
+    {
+        const auto from = far.WaitForQuery();
+        if (!from) return false;
+        bool sent = far.Send(*from, NetDiscoveryProtocol::Encode(FarAnnounce("FarHost", 40000, 8)));
+        for (const uint8_t index : {1, 0, 2, 3, 4, 5, 6, 7})
+        {
+            std::this_thread::sleep_for(std::chrono::milliseconds(1));
+            sent = far.Send(*from, Probe(40000, index)) && sent;
+        }
+        return sent;
+    });
+    const auto found = FoundFar(ENetDiscoveryService::FindSessions(NetworkSessionType::SystemLink));
+    ASSERT_TRUE(host.get());
+    ASSERT_EQ(found.size(), 1u);
+    // Seven intervals of about 1 ms: near 1.2 MB/s; the first two probes alone would read 0.
+    EXPECT_GT(Downstream(found, "FarHost"), 300'000) << "a swapped pair cut the train short";
+}
+
+// A complete train with one swapped pair is as complete as an ordered one: it keeps its rank over a
+// slower complete train by the second address.
+TEST_F(SystemLinkDiscoveryTest, ASwappedPairDoesNotCostATrainItsRank)
+{
+    FakeFarHost firstPath("127.0.0.1"), secondPath("127.0.0.3");
+    ASSERT_TRUE(firstPath.Ready() && secondPath.Ready());
+    SystemLinkDiscovery::setExtraSearchAddressesProperty({firstPath.SearchAddress(), secondPath.SearchAddress()});
+
+    auto host = std::async(std::launch::async, [&]
+    {
+        const auto toFirst = firstPath.WaitForQuery();
+        const auto toSecond = secondPath.WaitForQuery();
+        if (!toFirst || !toSecond) return false;
+        bool sent = firstPath.Send(*toFirst, NetDiscoveryProtocol::Encode(FarAnnounce("FarHost", 40000, 9)));
+        sent = secondPath.Send(*toSecond, NetDiscoveryProtocol::Encode(FarAnnounce("FarHost", 40000, 9))) && sent;
+        // The second address first, 8 ms apart: seven intervals over ~56 ms, near 150 kB/s.
+        for (uint8_t index = 0; index < kQosProbeCount; ++index)
+        {
+            std::this_thread::sleep_for(std::chrono::milliseconds(8));
+            sent = secondPath.Send(*toSecond, Probe(40000, index)) && sent;
+        }
+        for (const uint8_t index : {0, 2, 1, 3, 4, 5, 6, 7})
+        {
+            std::this_thread::sleep_for(std::chrono::milliseconds(1));
+            sent = firstPath.Send(*toFirst, Probe(40000, index)) && sent;
+        }
+        return sent;
+    });
+    const auto found = FoundFar(ENetDiscoveryService::FindSessions(NetworkSessionType::SystemLink));
+    ASSERT_TRUE(host.get());
+    ASSERT_EQ(found.size(), 1u);
+    EXPECT_GT(Downstream(found, "FarHost"), 450'000) << "the swapped train lost to the slower one";
+}
+
+// The host's repeated train whose index 0 was lost: its first index already seen still ends the
+// first train, so the repeat's tail is not timed across the gap between them.
+TEST_F(SystemLinkDiscoveryTest, ARepeatWithoutItsFirstProbeDoesNotExtendAPartialTrain)
+{
+    FakeFarHost far("127.0.0.1");
+    ASSERT_TRUE(far.Ready());
+    SystemLinkDiscovery::setExtraSearchAddressesProperty({far.SearchAddress()});
+
+    auto host = std::async(std::launch::async, [&]
+    {
+        const auto from = far.WaitForQuery();
+        if (!from) return false;
+        bool sent = far.Send(*from, NetDiscoveryProtocol::Encode(FarAnnounce("FarHost", 40000, 10)));
+        for (uint8_t index = 0; index < 4; ++index)
+        {
+            std::this_thread::sleep_for(std::chrono::milliseconds(1));
+            sent = far.Send(*from, Probe(40000, index)) && sent;
+        }
+        std::this_thread::sleep_for(std::chrono::milliseconds(60));
+        for (uint8_t index = 1; index < kQosProbeCount; ++index)
+        {
+            std::this_thread::sleep_for(std::chrono::milliseconds(1));
+            sent = far.Send(*from, Probe(40000, index)) && sent;
+        }
+        return sent;
+    });
+    const auto found = FoundFar(ENetDiscoveryService::FindSessions(NetworkSessionType::SystemLink));
+    ASSERT_TRUE(host.get());
+    ASSERT_EQ(found.size(), 1u);
+    EXPECT_GT(Downstream(found, "FarHost"), 300'000) << "the repeat's tail extended the first train";
+}
+
 // Two older hosts on one port; the second then answers by its own address with the first one's
 // gamertag. Its address, already its own, keeps it the second host, and so does its report.
 TEST_F(SystemLinkDiscoveryTest, ALegacyHostsOwnAddressWinsOverAnotherHostsGamertag)
