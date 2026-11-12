@@ -113,6 +113,9 @@ namespace CNA::Platform::Sdl3 {
 
     private:
         MouseSnapshot snapshot_;
+        // Wheel motion short of one XNA unit (1/120 notch), carried to the next wheel event.
+        double wheelResidualX_ = 0.0;
+        double wheelResidualY_ = 0.0;
         float relativeDeltaX_ = 0.0f;
         float relativeDeltaY_ = 0.0f;
         void* activeCursor_ = nullptr;

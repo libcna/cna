@@ -86,12 +86,12 @@ byte-for-byte by INPUT-KBD-009/010):
 | Button → `ClickedEXT` index (`button-1`, down-only) | **Matches FNA exactly.** |
 | `SetPosition` relative-mode early-return | **Matches FNA.** |
 | `SetPosition` with null window | Safe no-op warp; caches requested position. |
-| Wheel `×120` scaling | **Matches FNA** (cast-to-int **before** ×120 — whole notches only; task 927). |
+| Wheel `×120` scaling | **Matches XNA**, not FNA: each event adds its notches × 120 with the remainder carried, so a fraction of a notch counts (RV-INPUT-1; XNA's WndProc adds the raw delta, IL_0008-001b). FNA casts to whole notches first. |
 
 **Intentional deviations:**
-- **Wheel:** the SDL float is truncated to a whole notch before scaling, so `ScrollWheelValue`
-  stays a clean multiple of 120 exactly like XNA; multiply-then-cast would leak sub-notch
-  precision-wheel motion.
+- **Wheel:** XNA adds each `WM_MOUSEWHEEL` delta in 1/120-notch units as it comes, so a precision
+  wheel's half notch is 60; CNA adds the SDL float's units and carries the non-integer remainder.
+  (Task 927 truncated to whole notches, wrongly believing XNA did; RV-INPUT-1 corrected it.)
 - **DEC-18 (superseded by N-005, P1-018):** XNA/FNA `MouseState` exposes only the vertical
   `ScrollWheelValue`. SDL's horizontal wheel (`wheel.x`) is scaled to the same 120-unit notch and
   surfaced through the CNAEXT `MouseState::getHorizontalScrollWheelValueEXTProperty()`

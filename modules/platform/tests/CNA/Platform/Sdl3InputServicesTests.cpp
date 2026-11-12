@@ -157,15 +157,26 @@ TEST_F(Sdl3InputTest, MouseUpdateIsSafeAndButtonMaskStaysInCnasOwnBitOrder)
     EXPECT_EQ(platform_->GetMouse()->GetSnapshot().buttons & ~0x1F, 0);
 }
 
-TEST(Sdl3MouseTest, WheelEventsAccumulateInXnaUnitsAndTruncateBeforeScaling)
+// XNA adds each wheel delta in 1/120-notch units (MouseMessageHooker.WndProc IL_0008-001b), so a
+// fraction of a notch counts: 1.9 notches are 228 units, -2.1 are -252, and two half notches 120.
+TEST(Sdl3MouseTest, WheelEventsAccumulateInXnaUnitsIncludingFractionsOfANotch)
 {
     CNA::Platform::Sdl3::Sdl3Mouse mouse;
     mouse.ObserveEvent(MouseWheelEvent{17, 1.9f, -2.1f});
 
     const MouseSnapshot& snapshot = mouse.GetSnapshot();
     EXPECT_EQ(snapshot.window, 17u);
-    EXPECT_EQ(snapshot.scrollX, 120);
-    EXPECT_EQ(snapshot.scrollY, -240);
+    EXPECT_EQ(snapshot.scrollX, 228);
+    EXPECT_EQ(snapshot.scrollY, -252);
+
+    CNA::Platform::Sdl3::Sdl3Mouse precise;
+    precise.ObserveEvent(MouseWheelEvent{17, 0.0f, 0.5f});
+    EXPECT_EQ(precise.GetSnapshot().scrollY, 60);
+    precise.ObserveEvent(MouseWheelEvent{17, 0.0f, 0.5f});
+    EXPECT_EQ(precise.GetSnapshot().scrollY, 120);
+    // A third of a notch three times is one notch: the remainder is carried, not lost.
+    for (int i = 0; i < 3; ++i) precise.ObserveEvent(MouseWheelEvent{17, 0.0f, 1.0f / 3.0f});
+    EXPECT_EQ(precise.GetSnapshot().scrollY, 240);
 }
 
 TEST_F(Sdl3InputTest, PositionWithNoWindowIsRecordedWithoutANativeWarp)

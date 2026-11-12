@@ -16,6 +16,7 @@
 
 #include <algorithm>
 #include <array>
+#include <cmath>
 #include <cstring>
 #include <limits>
 #include <string>
@@ -93,9 +94,17 @@ namespace CNA::Platform::Sdl3 {
             return SDL_SYSTEM_CURSOR_DEFAULT;
         }
 
-        void AccumulateWheel(int& total, const float notches)
+        // XNA adds each WM_MOUSEWHEEL delta, in 1/120-notch units, as it comes
+        // (MouseMessageHooker.WndProc IL_0008-001b): a precision wheel's half notch is 60, two of
+        // them 120. SDL reports notches as a float; the units it stands for are added, and what a
+        // non-integer amount leaves over is carried to the next event so the total stays exact.
+        void AccumulateWheel(int& total, double& residual, const float notches)
         {
-            const long long delta = static_cast<long long>(static_cast<int>(notches)) * 120;
+            if (!std::isfinite(notches)) return;
+            const double units = residual + static_cast<double>(notches) * 120.0;
+            const double whole = std::round(units);
+            residual = units - whole;
+            const long long delta = static_cast<long long>(std::clamp(whole, -4.0e18, 4.0e18));
             const long long next = static_cast<long long>(total) + delta;
             total = static_cast<int>(std::clamp(
                 next,
@@ -300,8 +309,8 @@ namespace CNA::Platform::Sdl3 {
         }
 
         snapshot_.window = wheel->window;
-        AccumulateWheel(snapshot_.scrollX, wheel->x);
-        AccumulateWheel(snapshot_.scrollY, wheel->y);
+        AccumulateWheel(snapshot_.scrollX, wheelResidualX_, wheel->x);
+        AccumulateWheel(snapshot_.scrollY, wheelResidualY_, wheel->y);
     }
 
     void Sdl3Mouse::SetPosition(const WindowId window, const int x, const int y)

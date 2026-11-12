@@ -15,6 +15,7 @@
 #include "Microsoft/Xna/Framework/Input/Touch/TouchPanel.hpp"
 
 #include <algorithm>
+#include <cmath>
 #include <cstdint>
 #include <cstdlib>
 #include <limits>
@@ -34,6 +35,21 @@ namespace
     using SharpRuntime::charcs;
 
     std::optional<bool> g_scancodeModeTestOverride;
+
+    // XNA adds each WM_MOUSEWHEEL delta, in 1/120-notch units, as it comes
+    // (MouseMessageHooker.WndProc IL_0008-001b): a precision wheel's half notch is 60. SDL reports
+    // notches as a float; the units are added, and what a non-integer amount leaves over is carried
+    // to the next event so the total stays exact.
+    double g_wheelResidualX = 0.0;
+    double g_wheelResidualY = 0.0;
+    int WheelUnits(double& residual, const float notches)
+    {
+        if (!std::isfinite(notches)) return 0;
+        const double units = residual + static_cast<double>(notches) * 120.0;
+        const double whole = std::round(units);
+        residual = units - whole;
+        return static_cast<int>(std::clamp(whole, -2147483648.0, 2147483647.0));
+    }
     bool g_textInputControlDown[7] = {};
     bool g_textInputSuppress = false;
 
@@ -607,8 +623,8 @@ namespace CNA::Internal::Input
             }
             else if constexpr (std::is_same_v<Event, MouseWheelEvent>)
             {
-                InputManager::AddScrollWheelDelta(static_cast<int>(value.y) * 120);
-                InputManager::AddHorizontalScrollWheelDelta(static_cast<int>(value.x) * 120);
+                InputManager::AddScrollWheelDelta(WheelUnits(g_wheelResidualY, value.y));
+                InputManager::AddHorizontalScrollWheelDelta(WheelUnits(g_wheelResidualX, value.x));
             }
             else if constexpr (std::is_same_v<Event, DeviceEvent>)
             {

@@ -294,8 +294,8 @@ TEST(PlatformInputBridgeMouseWheelTest, HorizontalWheelAccumulatesInEXTPropertyB
     EXPECT_EQ(horizontalWheelDelta(-1.0f), -120);
     EXPECT_EQ(horizontalWheelDelta(3.0f), 360);
     EXPECT_EQ(horizontalWheelDelta(0.0f), 0);
-    // Same cast-then-scale truncation as vertical: sub-notch precision motion is discarded.
-    EXPECT_EQ(horizontalWheelDelta(0.5f), 0);
+    // Scaled as the vertical wheel is: a fraction of a notch counts.
+    EXPECT_EQ(horizontalWheelDelta(0.5f), 60);
 }
 
 // N-005: the two wheels are fully independent — a vertical-only event leaves the horizontal EXT value alone.
@@ -306,16 +306,19 @@ TEST(PlatformInputBridgeMouseWheelTest, VerticalWheelDoesNotAffectHorizontalEXTV
     EXPECT_EQ(Mouse::GetState().getHorizontalScrollWheelValueEXTProperty(), beforeHorizontal);
 }
 
-TEST(PlatformInputBridgeMouseWheelTest, FractionalSubNotchIsTruncatedBeforeScaling)
+// RV-INPUT review #1: XNA adds each WM_MOUSEWHEEL delta, in 1/120-notch units, as it comes
+// (MouseMessageHooker.WndProc IL_0008-001b; Mouse.GetState IL_00a5-00ac returns the total), so a
+// precision wheel's half notch moves the value by 60. FNA -- and CNA until RV-INPUT-1 -- cast each
+// event to whole notches first and lost it.
+TEST(PlatformInputBridgeMouseWheelTest, AFractionOfANotchCounts)
 {
-    // The crux of the FNA-fidelity fix: the SDL float is cast to int BEFORE multiplying by 120,
-    // so sub-notch precision-wheel motion is discarded (FNA/XNA report whole notches only). A
-    // multiply-then-cast implementation would wrongly yield 60 / 108 / -60 here.
-    EXPECT_EQ(wheelDelta(0.5f), 0);
-    EXPECT_EQ(wheelDelta(0.9f), 0);
-    EXPECT_EQ(wheelDelta(1.9f), 120);   // truncates to 1 notch
-    EXPECT_EQ(wheelDelta(-0.5f), 0);
-    EXPECT_EQ(wheelDelta(-1.9f), -120); // truncates toward zero to -1 notch
+    EXPECT_EQ(wheelDelta(0.5f), 60);
+    EXPECT_EQ(wheelDelta(0.5f), 60);
+    EXPECT_EQ(wheelDelta(0.9f), 108);
+    EXPECT_EQ(wheelDelta(1.9f), 228);
+    EXPECT_EQ(wheelDelta(-0.5f), -60);
+    EXPECT_EQ(wheelDelta(-1.9f), -228);
+    EXPECT_EQ(wheelDelta(-0.25f), -30);
 }
 
 TEST(PlatformInputBridgeMouseWheelTest, RepeatedEventsAccumulate)
