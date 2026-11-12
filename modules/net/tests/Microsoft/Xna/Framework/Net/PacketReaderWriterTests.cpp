@@ -11,6 +11,7 @@
 
 #include "System/ArgumentOutOfRangeException.hpp"
 #include "System/FormatException.hpp"
+#include "System/Decimal.hpp"
 #include "System/IO/EndOfStreamException.hpp"
 #include "System/IO/IOException.hpp"
 #include "Microsoft/Xna/Framework/Net/PacketReader.hpp"
@@ -82,6 +83,33 @@ TEST(PacketReaderTest, InheritedReadInt32Works) {
 }
 
 // --- PacketWriter ---
+
+// rv-netapi review #1/#4: PacketWriter/PacketReader inherit .NET's BinaryWriter/BinaryReader
+// (PacketWriter::.ctor(int) IL_0007), so a char16_t is one UTF-8 character, a string literal a
+// length-prefixed string, a byte array its bytes; Write(decimal) and Read() exist. A char16_t used to
+// be written as an int and a literal as a bool.
+TEST(PacketWriterTest, CharactersStringLiteralsArraysAndDecimalsUseTheInheritedDotNetOverloads) {
+    PacketWriter w;
+    w.Write(u'A');
+    w.Write("AB");
+    const SharpRuntime::bytecs bytes[2] = {42, 43};
+    w.Write(bytes);
+    w.Write(System::Decimal(7));
+    EXPECT_EQ(w.getLengthProperty(), 1 + 3 + 2 + 16);
+
+    PacketReader r;
+    std::vector<uint8_t> data(static_cast<std::size_t>(w.getLengthProperty()));
+    w.setPositionProperty(0);
+    w.getBaseStreamProperty()->Read(data.data(), 0, static_cast<int32_t>(data.size()));
+    r.getBaseStreamProperty()->Write(data.data(), 0, static_cast<int32_t>(data.size()));
+    r.setPositionProperty(0);
+    EXPECT_EQ(r.Read(), static_cast<SharpRuntime::intcs>(u'A'));
+    EXPECT_EQ(r.ReadString(), "AB");
+    EXPECT_EQ(r.ReadByte(), 42);
+    EXPECT_EQ(r.ReadByte(), 43);
+    EXPECT_EQ(r.ReadDecimal(), System::Decimal(7));
+    EXPECT_EQ(r.Read(), -1);
+}
 
 TEST(PacketWriterTest, DefaultCtorIsEmpty) {
     PacketWriter w;
