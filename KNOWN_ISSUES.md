@@ -89,6 +89,23 @@ page under `docs/` (index: `docs/README.md`), deliberate divergences from FNA an
   them with it (Play IL_0089-0095 registers them, Dispose(bool) IL_0079-00a2 disposes them). Their
   mixer tracks hold their own sample data, so nothing dangles; stopping them needs a stop path whose
   synchronously fired stopped callback does not destroy the track inside the stop call.
+- Reviews of 2026-11-12 (rv-sfx, rv-media, rv-storage, rv-fix7), source-traced and not fixed:
+  Audio -- after Apply3D, setting Pitch keeps the Doppler factor where XNA's set_Pitch writes the
+  base ratio alone (KernelSoundEffectInstance.SetPitch IL_0026-005e; rv-sfx #3); buffers submitted
+  to a paused DynamicSoundEffectInstance wait for the next update after Resume, where XNA submits at
+  SubmitBuffer whatever the state (AllocateData IL_001c-0029; #5); Stop(true) before the first Play
+  keeps staged buffers that XNA's already allocated voice flushes
+  (`StopDirectCallWhileNeverPlayedDoesNotClearPendingBuffers` pins FNA; #6); SoundEffect.FromStream
+  accepts fmt chunks XNA refuses (wrong nAvgBytesPerSec, cbSize other than 0, a 20-byte fmt; #10).
+  Whether XNA posts BufferNeeded for buffers a Stop flushes is unmeasured; CNA discards them.
+  Media -- queue and collection reads share disposal state XNA keeps apart (rv-media #3); switching
+  between distinct Videos of equal size recreates the frame textures XNA reuses (#5); public playback
+  calls have no serialization (#9); PlayPosition past 2,147,483,647 ms (about 24.86 days) returns
+  values XNA's Int32-millisecond results cannot hold, native rollover unmeasured (rv-fix7 #4).
+  Gamer services and storage -- Guide dialog callbacks run inline on the input/game thread
+  (rv-storage #1); opening a StorageContainer never enables DeviceChanged volume polling (#4);
+  Guide.IsScreenSaverEnabled follows the platform where Windows XNA's getter is always true and its
+  setter does nothing (#6); EndShowMessageBox/EndShowKeyboardInput ignore the exposed wait handle (#9).
 - XACT (HND-XACT-06, evidence `../cnaplan/evidence/rev002/hnd-xact-06-loop-extensions/`): with only an
   effect NEW_ON_LOOP (families 4/6), XACT holds one wave and varies its pitch per pass; CNA plays n+1
   complete waves of the first candidate with a new effect draw each (count and candidate match).
