@@ -23,6 +23,9 @@
 #include "SoundBankTestAccess.hpp"
 #include "Microsoft/Xna/Framework/Audio/AudioCategory.hpp"
 #include "SoundEffectInstanceTestAccess.hpp"
+#include "DynamicSoundEffectInstanceTestAccess.hpp"
+#include "Microsoft/Xna/Framework/Audio/DynamicSoundEffectInstance.hpp"
+#include "System/EventArgs.hpp"
 #include "WaveBankTestAccess.hpp"
 #include <algorithm>
 #include <atomic>
@@ -554,6 +557,7 @@ std::map<void*, VoiceReceipt> voiceReceipts;
 #include "XactFiniteEventBudgetCases.hpp"
 #include "XactReverbCases.hpp"
 #include "XactReverbBusCases.hpp"
+#include "DynamicSoundEffectOfflineCases.hpp"
 
 } // namespace
 

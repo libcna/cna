@@ -358,8 +358,7 @@ namespace Microsoft::Xna::Framework::Audio
          *
          * @param immediate If true, cuts off immediately; if false, allows release tails.
          * @throws System::ObjectDisposedException if the instance has been disposed.
-         * @throws System::InvalidOperationException if called on a DynamicSoundEffectInstance
-         *         with @p immediate false (there is no authored loop to release into).
+         * @note On a DynamicSoundEffectInstance, false leaves the non-looping buffers unchanged.
          */
         virtual void Stop(bool immediate);
 

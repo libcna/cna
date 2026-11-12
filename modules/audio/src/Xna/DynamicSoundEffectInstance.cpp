@@ -37,10 +37,10 @@ namespace Microsoft::Xna::Framework::Audio
         }
 
         // Whether the batch may still be delivered to (or handed back to) this instance. Membership
-        // in Streams is checked before anything else is read: a handler may stop the instance, or
-        // dispose or destroy it (directly or through the C API), and Stop and Dispose take it out
-        // of Streams. A registered address may hold a newer instance built in the same storage,
-        // which the serial tells apart; a Stop since the batch was taken changed the epoch.
+        // in Streams is checked before anything else is read: a handler may dispose or destroy
+        // the instance (directly or through the C API), which takes it out of Streams. Stop keeps
+        // it registered because XNA still delivers its posted messages. A registered address may
+        // hold a newer instance built in the same storage, which the serial tells apart.
         static bool Current(DynamicSoundEffectInstance* instance, const Batch& batch)
         {
             return Registered(instance) && instance->notificationSerial_ == batch.serial &&
@@ -93,14 +93,14 @@ namespace Microsoft::Xna::Framework::Audio
             }
         }
 
-        // FrameworkDispatcher::Update()'s stream step, installed by the first Play(). Every
+        // FrameworkDispatcher::Update()'s stream step, installed by Play() or immediate Stop(). Every
         // instance's batch is taken before any handler runs, so work a handler posts -- for
         // itself or another stream -- waits for the next update, as XNA's dispatcher copy does.
         static void UpdateFrameworkStreams()
         {
             using Microsoft::Xna::Framework::FrameworkDispatcher;
-            // Handlers run with no lock held: StopInternal() locks StreamsMutex to unregister, so
-            // a handler that stops or disposes a stream would otherwise self-deadlock.
+            // Handlers run with no lock held: disposal locks StreamsMutex to unregister, so
+            // a handler that disposes a stream would otherwise self-deadlock.
             std::vector<DynamicSoundEffectInstance*> snapshot;
             {
                 std::lock_guard<std::mutex> lock(FrameworkDispatcher::StreamsMutex);
@@ -436,6 +436,11 @@ namespace Microsoft::Xna::Framework::Audio
             ++pendingNotifications_;
         }
 
+        RegisterForUpdates();
+    }
+
+    void DynamicSoundEffectInstance::RegisterForUpdates()
+    {
         std::lock_guard<std::mutex> lock(Microsoft::Xna::Framework::FrameworkDispatcher::StreamsMutex);
         auto& streams = Microsoft::Xna::Framework::FrameworkDispatcher::Streams;
         if (std::find(streams.begin(), streams.end(), this) == streams.end())
@@ -450,81 +455,73 @@ namespace Microsoft::Xna::Framework::Audio
     {
         if (getIsDisposedProperty())
             throw System::ObjectDisposedException("DynamicSoundEffectInstance");
-        // Before any Play() there is no track. XNA's voice exists from the constructor
-        // (DynamicSoundEffectInstance..ctor IL_0043-0048) and an immediate Stop flushes its queued
-        // buffers (KernelSoundEffectInstance.Stop IL_0011-0062), so the staged buffers go; a
-        // non-immediate Stop has no started voice to be invalid about.
-#ifdef SOUND_ENABLED
-        if (!AsTrackD(GetLiveTrackHandle()))
-        {
-            if (immediate)
-            {
-                ClearBuffers();
-            }
-            return;
-        }
-#endif
-        // FNA throws for a non-immediate Stop on a dynamic instance: there is no authored loop
-        // for FAudioSourceVoice_ExitLoop to release into, unlike a static SoundEffectInstance.
-        if (!immediate)
-        {
-            throw System::InvalidOperationException();
-        }
-        StopInternal();
+        // RV-DSI-STOP: Refresh KernelSoundEffectInstance.Stop IL_0065-0072 only calls
+        // XAudio2 ExitLoop(0). Dynamic packets have no loop (SubmitPacket IL_001d-0022,
+        // IL_0066-007a), so this is a no-op, unlike FNA's dynamic-instance refusal.
+        if (!immediate) return;
+
+        // XNA has a voice before Play (dynamic .ctor IL_0043-0048); even a pre-Play flush
+        // can post. Register before changing anything: a failed vector growth must not lose
+        // buffers or notifications. Stop keeps registration, including any reserved batch.
+        RegisterForUpdates();
+        StopInternal(false);
     }
 
     void DynamicSoundEffectInstance::Stop()
     {
-        // P9-DYNAMIC-001: matches the base SoundEffectInstance::Stop() (and FNA's, which is
-        // exactly `Stop(true)`) -- delegates through Stop(bool)'s own guard rather than
-        // duplicating StopInternal()'s work unconditionally. Previously this override skipped
-        // that guard entirely, so calling the no-arg Stop() directly (not via Stop(bool)) on a
-        // never-played (or already-stopped) instance would still clear any staged buffers and
-        // reset state, unlike FNA, which no-ops in that case (handle == IntPtr.Zero).
+        // Refresh SoundEffectInstance.Stop() IL_0000-0007 delegates to Stop(true).
         Stop(true);
     }
 
-    void DynamicSoundEffectInstance::StopInternal()
+    void DynamicSoundEffectInstance::StopInternal(bool disposing)
     {
+        {
+            // Keep producer submissions/count reads out of the entire stop/retire/flush interval.
+            // AUD-15-006: track_ and audioStream_ teardown share their readers' queueMutex_.
+            std::lock_guard<std::mutex> lock(queueMutex_);
 #ifdef SOUND_ENABLED
-        // AUD-04-008/009: GetLiveTrackHandle() returns nullptr (and already clears track_) if
-        // the mixer that owned this track was destroyed since it was created -- stop/destroy
-        // must never run against that freed pointer. track_ is explicitly
-        // cleared again below regardless, matching this function's pre-existing "always end up
-        // with no track" contract for both the live and already-stale cases.
-        //
-        // AUD-15-006: this whole block (destroying the track and clearing track_) must run
-        // under queueMutex_ -- a producer thread's SubmitBuffer() reads track_ (via
-        // getStateProperty(), under the same lock as of this task's fix) to decide whether to
-        // submit immediately; without this lock here, destruction could free the track
-        // while that read was using it, a real sanitizer-reproduced use-after-free (stream lock
-        // segfaulting on a track already freed by this function running concurrently).
-        {
-            std::lock_guard<std::mutex> lock(queueMutex_);
             auto* track = AsTrackD(GetLiveTrackHandle());
-            if (track)
-            {
-                CNA::Internal::Audio::StopMixerTrack(track);
-                CNA::Internal::Audio::DestroyMixerTrack(track);
-            }
-            track_ = nullptr;
-        }
+            if (track) CNA::Internal::Audio::StopMixerTrack(track);
 #endif
-        State_   = SoundState::Stopped;
-        playing_ = false;
-
-        ClearBuffers();
-        {
-            // A stopped voice's undelivered notifications go with its buffers; a ClearBuffersEXT
-            // on a playing one keeps them, as a starving stream still needs its answer.
-            std::lock_guard<std::mutex> lock(queueMutex_);
-            pendingNotifications_ = 0;
-            ++notificationEpoch_;
+            if (!disposing)
+            {
+                // Retire natural completions before flushing: these still post at zero pending.
+                RetireConsumedChunksLocked();
+                const auto pending = queuedBuffers_.size() + submittedChunkSizes_.size();
+                // RV-DSI-STOP: Refresh KernelSoundEffectInstance.Stop IL_0014-0062 stops
+                // the voice, enters Stopping, then flushes all buffers. Dynamic OnBufferEnd
+                // IL_0039-0049 suppresses the final (zero-pending) post; IL_004b-006a posts
+                // at one and two remaining. Stop clears neither dispatcher messages nor the
+                // instance mapping (SoundEffectInstance.Stop IL_002f-003b).
+                if (pending > 0)
+                    pendingNotifications_ += static_cast<SharpRuntime::intcs>(
+                        std::min(pending - 1, BUFFER_NEEDED_AT_OR_BELOW));
+            }
+            else
+            {
+                // Dynamic Dispose IL_0029-0039 removes the mapping before destroying the voice;
+                // RaiseBufferNeededOnInstance IL_0010-0041 then ignores even copied messages.
+                pendingNotifications_ = 0;
+                ++notificationEpoch_;
+            }
+#ifdef SOUND_ENABLED
+            if (track) CNA::Internal::Audio::DestroyMixerTrack(track);
+            track_ = nullptr;
+            if (auto* stream = AsStream(audioStream_))
+                CNA::Internal::Audio::ClearMixerStream(stream);
+#endif
+            State_ = SoundState::Stopped;
+            playing_ = false;
+            queuedBuffers_.clear();
+            submittedChunkSizes_.clear();
         }
 
-        std::lock_guard<std::mutex> lock(Microsoft::Xna::Framework::FrameworkDispatcher::StreamsMutex);
-        auto& streams = Microsoft::Xna::Framework::FrameworkDispatcher::Streams;
-        streams.erase(std::remove(streams.begin(), streams.end(), this), streams.end());
+        if (disposing)
+        {
+            std::lock_guard<std::mutex> lock(Microsoft::Xna::Framework::FrameworkDispatcher::StreamsMutex);
+            auto& streams = Microsoft::Xna::Framework::FrameworkDispatcher::Streams;
+            streams.erase(std::remove(streams.begin(), streams.end(), this), streams.end());
+        }
     }
 
     // Pause()/Resume() are intentionally not defined here (P13-DYNAMIC-001) -- see the "not
@@ -539,7 +536,7 @@ namespace Microsoft::Xna::Framework::Audio
             return;
         }
         // Disposal releases CNA-owned queued storage even when no native voice was ever created.
-        StopInternal();
+        StopInternal(true);
         DestroyStream();                 // frees the queued mixer stream
         // StopInternal has nulled track_, so the base hook only marks the instance disposed.
         SoundEffectInstance::Dispose(disposing);

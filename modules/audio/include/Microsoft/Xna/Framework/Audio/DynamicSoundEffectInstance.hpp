@@ -108,16 +108,17 @@ namespace Microsoft::Xna::Framework::Audio
         /** @brief Requests more buffers if needed, then starts or continues playback. */
         void Play() override;
 
-        /** @brief Stops playback and clears all queued buffers. */
+        /** @brief Stops playback, flushes all queued buffers and preserves posted BufferNeeded events. */
         void Stop() override;
 
         /**
-         * @brief Stops playback and clears all queued buffers.
+         * @brief Immediately stops and flushes buffers, or leaves a non-looping dynamic voice alone.
          *
-         * @param immediate Must be true; dynamic instances have no authored loop to release
-         *        into, so a non-immediate stop is not a valid operation.
+         * Posted BufferNeeded events survive an immediate stop; each flushed buffer leaving one
+         * or two pending posts another event for a later update. The final buffer posts none.
+         *
+         * @param immediate True to stop and flush; false has no effect because dynamic buffers do not loop.
          * @throws System::ObjectDisposedException if the instance has been disposed.
-         * @throws System::InvalidOperationException if @p immediate is false.
          */
         void Stop(bool immediate) override;
 
@@ -239,9 +240,10 @@ namespace Microsoft::Xna::Framework::Audio
         // kernel posts one when Play starts a Stopped voice with at most two buffers pending and
         // one per completed buffer that leaves at most two (KernelDynamicSoundEffectInstance.Play
         // IL_001a-0061, OnBufferEnd IL_004b-006a); FrameworkDispatcher.Update delivers them.
+        // In Stopping, the final zero-pending flush posts none (OnBufferEnd IL_0039-0049).
         mutable SharpRuntime::intcs pendingNotifications_ = 0;
-        // Bumped when Stop discards undelivered notifications, so a batch taken before the discard
-        // is neither delivered further nor handed back over notifications posted after it.
+        // Bumped only by disposal: Stop preserves both pending and reserved notifications.
+        // A batch invalidated by disposal must neither be delivered nor restored.
         std::uint64_t notificationEpoch_ = 0;
         // Unique for the process's lifetime, so a batch can tell this instance from a later one
         // that happens to reuse its address after it was destroyed.
@@ -278,6 +280,7 @@ namespace Microsoft::Xna::Framework::Audio
         // must already hold queueMutex_.
         void SubmitQueuedToStreamLocked();
 
-        void StopInternal();
+        CNAEXT void RegisterForUpdates();
+        CNAEXT void StopInternal(bool disposing);
     };
 }

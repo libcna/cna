@@ -90,12 +90,10 @@ page under `docs/` (index: `docs/README.md`), deliberate divergences from FNA an
   mixer tracks hold their own sample data, so nothing dangles; stopping them needs a stop path whose
   synchronously fired stopped callback does not destroy the track inside the stop call.
 - Reviews of 2026-11-12 (rv-sfx, rv-media, rv-storage, rv-fix7), source-traced and not fixed:
-  Audio -- an immediate DynamicSoundEffectInstance.Stop flushes XNA's voice, and each flushed buffer that
-  leaves one or two pending posts a BufferNeeded (KernelSoundEffectInstance.Stop IL_0011-0062 with
-  OnBufferEnd IL_004b-006a in the Stopping state, source-traced, unmeasured); CNA's Stop posts none
-  and discards undelivered notifications. CNA notices a completed buffer when the count is read, at
-  a submission and at the dispatcher step, not at the completion itself: a buffer that finishes in
-  the instant between a submission's retirement and its append is judged with that new buffer
+  Audio -- immediate Stop accounts for its flush during the call; native XNA flush-callback timing
+  and transient PendingBufferCount observations remain unmeasured. CNA notices a completed buffer
+  when the count is read, at a submission and at the dispatcher step, not at completion itself:
+  a buffer that finishes in the instant between a submission's retirement and its append is judged with that new buffer
   pending (review rv-fix8 #5, residual). XNA's FrameworkDispatcher.Update keeps one copied list of every
   subsystem's messages until all of them ran (IL_0031-0037, IL_0112-0117); CNA retries a failed
   step's dynamic-sound notifications as a whole, but not across subsystems: when a media handler
