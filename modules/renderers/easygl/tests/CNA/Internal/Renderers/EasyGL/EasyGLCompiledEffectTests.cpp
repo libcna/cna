@@ -5460,6 +5460,14 @@ TEST(EasyGLCompiledEffectDrawTest, SharedDeviceTextureSlotAfterApplyContract)
     CNA::TestSupport::RunCompiledEffectDeviceTextureSlotAfterApplyContract(device);
 }
 
+TEST(EasyGLCompiledEffectDrawTest, SharedDeviceSamplerAfterApplyContract)
+{
+    GraphicsDevice device;
+    if (!CNA::TestSupport::SupportsCompiledEffects(device))
+        GTEST_SKIP() << "selected renderer does not execute XNA Effect Framework bytecode";
+    CNA::TestSupport::RunCompiledEffectDeviceSamplerAfterApplyContract(device);
+}
+
 TEST(EasyGLCompiledEffectDrawTest, SharedMrtWriteMaskContract)
 {
     GraphicsDevice device(GraphicsAdapter::getDefaultAdapterProperty(), GraphicsProfile::HiDef,

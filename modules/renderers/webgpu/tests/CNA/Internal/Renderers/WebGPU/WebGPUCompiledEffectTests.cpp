@@ -547,6 +547,14 @@ TEST(WebGPUCompiledEffectDrawTest, SharedDeviceTextureSlotAfterApplyContract)
     CNA::TestSupport::RunCompiledEffectDeviceTextureSlotAfterApplyContract(device);
 }
 
+TEST(WebGPUCompiledEffectDrawTest, SharedDeviceSamplerAfterApplyContract)
+{
+    GraphicsDevice device;
+    if (!CNA::TestSupport::SupportsCompiledEffects(device))
+        GTEST_SKIP() << "selected renderer does not execute XNA Effect Framework bytecode";
+    CNA::TestSupport::RunCompiledEffectDeviceSamplerAfterApplyContract(device);
+}
+
 TEST(WebGPUCompiledEffectDrawTest, SharedMrtWriteMaskContract)
 {
     GraphicsDevice device(Microsoft::Xna::Framework::Graphics::GraphicsAdapter::getDefaultAdapterProperty(),

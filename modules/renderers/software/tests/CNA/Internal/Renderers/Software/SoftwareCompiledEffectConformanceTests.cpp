@@ -142,6 +142,7 @@ TEST(SoftwareCompiledEffectConformanceTest, RunsEverySharedCompiledEffectContrac
     {
         RunCompiledEffectHalfPixelCoverageContract(device);
         RunCompiledEffectDeviceTextureSlotAfterApplyContract(device);
+        RunCompiledEffectDeviceSamplerAfterApplyContract(device);
         RunCompiledEffectMrtWriteMaskContract(device);
     });
     RunOnFreshSoftwareDevice("per-register/per-draw LOD bias, AddressW, SpriteBatch alternation",

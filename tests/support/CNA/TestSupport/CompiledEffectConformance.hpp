@@ -6101,6 +6101,54 @@ namespace CNA::TestSupport
     }
 
     /**
+     * @brief Contract: a device sampler state replaced after Apply() is the one a compiled draw uses.
+     *
+     * The sampler-state counterpart of RunCompiledEffectDeviceTextureSlotAfterApplyContract.
+     * EffectPass.Apply() publishes the pass's sampler assignments to GraphicsDevice.SamplerStates,
+     * and a game may replace one before drawing (XNA SamplerStateCollection.set_Item IL_0029-0045
+     * applies it to the device). The pass assigns Point/Clamp; the caller then sets Point/Wrap. A
+     * 2x1 [red, green] texture sampled at u = 1.25 reads green under Clamp and red under Wrap.
+     *
+     * @param device Device whose renderer claims CompiledEffects.
+     */
+    inline void RunCompiledEffectDeviceSamplerAfterApplyContract(GraphicsDevice& device)
+    {
+        namespace Fx = EffectFormat;
+        Effect effect(device, BuildSyntheticSamplingEffect({
+            {Fx::SampMagFilter, Fx::FilterPoint}, {Fx::SampMinFilter, Fx::FilterPoint},
+            {Fx::SampMipFilter, Fx::FilterPoint}, {Fx::SampAddressU, Fx::AddressClamp},
+            {Fx::SampAddressV, Fx::AddressClamp}}));
+        auto& parameters = effect.getParametersProperty();
+        parameters["Transform"]->SetValue(Matrix::getIdentityProperty());
+        parameters["Tint"]->SetValue(Vector4(1.0f, 1.0f, 1.0f, 1.0f));
+        Texture2D strip(device, 2, 1);
+        const Color texels[2] = {Color(255, 0, 0, 255), Color(0, 255, 0, 255)};
+        strip.SetData(texels, 2);
+        parameters["FxTexture"]->SetValue(&strip);
+
+        SamplingQuadVertex quad[6];
+        FillSamplingQuad(quad, 1.25f, 0.5f);
+        RenderTarget2D target(device, 8, 8);
+        device.SetRenderTarget(&target);
+        device.Clear(Color(9, 19, 29, 255));
+        device.setRasterizerStateProperty(RasterizerState::CullNone);
+        device.setDepthStencilStateProperty(DepthStencilState::None);
+        device.setBlendStateProperty(BlendState::Opaque);
+        effect.getTechniquesProperty()[0]->getPassesProperty()[1]->Apply();
+        device.getSamplerStatesProperty()[0] = SamplerState::PointWrap;
+        device.DrawUserPrimitives(PrimitiveType::TriangleList, static_cast<const void*>(quad), 0, 2,
+                                  SamplingQuadDeclaration());
+        device.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
+        device.getTexturesProperty()(0, nullptr);
+
+        Color pixel(0, 0, 0, 0);
+        const Rectangle centre(4, 4, 1, 1);
+        target.GetData(0, &centre, &pixel, 0, 1);
+        EXPECT_NEAR(pixel.getRProperty(), 255, 3) << "the device's sampler, replaced after Apply, wins";
+        EXPECT_NEAR(pixel.getGProperty(), 0, 3);
+    }
+
+    /**
      * @brief Contract: an MRT compiled pass writes each slot under that slot's own write mask.
      *
      * An ordinary compiled Effect writing oC0 = Tint and oC1 = Tint.yxzw (the fixture's own

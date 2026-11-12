@@ -10640,7 +10640,12 @@ fn cnaInverseTranspose3(m: mat3x3f) -> mat3x3f {
                     {
                         texture = (*params.compiledDeviceTextures)[static_cast<int>(sampler.slot)];
                     }
-                    if (!assigned && params.compiledDeviceSamplerStates != nullptr &&
+                    // Apply publishes the pass's sampler assignments to the device's collection, and
+                    // a sampler the game sets there afterwards is the one XNA uses (as for the
+                    // vertex stage above). Only a SpriteBatch draw keeps the pass's own state
+                    // (MSR-003): its sprite path does not go through the device's state flush.
+                    if ((!assigned || spriteTextureOverride == nullptr) &&
+                        params.compiledDeviceSamplerStates != nullptr &&
                         sampler.slot < static_cast<std::uint32_t>(SamplerStateCollection::MaxSamplers))
                     {
                         state = (*params.compiledDeviceSamplerStates)[static_cast<int>(sampler.slot)];
