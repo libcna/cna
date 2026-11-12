@@ -56,6 +56,7 @@ namespace CNA::Internal::Renderers::Software
             throw std::runtime_error("SoftwareSpriteBatchRenderer::Begin: Begin() called without a matching End()");
         pendingCompiledSprites_.clear();
         compiledTexture_ = nullptr;
+        compiledSpriteEffectApplied_ = false;
         begun_ = true;
     }
 
@@ -159,7 +160,11 @@ namespace CNA::Internal::Renderers::Software
             throw System::InvalidOperationException(
                 "Software SpriteBatch compiled Effect has no current pass.");
 
-        ApplyCompiledSpriteEffect();
+        if (!compiledSpriteEffectApplied_)
+        {
+            ApplyCompiledSpriteEffect();
+            compiledSpriteEffectApplied_ = true;
+        }
         auto* spriteRuntime =
             dynamic_cast<SoftwareCompiledEffect*>(compiledSpriteEffect_.get());
         if (spriteRuntime == nullptr || spriteRuntime->GetVertexProgramEXT() == nullptr ||

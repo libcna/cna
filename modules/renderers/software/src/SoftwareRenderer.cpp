@@ -6704,6 +6704,9 @@ namespace CNA::Internal::Renderers::Software
         float u1, float v1, float u2, float v2,
         Effect* customEffect, const SoftwareSamplerState& spriteSampler)
     {
+#if defined(CNA_SOFTWARE_COMPILED_EFFECTS)
+        ForgetCompiledStageOwners();
+#endif
         SoftwareFramebuffer& fb = CurrentFramebuffer();
         int vpX = 0, vpY = 0, vpW = 0, vpH = 0;
         float vpMinDepth = 0.0f, vpMaxDepth = 1.0f;
@@ -6928,6 +6931,14 @@ namespace CNA::Internal::Renderers::Software
         return effect;
     }
 
+#if defined(CNA_SOFTWARE_COMPILED_EFFECTS)
+    void SoftwareRenderer::ForgetCompiledStageOwners() noexcept
+    {
+        if (compiledStageOwners_ != nullptr)
+            *compiledStageOwners_ = {};
+    }
+#endif
+
     std::unique_ptr<ICompiledEffectRuntime> SoftwareRenderer::CreateCompiledEffect(
         const std::uint8_t* effectCode, std::size_t effectCodeBytes)
     {
@@ -6965,6 +6976,9 @@ namespace CNA::Internal::Renderers::Software
                                                         const Matrix& view, const Matrix& projection,
                                                         PrimitiveType primitive, int primitiveCount)
     {
+#if defined(CNA_SOFTWARE_COMPILED_EFFECTS)
+        ForgetCompiledStageOwners();
+#endif
         if (primitiveCount <= 0)
             throw std::runtime_error("SoftwareRenderer::DrawColoredPrimitives: primitiveCount must be > 0");
         if (primitive != PrimitiveType::TriangleList && primitive != PrimitiveType::TriangleStrip)
@@ -7055,6 +7069,9 @@ namespace CNA::Internal::Renderers::Software
                                                                const Matrix& world, const Matrix& view, const Matrix& projection,
                                                                PrimitiveType primitive, int primitiveCount)
     {
+#if defined(CNA_SOFTWARE_COMPILED_EFFECTS)
+        ForgetCompiledStageOwners();
+#endif
         if (primitiveCount <= 0)
             throw std::runtime_error("SoftwareRenderer::DrawIndexedColoredPrimitives: primitiveCount must be > 0");
         if (primitive != PrimitiveType::TriangleList && primitive != PrimitiveType::TriangleStrip)
@@ -7181,6 +7198,8 @@ namespace CNA::Internal::Renderers::Software
         const auto& swVb = static_cast<const SoftwareVertexBufferRenderer&>(vb);
         const bool compiledEffectDraw = params.compiledEffectRuntime != nullptr;
 #if defined(CNA_SOFTWARE_COMPILED_EFFECTS)
+        if (!compiledEffectDraw)
+            ForgetCompiledStageOwners();
         SoftwareCompiledEffect* compiledRuntime = nullptr;
         if (compiledEffectDraw)
         {
@@ -7427,6 +7446,8 @@ namespace CNA::Internal::Renderers::Software
         const auto& swIb = static_cast<const SoftwareIndexBufferRenderer&>(ib);
         const bool compiledEffectDraw = params.compiledEffectRuntime != nullptr;
 #if defined(CNA_SOFTWARE_COMPILED_EFFECTS)
+        if (!compiledEffectDraw)
+            ForgetCompiledStageOwners();
         SoftwareCompiledEffect* compiledRuntime = nullptr;
         if (compiledEffectDraw)
         {

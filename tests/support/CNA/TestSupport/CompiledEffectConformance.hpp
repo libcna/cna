@@ -6697,6 +6697,29 @@ namespace CNA::TestSupport
             expectColor(pixels[0], halfTint);
             expectColor(pixels[1], halfTint);
         }
+        {
+            // The pixel-only pass assigns no vertex constant, so a Transform changed after the
+            // vertex shader was applied does not reach it.
+            SCOPED_TRACE("an omitted stage keeps the constants it was applied with");
+            RenderTarget2D target(device, kSize, kSize);
+            device.SetRenderTarget(&target);
+            device.Clear(background);
+            device.setRasterizerStateProperty(RasterizerState::CullNone);
+            device.setDepthStencilStateProperty(DepthStencilState::None);
+            device.setBlendStateProperty(BlendState::Opaque);
+            full.setCurrentTechniqueProperty(full.getTechniquesProperty()[0]);
+            full.getTechniquesProperty()[0]->getPassesProperty()[1]->Apply();
+            full.getParametersProperty()["Transform"]->SetValue(Matrix::CreateScale(0.5f));
+            full.setCurrentTechniqueProperty(full.getTechniquesProperty()[1]);
+            full.getTechniquesProperty()[1]->getPassesProperty()[0]->Apply();
+            device.DrawUserPrimitives(PrimitiveType::TriangleList,
+                                      static_cast<const void*>(quad), 0, 2, declaration);
+            device.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
+            Color corner = Color::Transparent;
+            const Rectangle cornerRectangle(0, 0, 1, 1);
+            target.GetData(0, &cornerRectangle, &corner, 0, 1);
+            expectColor(corner, fullTint);
+        }
     }
 
     /**

@@ -1408,6 +1408,9 @@ namespace CNA::Internal::Renderers::Software
         SoftwareRenderer& owner_;
         bool begun_ = false;
         bool immediateMode_ = false;
+        // XNA's SpriteBatch applies its SpriteEffect once per batch (End's SetRenderState), not
+        // per texture run, so a custom pass's inherited stage carries across runs.
+        bool compiledSpriteEffectApplied_ = false;
         Matrix transformMatrix_ = Matrix::getIdentityProperty();
         Effect* customEffect_ = nullptr;
         std::unique_ptr<ICompiledEffectRuntime> compiledSpriteEffect_;
@@ -1928,6 +1931,9 @@ namespace CNA::Internal::Renderers::Software
         /// The compiled-effect runtimes that own the device's vertex and pixel shader stages,
         /// made with the first compiled effect.
         std::shared_ptr<SoftwareCompiledStageOwners> compiledStageOwners_;
+        /// A stock, ShaderEffect or plain-sprite draw ran shaders of its own: a later compiled pass
+        /// without a stage refuses instead of inheriting an older compiled one.
+        void ForgetCompiledStageOwners() noexcept;
 #endif
 
         /// The active viewport as raster parameters for the 3D draw path --

@@ -106,6 +106,17 @@ page under `docs/` (index: `docs/README.md`), deliberate divergences from FNA an
   can render differently); (2) SpriteEffect (CNAEXT,
   FNA's) reflects no `Texture` parameter, so a clone cannot carry or bind FNA's texture at Apply and
   draws device slot 0 (SpriteBatch rebinds slot 0 and hides this).
+- Graphics, compiled-effect passes that omit a shader stage (review rv-stage, 2026-11-12, source
+  analysis): XNA keeps the device's shader and constants for a stage a pass does not assign.
+  `RunCompiledEffectInheritedVertexStageContract` is registered for Software only. EasyGL, FNA3D,
+  SDLGPU, WebGPU and DIRECTX9 are predicted to fail its other-effect and last-assigner cases:
+  MojoShader's BeginPass starts from the effect's previous raw shaders, so CommitChanges writes the
+  applying effect's parameters into the inherited stage's registers. Software resets those raw
+  sources before BeginPass; the other four backends can do the same before their BeginPass, FNA3D
+  needs it in the fork. Software itself refuses (InvalidOperationException) a pass without a vertex
+  shader after a stock, ShaderEffect or plain-sprite draw, where XNA would inherit the stock shader;
+  its stage record splits when `RecreateRendererForMultiSampleCount` replaces the renderer, and is
+  lost with the effect that owned it.
 - C API: content tags of meshes/parts have no C route; HND-TQ-22 C route (ObjectValue handles, ABI 0.61)
   not done; `CNA::Net::SystemLinkDiscovery` (GALAXY-NET-01) has no C route (planned, CBIND-127).
 - Content: Texture3D/TextureCube level counts <= 0 are accepted by XNA (same loop as Texture2D), CNA

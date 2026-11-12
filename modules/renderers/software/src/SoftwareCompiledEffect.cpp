@@ -771,6 +771,12 @@ namespace CNA::Internal::Renderers::Software
 
         unsigned int passCount = 0;
         MOJOSHADER_effectBegin(effectData_, &passCount, 0, &stateChanges_);
+        // MojoShader's BeginPass starts from the effect's previous raw shaders: for a stage the
+        // new pass omits it would copy the current parameter values into that stage's registers
+        // (CommitChanges) and re-run an earlier array selector. An omitted stage keeps the
+        // shader and constants it was applied with.
+        effectData_->current_vert_raw = nullptr;
+        effectData_->current_pixl_raw = nullptr;
         MOJOSHADER_effectBeginPass(effectData_, passIndex);
         passActive_ = true;
         if (parserContext_->boundVertex != nullptr)

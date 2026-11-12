@@ -154,4 +154,50 @@ TEST(SoftwareCompiledEffectConformanceTest, RunsEverySharedCompiledEffectContrac
     });
 }
 
+
+// Software keeps no record of the shaders a stock effect or a plain SpriteBatch runs (they are not
+// compiled runtimes). XNA would let a later pass without a vertex shader inherit the stock one;
+// Software refuses that draw rather than reusing an older compiled vertex shader.
+TEST(SoftwareCompiledEffectStageTest, APassWithoutAVertexShaderAfterAStockDrawRefuses)
+{
+    using namespace CNA::TestSupport;
+    using namespace Microsoft::Xna::Framework;
+    using namespace Microsoft::Xna::Framework::Graphics;
+    GraphicsDevice device(GraphicsAdapter::getDefaultAdapterProperty(), GraphicsProfile::HiDef,
+                          PresentationParameters::CreateWindowedEXT(64, 64));
+    ASSERT_TRUE(device.SupportsCapability(CNA::GraphicsCapability::CompiledEffects));
+    Effect effect(device, BuildSyntheticDrawableEffectWithPixelOnlyPass());
+    effect.getParametersProperty()["Transform"]->SetValue(Matrix::getIdentityProperty());
+    effect.getParametersProperty()["Tint"]->SetValue(Vector4(0.25f, 0.5f, 0.75f, 1.0f));
+    struct ClipVertex { float x, y, z; };
+    const VertexDeclaration declaration(static_cast<int>(sizeof(ClipVertex)), {
+        VertexElement(0, VertexElementFormat::Vector3, VertexElementUsage::Position, 0),
+    });
+    const ClipVertex quad[6] = {
+        {-1.0f,  1.0f, 0.0f}, {-1.0f, -1.0f, 0.0f}, { 1.0f, -1.0f, 0.0f},
+        {-1.0f,  1.0f, 0.0f}, { 1.0f, -1.0f, 0.0f}, { 1.0f,  1.0f, 0.0f},
+    };
+    VertexPositionColor stockQuad[6];
+    for (int i = 0; i < 6; ++i)
+        stockQuad[i] = VertexPositionColor(Vector3(quad[i].x, quad[i].y, quad[i].z), Color::White);
+
+    RenderTarget2D target(device, 8, 8);
+    device.SetRenderTarget(&target);
+    device.setRasterizerStateProperty(RasterizerState::CullNone);
+    effect.getTechniquesProperty()[0]->getPassesProperty()[1]->Apply();
+    device.DrawUserPrimitives(PrimitiveType::TriangleList, static_cast<const void*>(quad), 0, 2, declaration);
+
+    BasicEffect stock(device);
+    stock.setVertexColorEnabledProperty(true);
+    stock.getCurrentTechniqueProperty()->getPassesProperty()[0]->Apply();
+    device.DrawUserPrimitives(PrimitiveType::TriangleList, stockQuad, 0, 2);
+
+    effect.setCurrentTechniqueProperty(effect.getTechniquesProperty()[1]);
+    effect.getTechniquesProperty()[1]->getPassesProperty()[0]->Apply();
+    EXPECT_THROW(device.DrawUserPrimitives(PrimitiveType::TriangleList, static_cast<const void*>(quad),
+                                           0, 2, declaration),
+                 System::InvalidOperationException);
+    device.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
+}
+
 #endif
