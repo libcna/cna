@@ -288,7 +288,7 @@ TEST_F(SystemLinkDiscoveryTest, OneHostReachedByTwoPathsIsListedOnce)
     SystemLinkDiscovery::setExtraSearchAddressesProperty({first.SearchAddress(), second.SearchAddress()});
 
     // The same instance answering twice, as one host does when a query reaches it by broadcast
-    // and by its address; a host without an instance id (0) is identified by its port alone.
+    // and by its address; a host without an instance id (0) is identified by its port and gamertag.
     auto a = std::async(std::launch::async, [&] { return first.AnswerOneQuery(FarAnnounce("FarHost", 40000, 9)); });
     auto b = std::async(std::launch::async, [&] { return second.AnswerOneQuery(FarAnnounce("FarHost", 40000, 9)); });
     EXPECT_EQ(FoundFar(ENetDiscoveryService::FindSessions(NetworkSessionType::SystemLink)).size(), 1u);
@@ -298,6 +298,23 @@ TEST_F(SystemLinkDiscoveryTest, OneHostReachedByTwoPathsIsListedOnce)
     b = std::async(std::launch::async, [&] { return second.AnswerOneQuery(FarAnnounce("FarOld", 40002, 0)); });
     EXPECT_EQ(FoundFar(ENetDiscoveryService::FindSessions(NetworkSessionType::SystemLink)).size(), 1u);
     ASSERT_TRUE(a.get() && b.get());
+}
+
+TEST_F(SystemLinkDiscoveryTest, TwoHostsWithoutAnInstanceIdOnOnePortAreListedApartByGamertag)
+{
+    FakeFarHost first, second;
+    ASSERT_TRUE(first.Ready() && second.Ready());
+    SystemLinkDiscovery::setExtraSearchAddressesProperty({first.SearchAddress(), second.SearchAddress()});
+
+    // Older CNA hosts send no instance id; one port alone must not merge two of them.
+    auto a = std::async(std::launch::async, [&] { return first.AnswerOneQuery(FarAnnounce("FarOldFirst", 40002, 0)); });
+    auto b = std::async(std::launch::async, [&] { return second.AnswerOneQuery(FarAnnounce("FarOldSecond", 40002, 0)); });
+    auto found = FoundFar(ENetDiscoveryService::FindSessions(NetworkSessionType::SystemLink));
+    ASSERT_TRUE(a.get() && b.get());
+    ASSERT_EQ(found.size(), 2u);
+    std::vector<std::string> names{found[0].getHostGamertagProperty(), found[1].getHostGamertagProperty()};
+    std::sort(names.begin(), names.end());
+    EXPECT_EQ(names, (std::vector<std::string>{"FarOldFirst", "FarOldSecond"}));
 }
 
 TEST_F(SystemLinkDiscoveryTest, AnAddressThatDoesNotResolveIsSkipped)

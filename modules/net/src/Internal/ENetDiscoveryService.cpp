@@ -509,14 +509,18 @@ namespace CNA::Internal::Net
                             // identifies one hosted session, regardless of which local path its
                             // announce happened to take.
                             // A host's instance id also tells apart two hosts that bound the same
-                            // fixed port (CNA::Net::SystemLinkDiscovery::setHostPortProperty); a host
-                            // that sends none (0) is identified by its port alone, as before.
+                            // fixed port (CNA::Net::SystemLinkDiscovery::setHostPortProperty). A host
+                            // that sends none (0, an older CNA) is identified by its port and its
+                            // gamertag, so two such hosts on one port still list apart unless they
+                            // also share the gamertag.
                             const auto known = std::find_if(
                                 currentResults_->begin(), currentResults_->end(),
                                 [&](const Found& existing)
                                 {
                                     return existing.Announce.ConnectPort == announce.ConnectPort
-                                        && existing.Announce.HostInstance == announce.HostInstance;
+                                        && existing.Announce.HostInstance == announce.HostInstance
+                                        && (announce.HostInstance != 0
+                                            || existing.Announce.HostGamertag == announce.HostGamertag);
                                 }
                             );
                             if (known != currentResults_->end())
