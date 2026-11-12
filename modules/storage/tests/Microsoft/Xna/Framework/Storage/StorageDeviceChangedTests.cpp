@@ -13,12 +13,14 @@
 
 #include <gtest/gtest.h>
 
+#include <atomic>
 #include <cstdlib>
 #include <filesystem>
 #include <memory>
 #include <optional>
 #include <random>
 #include <string>
+#include <thread>
 #include <vector>
 
 #include "CNA/Internal/FrameworkNotifications.hpp"
@@ -121,6 +123,41 @@ TEST_F(StorageDeviceChangedTest, OrdinaryStorageUseNeverRaisesIt)
     EXPECT_EQ(raised, 0);
 }
 
+// RV-STORAGE-POLL: the normal open route publishes the storage root that the per-frame volume poll
+// reads. A container opened on a worker while the game thread's dispatcher polls must not race the
+// cache (both sides take the storage-root lock; ThreadSanitizer flags the unsynchronized version),
+// and the poll then watches exactly the root the worker's container uses, without an event.
+TEST_F(StorageDeviceChangedTest, AContainerOpenedOnAWorkerWhileTheDispatcherPollsPublishesItsRoot)
+{
+    StorageDevice::SetAppNameEXT(name_ + "-worker");   // forget the fixture's cached root
+    int raised = 0;
+    Subscribe(raised);
+    auto* const poll = CNA::Internal::FrameworkNotifications::StorageDevices.load();
+    ASSERT_NE(poll, nullptr) << "linking StorageDevice installs its poll";
+
+    std::atomic<bool> opened{false};
+    std::string containerRoot;
+    std::thread worker([&] {
+        auto device = Select();
+        auto container =
+            device->EndOpenContainer(device->BeginOpenContainer("Saves", nullptr, nullptr).get());
+        containerRoot = StorageDevice::GetStorageRootEXT();
+        opened.store(true);
+    });
+    while (!opened.load()) poll();
+    worker.join();
+    poll();
+    poll();
+
+    const std::string root = StorageDevice::GetStorageRootEXT();
+    EXPECT_EQ(root, containerRoot);
+    EXPECT_EQ(fs::path(root).filename().string(), name_ + "-worker");
+    EXPECT_TRUE(fs::is_directory(fs::path(root) / "Saves" / "AllPlayers"));
+    EXPECT_EQ(raised, 0);
+    std::error_code ignored;
+    if (fs::path(root).filename().string().find("CnaDeviceChanged-") == 0) fs::remove_all(root, ignored);
+}
+
 // The subscriptions belong to the process: they exist before any device is selected and survive
 // every device's selection, use and destruction. Raising the event from here stands in for the
 // absent native producer only to observe which subscriptions are still attached; the arguments
@@ -218,8 +255,12 @@ TEST_F(StorageDeviceChangedTest, AVolumeArrivingOrLeavingAtTheRootRaisesItAtTheN
     PointAt(link, memory);
     System::Environment::SetEnvironmentVariable("XDG_DATA_HOME", link.string());
     StorageDevice::SetAppNameEXT(name_ + "-volume");
-    const fs::path root = StorageDevice::GetStorageRootEXT();
-    ASSERT_EQ(root.parent_path(), link);
+    // RV-STORAGE-POLL: normal Begin/End use must activate polling without a capacity,
+    // connectivity or GetStorageRootEXT query. SetAppNameEXT above clears the fixture's cache.
+    const fs::path root = link / (name_ + "-volume");
+    auto device = Select();
+    auto container = device->EndOpenContainer(device->BeginOpenContainer("Saves", nullptr, nullptr).get());
+    ASSERT_TRUE(fs::is_directory(root / "Saves" / "AllPlayers"));
 
     int raised = 0;
     System::Object* sender = reinterpret_cast<System::Object*>(this);

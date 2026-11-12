@@ -107,9 +107,9 @@ page under `docs/` (index: `docs/README.md`), deliberate divergences from FNA an
   calls have no serialization (#9); PlayPosition past 2,147,483,647 ms (about 24.86 days) returns
   values XNA's Int32-millisecond results cannot hold, native rollover unmeasured (rv-fix7 #4).
   Gamer services and storage -- Guide dialog callbacks run inline on the input/game thread
-  (rv-storage #1); opening a StorageContainer never enables DeviceChanged volume polling (#4);
-  Guide.IsScreenSaverEnabled follows the platform where Windows XNA's getter is always true and its
-  setter does nothing (#6); EndShowMessageBox/EndShowKeyboardInput ignore the exposed wait handle (#9).
+  (rv-storage #1); Guide.IsScreenSaverEnabled follows the platform where Windows XNA's getter is
+  always true and its setter does nothing (#6); EndShowMessageBox/EndShowKeyboardInput ignore the
+  exposed wait handle (#9).
 - XACT (HND-XACT-06, evidence `../cnaplan/evidence/rev002/hnd-xact-06-loop-extensions/`): with only an
   effect NEW_ON_LOOP (families 4/6), XACT holds one wave and varies its pitch per pass; CNA plays n+1
   complete waves of the first candidate with a new effect draw each (count and candidate match).

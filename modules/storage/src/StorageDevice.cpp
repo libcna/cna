@@ -97,7 +97,7 @@ namespace Microsoft::Xna::Framework::Storage
     System::EventHandler<System::EventArgs> StorageDevice::DeviceChanged;
     std::string StorageDevice::storageRoot_;
     std::string StorageDevice::appName_;
-    bool StorageDevice::storageRootInitialized_ = false;
+    std::atomic<bool> StorageDevice::storageRootInitialized_{false};
 
     // -------------------------------------------------------------------------
     // Storage root resolution
@@ -105,6 +105,15 @@ namespace Microsoft::Xna::Framework::Storage
 
     namespace
     {
+        // Guards storageRoot_ and appName_. A container can be opened on a worker while the game
+        // thread's FrameworkDispatcher.Update polls the root's volume (RV-STORAGE-POLL), so the
+        // cache is read and published only under this lock and handed out by value.
+        std::mutex& StorageRootMutex()
+        {
+            static std::mutex mutex;
+            return mutex;
+        }
+
         // std::getenv on Windows reads the ANSI environment block, which substitutes '?' for every
         // character the code page cannot spell -- so %LOCALAPPDATA% for a user named with anything
         // outside it is already destroyed before std::filesystem sees it, and no downstream
@@ -131,9 +140,12 @@ namespace Microsoft::Xna::Framework::Storage
 
     std::string StorageDevice::ResolveStorageRoot()
     {
-        if (storageRootInitialized_) return storageRoot_;
-
-        const std::string app = appName_.empty() ? "game" : appName_;
+        std::string app;
+        {
+            const std::lock_guard<std::mutex> lock(StorageRootMutex());
+            if (storageRootInitialized_.load(std::memory_order_relaxed)) return storageRoot_;
+            app = appName_.empty() ? "game" : appName_;
+        }
 
         // Storage is intentionally independent of the selected windowing platform.  Resolve a
         // conventional per-user data root directly; creating it is the caller's decision.
@@ -190,9 +202,21 @@ namespace Microsoft::Xna::Framework::Storage
         return CNA::Internal::PathToGenericUtf8(root);
     }
 
-    const std::string& StorageDevice::EnsureStorageRoot()
+    void StorageDevice::PublishStorageRoot(std::string root)
     {
-        if (storageRootInitialized_) return storageRoot_;
+        // The first successful resolution wins; a concurrent one computed the same path.
+        const std::lock_guard<std::mutex> lock(StorageRootMutex());
+        if (storageRootInitialized_.load(std::memory_order_relaxed)) return;
+        storageRoot_ = std::move(root);
+        storageRootInitialized_.store(true, std::memory_order_release);
+    }
+
+    std::string StorageDevice::EnsureStorageRoot()
+    {
+        {
+            const std::lock_guard<std::mutex> lock(StorageRootMutex());
+            if (storageRootInitialized_.load(std::memory_order_relaxed)) return storageRoot_;
+        }
 
         const fs::path root = CNA::Internal::PathFromUtf8(ResolveStorageRoot());
         std::error_code code;
@@ -204,8 +228,8 @@ namespace Microsoft::Xna::Framework::Storage
                 std::make_exception_ptr(std::filesystem::filesystem_error(
                     "create_directories", root, code)));
         }
-        storageRoot_ = CNA::Internal::PathToGenericUtf8(root);
-        storageRootInitialized_ = true;
+        PublishStorageRoot(CNA::Internal::PathToGenericUtf8(root));
+        const std::lock_guard<std::mutex> lock(StorageRootMutex());
         return storageRoot_;
     }
 
@@ -314,8 +338,14 @@ namespace Microsoft::Xna::Framework::Storage
 
         // XNA only names the device folder here; the container's DirectoryInfo.Create builds the
         // whole chain and its System.IO failure escapes unwrapped (StorageContainerCreationOracle).
-        return std::unique_ptr<StorageContainer>(
-            new StorageContainer(*this, r->displayName, ResolveStorageRoot(), playerIdx));
+        std::string root = ResolveStorageRoot();
+        auto container = std::unique_ptr<StorageContainer>(
+            new StorageContainer(*this, r->displayName, root, playerIdx));
+        // RV-STORAGE-POLL: XNA StorageDevice..cctor IL_0000-000c registers notifications
+        // independently of property queries. Activate CNA's accepted root-volume poll after
+        // successful open; EnsureStorageRoot would wrap the container's creation errors.
+        PublishStorageRoot(std::move(root));
+        return container;
     }
 
     void StorageDevice::DeleteContainer(const std::string& titleName)
@@ -402,9 +432,12 @@ namespace Microsoft::Xna::Framework::Storage
         };
         static ResolverLifetime lifetime;
 
-        appName_               = appName;
-        storageRootInitialized_ = false; // force re-evaluation next access
-        storageRoot_.clear();
+        {
+            const std::lock_guard<std::mutex> lock(StorageRootMutex());
+            appName_ = appName;
+            storageRootInitialized_.store(false, std::memory_order_release); // re-resolve next access
+            storageRoot_.clear();
+        }
 
         SharpRuntime::Storage::StoragePaths::SetIsolatedStorageRootResolver([]
         {
@@ -476,17 +509,23 @@ namespace Microsoft::Xna::Framework::Storage
     {
         // Nothing to watch until the game has resolved its storage root; the poll never resolves
         // it itself, so a game that does not use storage costs one branch per frame.
-        if (!storageRootInitialized_) return;
+        if (!storageRootInitialized_.load(std::memory_order_acquire)) return;
+        std::string root;
+        {
+            const std::lock_guard<std::mutex> lock(StorageRootMutex());
+            if (!storageRootInitialized_.load(std::memory_order_relaxed)) return;
+            root = storageRoot_;
+        }
         bool changed = false;
         {
             PolledVolume& polled = Polled();
             std::lock_guard<std::mutex> lock(polled.mutex);
-            const std::optional<std::uint64_t> volume = VolumeOf(CNA::Internal::PathFromUtf8(storageRoot_));
+            const std::optional<std::uint64_t> volume = VolumeOf(CNA::Internal::PathFromUtf8(root));
             // A different root (SetAppNameEXT, another XDG/HOME resolution) is a new baseline, not
             // a device change: the owner's option 1 counts volume arrival and removal only.
-            if (!polled.baseline || polled.root != storageRoot_)
+            if (!polled.baseline || polled.root != root)
             {
-                polled.root = storageRoot_;
+                polled.root = root;
                 polled.volume = volume;
                 polled.baseline = true;
                 return;

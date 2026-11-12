@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MS-PL
 #pragma once
 
+#include <atomic>
 #include <functional>
 #include <memory>
 #include <optional>
@@ -216,12 +217,17 @@ namespace Microsoft::Xna::Framework::Storage
 
         std::optional<PlayerIndex> devicePlayer_;
 
+        // storageRoot_ and appName_ are guarded by one storage-root mutex in StorageDevice.cpp;
+        // the flag is atomic so the per-frame volume poll can skip a game without storage
+        // without taking it.
         static std::string storageRoot_;
         static std::string appName_;
-        static bool storageRootInitialized_;
+        static std::atomic<bool> storageRootInitialized_;
 
         static std::string ResolveStorageRoot();
-        static const std::string& EnsureStorageRoot();
+        static std::string EnsureStorageRoot();
+        /** @brief Publishes a resolved root once, under the storage-root lock; the first one wins. */
+        static void PublishStorageRoot(std::string root);
 
         /** @brief FrameworkDispatcher's per-frame poll of the storage root's volume (HND-TQ-04). */
         static void PollVolume();
