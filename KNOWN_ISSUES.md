@@ -128,7 +128,10 @@ page under `docs/` (index: `docs/README.md`), deliberate divergences from FNA an
   decodes before it constructs, so the profile's cube refusals come after the levels, and the
   Texture2D reader looks up the device before it reads the header; ContentManager asks a custom
   stream's CanSeek before it validates the XNB header (XNA after it, PrepareStream IL_009f-00a5),
-  which only a stream whose CanSeek getter throws can observe. Reach NPOT DXT textures are
+  which only a stream whose CanSeek getter throws can observe; ReadObject/ReadRawObject with an
+  existing Texture2D or TextureCube returns the reader's new texture where XNA's InvokeReader throws
+  InvalidOperationException (ReaderConstructedNewInstance, IL_0090-00b8), because CNA's by-value
+  texture carriers have no reference identity to compare. Reach NPOT DXT textures are
   uploaded as Color although XNA's Texture2D constructor refuses them (IL_00d0-0122): this keeps
   HiDef-built content loadable on a Reach device (owner decision, 2026-11-04), and the Platformer
   HUD font fixture is such a HiDef XNB. LZX (KI-CONTENT-LZXGRAN,
