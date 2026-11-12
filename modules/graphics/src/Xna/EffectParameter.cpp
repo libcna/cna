@@ -1128,8 +1128,10 @@ namespace Microsoft::Xna::Framework::Graphics
         // the texture's own type returns it, and another type's getter returns null.
         textureData_ = v;
         texture2DData_ = dynamic_cast<Texture2D*>(v);
-        texture3DData_ = dynamic_cast<Texture3D*>(v);
-        textureCubeData_ = dynamic_cast<TextureCube*>(v);
+        // The cube and volume views come from Texture's virtual queries: a cast naming them here
+        // would link both classes into every program (docs/link-size-architecture.md).
+        texture3DData_ = v != nullptr ? const_cast<Texture3D*>(v->AsTexture3DEXT()) : nullptr;
+        textureCubeData_ = v != nullptr ? const_cast<TextureCube*>(v->AsTextureCubeEXT()) : nullptr;
     }
     void EffectParameter::SetValue(Texture2D* v)
     {

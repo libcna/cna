@@ -505,9 +505,14 @@ static int validate_textures(void)
             CNA_RESULT_SUCCESS);
     REQUIRE(cna_effect_parameter_set_value_texture(
                 parameter, CNA_EFFECT_TEXTURE_BASE, texture) == CNA_RESULT_SUCCESS);
+    CNA_Handle returned = UINT64_MAX;
+    /* One texture slot, as XNA's parameter has: the 2D getter reads what the base overload set. */
+    REQUIRE(cna_effect_parameter_get_value_texture(
+                parameter, CNA_EFFECT_TEXTURE_2D, &returned) == CNA_RESULT_SUCCESS &&
+            returned == texture);
     REQUIRE(cna_effect_parameter_set_value_texture(
                 parameter, CNA_EFFECT_TEXTURE_2D, texture) == CNA_RESULT_SUCCESS);
-    CNA_Handle returned = UINT64_MAX;
+    returned = UINT64_MAX;
     REQUIRE(cna_effect_parameter_get_value_texture(
                 parameter, CNA_EFFECT_TEXTURE_2D, &returned) == CNA_RESULT_SUCCESS &&
             returned == texture);
@@ -516,14 +521,15 @@ static int validate_textures(void)
             CNA_RESULT_INVALID_ARGUMENT);
     REQUIRE(cna_texture2d_destroy(texture) == CNA_RESULT_INVALID_STATE);
     REQUIRE(cna_graphics_resource_dispose(texture) == CNA_RESULT_INVALID_STATE);
+    /* The 2D write replaced the base one in the same slot, and clearing through the base
+       overload clears -- and releases -- that one value. */
     REQUIRE(cna_effect_parameter_set_value_texture(
                 parameter, CNA_EFFECT_TEXTURE_BASE, CNA_INVALID_HANDLE) ==
             CNA_RESULT_SUCCESS);
-    REQUIRE(cna_texture2d_destroy(texture) == CNA_RESULT_INVALID_STATE);
+    REQUIRE(cna_texture2d_destroy(texture) == CNA_RESULT_SUCCESS);
     REQUIRE(cna_effect_parameter_set_value_texture(
                 parameter, CNA_EFFECT_TEXTURE_2D, CNA_INVALID_HANDLE) ==
             CNA_RESULT_SUCCESS);
-    REQUIRE(cna_texture2d_destroy(texture) == CNA_RESULT_SUCCESS);
     REQUIRE(cna_effect_parameter_get_value_texture(
                 parameter, CNA_EFFECT_TEXTURE_2D, &returned) == CNA_RESULT_SUCCESS &&
             returned == CNA_INVALID_HANDLE);

@@ -236,9 +236,6 @@ struct ParameterCollectionState;
 
 struct ParameterState final {
     RetainedTextureSlot baseTexture;
-    RetainedTextureSlot texture2D;
-    RetainedTextureSlot texture3D;
-    RetainedTextureSlot textureCube;
     std::shared_ptr<ParameterCollectionState> elements;
     std::shared_ptr<ParameterCollectionState> members;
     std::shared_ptr<void> effectOwnership;
@@ -1469,19 +1466,20 @@ namespace {
         return result;
     }
     switch (textureType) {
+    // The parameter holds one texture whichever overload set it; its handle is the one retained.
     case CNA_EFFECT_TEXTURE_2D:
         if (parameter->value->GetValueTexture2D() != nullptr) {
-            *outTexture = parameter->state->texture2D.handle;
+            *outTexture = parameter->state->baseTexture.handle;
         }
         return CNA_RESULT_SUCCESS;
     case CNA_EFFECT_TEXTURE_3D:
         if (parameter->value->GetValueTexture3D() != nullptr) {
-            *outTexture = parameter->state->texture3D.handle;
+            *outTexture = parameter->state->baseTexture.handle;
         }
         return CNA_RESULT_SUCCESS;
     case CNA_EFFECT_TEXTURE_CUBE:
         if (parameter->value->GetValueTextureCube() != nullptr) {
-            *outTexture = parameter->state->textureCube.handle;
+            *outTexture = parameter->state->baseTexture.handle;
         }
         return CNA_RESULT_SUCCESS;
     case CNA_EFFECT_TEXTURE_BASE:
@@ -1505,23 +1503,9 @@ namespace {
     if (textureType > CNA_EFFECT_TEXTURE_CUBE) {
         return InvalidArgument("The EffectParameter texture type is invalid.");
     }
-    RetainedTextureSlot* slot = nullptr;
-    switch (textureType) {
-    case CNA_EFFECT_TEXTURE_BASE:
-        slot = &parameter->state->baseTexture;
-        break;
-    case CNA_EFFECT_TEXTURE_2D:
-        slot = &parameter->state->texture2D;
-        break;
-    case CNA_EFFECT_TEXTURE_3D:
-        slot = &parameter->state->texture3D;
-        break;
-    case CNA_EFFECT_TEXTURE_CUBE:
-        slot = &parameter->state->textureCube;
-        break;
-    default:
-        break;
-    }
+    // One retention slot, as the native parameter holds one texture whichever overload set it:
+    // a new value (or null) through any overload replaces and releases the previous one.
+    RetainedTextureSlot* const slot = &parameter->state->baseTexture;
     if (textureHandle == CNA_INVALID_HANDLE) {
         switch (textureType) {
         case CNA_EFFECT_TEXTURE_BASE:
@@ -2137,9 +2121,6 @@ void CopyParameterRetention(
             }
             const std::shared_ptr<ParameterState> targetState = GetElementState(destination, target);
             CopyRetainedTextureSlot(sourceState->baseTexture, targetState->baseTexture);
-            CopyRetainedTextureSlot(sourceState->texture2D, targetState->texture2D);
-            CopyRetainedTextureSlot(sourceState->texture3D, targetState->texture3D);
-            CopyRetainedTextureSlot(sourceState->textureCube, targetState->textureCube);
             const std::shared_ptr<EffectParameter> owned(destination->value, target);
             if (sourceState->elements != nullptr) {
                 if (targetState->elements == nullptr) {

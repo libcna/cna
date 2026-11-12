@@ -343,6 +343,24 @@ namespace Microsoft::Xna::Framework::Graphics
         CNAEXT void BindStockTextureInternal(int slot, Texture* texture);
 
         /**
+         * @brief CNAEXT: the texture a parameter holds, whichever SetValue overload stored it.
+         *
+         * @param parameter The parameter.
+         * @return Its texture, or null.
+         */
+        CNAEXT [[nodiscard]] static Texture* ParameterTextureInternal(const EffectParameter& parameter) noexcept;
+
+        /**
+         * @brief CNAEXT: copies the texture reference one parameter holds into another, as a clone
+         *        copies it -- without the checks of a new assignment.
+         *
+         * @param target The parameter receiving the reference.
+         * @param source The parameter whose reference is copied.
+         */
+        CNAEXT static void CopyParameterTextureInternal(EffectParameter& target,
+                                                        const EffectParameter& source) noexcept;
+
+        /**
          * @brief The texture a draw with this stock effect samples at a slot.
          *
          * The device's binding while this effect is the applied one; otherwise, as when

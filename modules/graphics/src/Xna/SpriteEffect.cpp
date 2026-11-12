@@ -35,7 +35,9 @@ namespace Microsoft::Xna::Framework::Graphics
         AddStockParameterInternal(getParametersProperty(), "MatrixTransform", 4, 4,
                                   EffectParameterClass::Matrix, EffectParameterType::Single);
         CacheEffectParameters();
-        textureParam_->SetValue(cloneSource.textureParam_->GetValueTexture2D());
+        // A copy of the held reference, not a new assignment: FNA's clone checks only the source
+        // effect, not whether the texture could be assigned now (Effect.cs:278-305).
+        CopyParameterTextureInternal(*textureParam_, *cloneSource.textureParam_);
         matrixParam_->SetValue(cloneSource.matrixParam_->GetValueMatrix());
     }
 
@@ -69,7 +71,8 @@ namespace Microsoft::Xna::Framework::Graphics
         matrixParam_->SetValue(halfPixelOffset * projection);
         // FNA's pass binds a non-null effect texture to its sampler (Effect.cs:719-727); a null
         // one leaves the device's s0 (SpriteBatch binds each sprite's texture there afterwards).
-        if (Texture2D* texture = textureParam_ ? textureParam_->GetValueTexture2D() : nullptr)
+        // Whatever texture it holds, as FNA binds the stored Texture without a cast.
+        if (Texture* texture = textureParam_ ? ParameterTextureInternal(*textureParam_) : nullptr)
             BindStockTextureInternal(0, texture);
     }
 

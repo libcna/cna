@@ -1103,6 +1103,26 @@ namespace Microsoft::Xna::Framework::Graphics
             device_->getTexturesProperty()(slot, texture);
     }
 
+    Texture* Effect::ParameterTextureInternal(const EffectParameter& parameter) noexcept
+    {
+        return parameter.GetTextureInternal();
+    }
+
+    void Effect::CopyParameterTextureInternal(EffectParameter& target,
+                                              const EffectParameter& source) noexcept
+    {
+        if (target.compiledStorage_ && source.compiledStorage_)
+        {
+            target.compiledStorage_->texture = source.compiledStorage_->texture;
+            target.compiledStorage_->dirty = true;
+            return;
+        }
+        target.textureData_ = source.textureData_;
+        target.texture2DData_ = source.texture2DData_;
+        target.texture3DData_ = source.texture3DData_;
+        target.textureCubeData_ = source.textureCubeData_;
+    }
+
     Texture* Effect::SampledStockTextureInternal(int slot, Texture* own) const
     {
         if (device_ == nullptr || device_->currentEffect_ != this)
@@ -1380,7 +1400,11 @@ namespace Microsoft::Xna::Framework::Graphics
                 bone.M44 = 1.0f;
         }
         if (const EffectParameter* texture = find("Texture"))
-            snapshot.texture0 = texture->GetValueTexture2D();
+            // SpriteEffect's sampler takes whatever texture the parameter holds, as FNA binds it
+            // without a cast; the other stock samplers are 2D.
+            snapshot.texture0 = stockCloneKind_ == StockEffectKindInternal::Sprite
+                ? texture->GetTextureInternal()
+                : texture->GetValueTexture2D();
         if (const EffectParameter* texture = find("Texture2"))
             snapshot.texture1 = texture->GetValueTexture2D();
         else if (const EffectParameter* environmentMap = find("EnvironmentMap"))

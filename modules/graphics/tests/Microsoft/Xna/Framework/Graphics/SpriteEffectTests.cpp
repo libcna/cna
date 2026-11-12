@@ -37,6 +37,9 @@
 #include "Microsoft/Xna/Framework/Graphics/GraphicsProfile.hpp"
 #include "Microsoft/Xna/Framework/Graphics/PresentationParameters.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SpriteEffect.hpp"
+#include "Microsoft/Xna/Framework/Graphics/RenderTarget2D.hpp"
+#include "Microsoft/Xna/Framework/Graphics/SurfaceFormat.hpp"
+#include "Microsoft/Xna/Framework/Graphics/TextureCube.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Viewport.hpp"
 
 using Microsoft::Xna::Framework::Matrix;
@@ -52,6 +55,10 @@ using Microsoft::Xna::Framework::Graphics::GraphicsProfile;
 using Microsoft::Xna::Framework::Graphics::PresentationParameters;
 using Microsoft::Xna::Framework::Graphics::SpriteEffect;
 using Microsoft::Xna::Framework::Graphics::Viewport;
+using Microsoft::Xna::Framework::Graphics::RenderTarget2D;
+using Microsoft::Xna::Framework::Graphics::SurfaceFormat;
+using Microsoft::Xna::Framework::Graphics::Texture;
+using Microsoft::Xna::Framework::Graphics::TextureCube;
 
 namespace
 {
@@ -151,6 +158,46 @@ TEST_F(SpriteEffectMatrixTest, TheTextureParameterIsBoundAtApplyAndCarriedByClon
         gd.getTexturesProperty()(0, &blue);
         ApplyFirstPass(*copy);
         EXPECT_EQ(gd.getTexturesProperty()[0], &red);
+    }
+}
+
+// FNA's clone copies the held reference (Effect.cs:303-305) without the checks of a new
+// SetValue: a texture that is now the active render target, which SetValue would refuse
+// (XNA SetValue(Texture) IL_0002-0059), is still carried by the clone.
+TEST_F(SpriteEffectMatrixTest, CloneCarriesATextureThatIsNowTheActiveRenderTarget)
+{
+    SpriteEffect fx(gd);
+    RenderTarget2D target(gd, 4, 4);
+    fx.getParametersProperty()["Texture"]->SetValue(&target);
+    gd.SetRenderTarget(&target);
+    std::unique_ptr<Effect> clone;
+    EXPECT_NO_THROW(clone.reset(fx.Clone()));
+    std::unique_ptr<EffectMaterial> material;
+    EXPECT_NO_THROW(material = std::make_unique<EffectMaterial>(fx));
+    gd.SetRenderTarget(nullptr);
+    ASSERT_NE(clone, nullptr);
+    ASSERT_NE(material, nullptr);
+    EXPECT_EQ(clone->getParametersProperty()["Texture"]->GetValueTexture2D(), &target);
+    EXPECT_EQ(material->getParametersProperty()["Texture"]->GetValueTexture2D(), &target);
+}
+
+// FNA binds the stored Texture without a cast (Effect.cs:719-727), so a cube set through the base
+// overload is what the pass binds -- by the effect, its clone and an EffectMaterial alike.
+TEST_F(SpriteEffectMatrixTest, ApplyBindsATextureOfAnotherTypeSetThroughTheBaseOverload)
+{
+    SpriteEffect fx(gd);
+    TextureCube cube(gd, 4, false, SurfaceFormat::Color);
+    Texture2D blue(gd, 1, 1);
+    fx.getParametersProperty()["Texture"]->SetValue(static_cast<Texture*>(&cube));
+    EXPECT_EQ(fx.getParametersProperty()["Texture"]->GetValueTexture2D(), nullptr);
+
+    std::unique_ptr<Effect> clone(fx.Clone());
+    EffectMaterial material(fx);
+    for (Effect* effect : {static_cast<Effect*>(&fx), clone.get(), static_cast<Effect*>(&material)})
+    {
+        gd.getTexturesProperty()(0, &blue);
+        ApplyFirstPass(*effect);
+        EXPECT_EQ(gd.getTexturesProperty()[0], &cube);
     }
 }
 
