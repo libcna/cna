@@ -58,6 +58,15 @@ using Microsoft::Xna::Framework::Graphics::VertexPositionColor;
 
 namespace
 {
+    // Refresh FrameworkResources, selected by DrawPrimitives IL_005d-0067 and
+    // DrawInstancedPrimitives IL_036f-0374.
+    constexpr const char* NonZeroInstanceFrequency =
+        "Non-instanced draw calls are not valid when a vertex buffer is bound with a non-zero "
+        "instance frequency.";
+    constexpr const char* InvalidInstanceStreams =
+        "DrawInstancedPrimitives requires at least one vertex buffer to be bound with a non-zero "
+        "instance frequency, and also at least one with a zero instance frequency.";
+
     struct MatrixRecord
     {
         float c0[4];
@@ -85,7 +94,7 @@ namespace
     }
 
     template<typename TCallable>
-    void ExpectExactInvalidOperation(TCallable&& draw, const char* what)
+    void ExpectExactInvalidOperation(TCallable&& draw, const char* what, const char* message)
     {
         try
         {
@@ -95,6 +104,7 @@ namespace
         catch (const System::InvalidOperationException& exception)
         {
             EXPECT_EQ(typeid(exception), typeid(System::InvalidOperationException)) << what;
+            EXPECT_EQ(std::string(exception.what()), message) << what;
         }
         catch (...)
         {
@@ -196,9 +206,11 @@ TEST_F(InstanceStreamDrawRuleTest, OrdinaryDrawsRefuseABoundPerInstanceStream)
 
     device.SetVertexBuffers({VertexBufferBinding(mesh.get(), 0, 0),
                              VertexBufferBinding(instances.get(), 0, 1)});
-    ExpectExactInvalidOperation([&] { DrawOrdinary(); }, "DrawPrimitives with an instance stream");
+    ExpectExactInvalidOperation([&] { DrawOrdinary(); }, "DrawPrimitives with an instance stream",
+                                NonZeroInstanceFrequency);
     ExpectExactInvalidOperation([&] { DrawIndexed(); },
-                                "DrawIndexedPrimitives with an instance stream");
+                                "DrawIndexedPrimitives with an instance stream",
+                                NonZeroInstanceFrequency);
 
     // Rebinding a single per-vertex stream clears the instance slot again.
     device.SetVertexBuffer(mesh.get());
@@ -214,10 +226,12 @@ TEST_F(InstanceStreamDrawRuleTest, InstancedDrawsNeedBothAPerVertexAndAPerInstan
     ExpectLegalInstancedShapePassesValidation();
 
     device.SetVertexBuffers({VertexBufferBinding(mesh.get(), 0, 0)});
-    ExpectExactInvalidOperation([&] { DrawInstanced(); }, "instanced draw without instance data");
+    ExpectExactInvalidOperation([&] { DrawInstanced(); }, "instanced draw without instance data",
+                                InvalidInstanceStreams);
 
     device.SetVertexBuffers({VertexBufferBinding(instances.get(), 0, 1)});
-    ExpectExactInvalidOperation([&] { DrawInstanced(); }, "instanced draw without vertex data");
+    ExpectExactInvalidOperation([&] { DrawInstanced(); }, "instanced draw without vertex data",
+                                InvalidInstanceStreams);
 
     device.SetVertexBuffers({VertexBufferBinding(mesh.get(), 0, 0),
                              VertexBufferBinding(instances.get(), 0, 1)});

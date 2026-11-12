@@ -2111,8 +2111,9 @@ namespace Microsoft::Xna::Framework::Graphics
             {
                 // XNA's InvalidInstanceStreams (DrawInstancedPrimitives IL_036f-0374).
                 throw System::InvalidOperationException(
-                    "Instanced draw calls require at least one vertex buffer with an instance "
-                    "frequency of zero and at least one with a non-zero instance frequency.");
+                    "DrawInstancedPrimitives requires at least one vertex buffer to be bound "
+                    "with a non-zero instance frequency, and also at least one with a zero "
+                    "instance frequency.");
             }
         }
     }
