@@ -140,6 +140,22 @@ TEST(VideoPlayerTest, PlayWithMatchingMetadataDoesNotThrow)
     EXPECT_EQ(player.getStateProperty(), MediaState::Playing);
 }
 
+// rv-media review #8 and #10: XNA's Play and AllocateTextures never read FramesPerSecond (Play
+// IL_0056-0084), so a declared rate other than the file's still plays; and get_PlayPosition
+// (IL_0031-0045) is a whole number of milliseconds.
+TEST(VideoPlayerTest, ADeclaredFrameRateOtherThanTheFilesStillPlaysAndPositionIsWholeMilliseconds)
+{
+    GraphicsDevice gd;
+    Video declared24(kFixture, &gd, 2000, 160, 90, 24.0f,
+                     Microsoft::Xna::Framework::Media::VideoSoundtrackType::MusicAndDialog);
+    VideoPlayer player;
+    EXPECT_NO_THROW(player.Play(&declared24));
+    EXPECT_EQ(player.getStateProperty(), MediaState::Playing);
+    std::this_thread::sleep_for(std::chrono::milliseconds(3));
+    const auto ticks = player.getPlayPositionProperty().getTicksProperty();
+    EXPECT_EQ(ticks % System::TimeSpan::TicksPerMillisecond, 0) << ticks;
+}
+
 TEST(VideoPlayerTest, PlayRealFixtureProducesATextureOfCorrectSize)
 {
     GraphicsDevice gd;

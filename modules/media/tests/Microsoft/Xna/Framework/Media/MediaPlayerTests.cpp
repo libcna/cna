@@ -331,6 +331,17 @@ TEST_F(MediaPlayerTest, AThrowingMediaHandlerLeavesItsBatchForTheNextUpdate)
     EXPECT_EQ(states, 1) << "the state notification behind the throwing handler was lost";
 }
 
+// rv-media review #10: XNA's MediaQueue.get_PlayPosition (IL_0014-0027) is built from an int32 count
+// of milliseconds.
+TEST_F(MediaPlayerTest, PlayPositionIsAWholeNumberOfMilliseconds)
+{
+    Song song(kFixtureA, "A");
+    MediaPlayer::Play(&song);
+    std::this_thread::sleep_for(std::chrono::milliseconds(3));
+    const auto ticks = MediaPlayer::getPlayPositionProperty().getTicksProperty();
+    EXPECT_EQ(ticks % System::TimeSpan::TicksPerMillisecond, 0) << ticks;
+}
+
 // MEDIA-84/188/189/190: IsVisualizationEnabled/GetVisualizationData.
 //
 // This test previously asserted the STUB behavior as if it were the specification -- that the

@@ -182,7 +182,10 @@ namespace Microsoft::Xna::Framework::Media
 
     System::TimeSpan MediaPlayer::getPlayPositionProperty()
     {
-        return TimerElapsed();
+        // XNA's MediaQueue.get_PlayPosition (IL_0014-0027) builds the TimeSpan from an int32 count
+        // of milliseconds: whole milliseconds, the fraction dropped.
+        const auto ticks = TimerElapsed().getTicksProperty();
+        return System::TimeSpan(ticks - ticks % System::TimeSpan::TicksPerMillisecond);
     }
 
     MediaQueue& MediaPlayer::getQueueProperty()

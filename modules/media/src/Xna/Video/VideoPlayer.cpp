@@ -118,7 +118,10 @@ namespace Microsoft::Xna::Framework::Media
     {
         CheckDisposed(isDisposed_);
         if (state_ == MediaState::Stopped) return System::TimeSpan::Zero;
-        return System::TimeSpan::FromMilliseconds(GetElapsedSeconds() * 1000.0);
+        // XNA's get_PlayPosition (IL_0031-0045) builds the TimeSpan from an int32 count of
+        // milliseconds: whole milliseconds, the fraction dropped.
+        const double milliseconds = std::floor(GetElapsedSeconds() * 1000.0);
+        return System::TimeSpan::FromMilliseconds(milliseconds);
     }
 
     // -------------------------------------------------------------------------
@@ -216,20 +219,19 @@ namespace Microsoft::Xna::Framework::Media
             return;
         }
 
-        // FNA's VideoPlayerAV1/VideoPlayerTheora both validate the video's declared metadata
-        // (trusted upfront, e.g. from an XNB) against what the real file actually reports before
-        // ever playing it, throwing InvalidOperationException on mismatch (~1.0f fps tolerance,
-        // matching FNA's own check) -- MEDIA-42. For the raw-file constructor this
-        // is a trivially-true self-check (Video's own properties already came from an identical
-        // probe); for the XNB-sourced constructor it is the real, meaningful validation.
+        // FNA's VideoPlayerAV1/VideoPlayerTheora validate the video's declared metadata (trusted
+        // upfront, e.g. from an XNB) against what the real file reports before playing it,
+        // throwing InvalidOperationException on mismatch -- MEDIA-42. The dimensions are kept: XNA
+        // hands them to its decoder (Play IL_0056-0084). The declared frame rate is not compared:
+        // XNA's Play and AllocateTextures never read FramesPerSecond, so a content file declaring
+        // another rate than the video's still plays (review rv-media #8).
         if (video->getWidthProperty() != decoder_->GetWidth() ||
-            video->getHeightProperty() != decoder_->GetHeight() ||
-            std::abs(video->getFramesPerSecondProperty() - decoder_->GetFPS()) > 1.0f)
+            video->getHeightProperty() != decoder_->GetHeight())
         {
             decoder_.reset();
             DetachVideo();
             throw System::InvalidOperationException(
-                "Video metadata (width/height/framesPerSecond) does not match the decoded file.");
+                "Video metadata (width/height) does not match the decoded file.");
         }
 
         // Apply stored track preferences BEFORE creating the frame texture / audio stream --
