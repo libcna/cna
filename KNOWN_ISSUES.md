@@ -96,7 +96,12 @@ page under `docs/` (index: `docs/README.md`), deliberate divergences from FNA an
   and discards undelivered notifications. CNA notices a completed buffer when the count is read, at
   a submission and at the dispatcher step, not at the completion itself: a buffer that finishes in
   the instant between a submission's retirement and its append is judged with that new buffer
-  pending (review rv-fix8 #5, residual).
+  pending (review rv-fix8 #5, residual). XNA's FrameworkDispatcher.Update keeps one copied list of every
+  subsystem's messages until all of them ran (IL_0031-0037, IL_0112-0117); CNA retries a failed
+  step's dynamic-sound notifications as a whole, but not across subsystems: when a media handler
+  throws after the audio step delivered, the audio notifications are not delivered again (review
+  rv-fix10 #2, pre-existing). A FrameworkDispatcher.Update re-entered from a handler also differs:
+  XNA's re-enumerated list throws InvalidOperationException, CNA delivers each reserved batch once.
   Media -- queue and collection reads share disposal state XNA keeps apart (rv-media #3); switching
   between distinct Videos of equal size recreates the frame textures XNA reuses (#5); public playback
   calls have no serialization (#9); PlayPosition past 2,147,483,647 ms (about 24.86 days) returns
