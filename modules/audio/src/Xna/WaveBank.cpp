@@ -223,7 +223,7 @@ namespace Microsoft::Xna::Framework::Audio
         catch (...) {}
     }
 
-    void WaveBank::DetachRemainingInternal() noexcept
+    void WaveBank::DetachRemainingInternal()
     {
         std::vector<std::pair<Cue*, std::weak_ptr<char>>> cues;
         for (auto* cue : activeCues_)

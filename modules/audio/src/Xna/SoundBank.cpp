@@ -96,7 +96,7 @@ namespace Microsoft::Xna::Framework::Audio
         catch (...) {}
     }
 
-    void SoundBank::DetachRemainingInternal() noexcept
+    void SoundBank::DetachRemainingInternal()
     {
         std::vector<std::pair<Cue*, std::weak_ptr<char>>> cues;
         for (auto* cue : activeCues_)
@@ -113,6 +113,9 @@ namespace Microsoft::Xna::Framework::Audio
         auto resolved = std::move(resolvedWaveBanks_);
         resolvedWaveBanks_.clear();
         for (auto* bank : resolved) bank->UnregisterSoundBank(this);
+        // XA-8. Registered until here, so an engine destroyed by a cue's handler meanwhile still
+        // knows this bank and detaches it (engine_ = nullptr) rather than leaving it dangling.
+        if (engine_) engine_->UnregisterSoundBank(this);
         xactImpl_.reset();
     }
 
@@ -290,7 +293,6 @@ namespace Microsoft::Xna::Framework::Audio
         {
             // XNA Dispose(bool) IL_0018-IL_003f precedes Disposing at IL_005b.
             isDisposed_ = true;
-            if (engine_) engine_->UnregisterSoundBank(this); // XA-8
             fireAndForget_.clear(); // stops any still-playing fire-and-forget cues; each one's
                                      // destructor also unregisters itself from activeCues_.
 

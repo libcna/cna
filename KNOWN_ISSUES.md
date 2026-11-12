@@ -78,11 +78,9 @@ page under `docs/` (index: `docs/README.md`), deliberate divergences from FNA an
 
 ### Divergences from XNA, not fixed (state of 2026-11-11)
 
-- XACT teardown (review rv-cue3, 2026-11-12): an AudioEngine destroyed by a Disposing handler
-  during its own disposal cascade stops the cascade, and the banks it had not yet disposed keep a
-  pointer to it; a later use of such a bank reads freed memory. XNA's managed references cannot
-  dangle this way. A handler that destroys the bank or wave bank being disposed is handled. XNA
-  serializes AudioEngine.Update and every Cue/bank call with one lock (UnsafeNativeMethods
+- XACT teardown (reviews rv-cue3 to rv-cue5, 2026-11-12): an AudioEngine destroyed by a Disposing
+  handler during its own disposal cascade stops the cascade; the banks it had not yet disposed stay
+  undisposed, detached from it (no engine). XNA serializes AudioEngine.Update and every Cue/bank call with one lock (UnsafeNativeMethods
   pSyncObject); CNA has none, so calling Update on one thread while another stops or disposes a
   cue, or disposes the engine, is a data race (review rv-cue #3, not reproduced).
 - XACT (HND-XACT-06, evidence `../cnaplan/evidence/rev002/hnd-xact-06-loop-extensions/`): with only an

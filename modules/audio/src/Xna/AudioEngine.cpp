@@ -414,7 +414,15 @@ namespace Microsoft::Xna::Framework::Audio
                 }
                 return true;
             };
-            if (!disposeEach(cues) || !disposeEach(soundBanks) || !disposeEach(waveBanks))
+            const bool completed = disposeEach(cues) && disposeEach(soundBanks) && disposeEach(waveBanks);
+            // A bank that outlives this engine (a caller still holds it, or it is in the middle of
+            // its own teardown) must not reach the engine again; every engine use in a bank and its
+            // cues is guarded by a null engine.
+            for (auto& [bank, alive] : soundBanks)
+                if (!alive.expired()) bank->engine_ = nullptr;
+            for (auto& [bank, alive] : waveBanks)
+                if (!alive.expired()) bank->engine_ = nullptr;
+            if (!completed)
             {
                 if (failure) std::rethrow_exception(failure);
                 return;

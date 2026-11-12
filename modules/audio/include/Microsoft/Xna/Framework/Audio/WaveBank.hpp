@@ -138,7 +138,7 @@ namespace Microsoft::Xna::Framework::Audio
         // Set while Dispose runs its cues' Disposing handlers: a handler that destroys this bank
         // then leaves the destructor to finish the teardown (DetachRemainingInternal).
         bool cascading_ = false;
-        void DetachRemainingInternal() noexcept;
+        void DetachRemainingInternal();
 
         struct XactWaveBankImpl;
         std::unique_ptr<XactWaveBankImpl> xactImpl_;

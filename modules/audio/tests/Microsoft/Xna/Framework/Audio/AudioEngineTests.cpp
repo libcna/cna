@@ -717,6 +717,26 @@ TEST(AudioEngineTest, ACueHandlerThatDestroysItsBankAndThrowsEndsTheCascade)
     EXPECT_TRUE(cue->getIsDisposedProperty());
 }
 
+// During a bank's teardown in its destructor (a handler destroyed it), another handler destroys the
+// engine; a cue disposed after that must not reach the freed engine through the bank.
+TEST(AudioEngineTest, AnEngineDestroyedDuringABanksTeardownIsNotReachedAfterwards)
+{
+    auto engine = std::make_unique<AudioEngine>(XgsFixturePath());
+    WaveBank* wave = new WaveBank(engine.get(), WriteFixture("engine_gone.xwb", BuildXA8XwbFixtureBytes()));
+    auto bank = std::make_unique<SoundBank>(engine.get(), WriteFixture("engine_gone.xsb", BuildXA8XsbFixtureBytes()));
+    std::unique_ptr<Cue> a(bank->GetCue("XA8Cue"));
+    std::unique_ptr<Cue> b(bank->GetCue("XA8Cue"));
+    std::unique_ptr<Cue> c(bank->GetCue("XA8Cue"));
+    a->Disposing += [&](System::Object*, const System::EventArgs&) { bank.reset(); };
+    b->Disposing += [&](System::Object*, const System::EventArgs&) { engine.reset(); };
+    SoundBank* const disposing = bank.get();
+    disposing->Dispose();
+    EXPECT_EQ(bank, nullptr);
+    EXPECT_EQ(engine, nullptr);
+    EXPECT_TRUE(c->getIsDisposedProperty());
+    delete wave;
+}
+
 // A saved category outlives its engine's C++ object: it refuses like a category of a disposed engine
 // (Refresh native refusal E_INVALIDARG, Helpers.GetExceptionFromResult IL_0235-023a) and keeps
 // its hash, without reading the freed engine.
