@@ -300,23 +300,6 @@ TEST_F(SystemLinkDiscoveryTest, OneHostReachedByTwoPathsIsListedOnce)
     ASSERT_TRUE(a.get() && b.get());
 }
 
-TEST_F(SystemLinkDiscoveryTest, TwoHostsWithoutAnInstanceIdOnOnePortAreListedApartByGamertag)
-{
-    FakeFarHost first, second;
-    ASSERT_TRUE(first.Ready() && second.Ready());
-    SystemLinkDiscovery::setExtraSearchAddressesProperty({first.SearchAddress(), second.SearchAddress()});
-
-    // Older CNA hosts send no instance id; one port alone must not merge two of them.
-    auto a = std::async(std::launch::async, [&] { return first.AnswerOneQuery(FarAnnounce("FarOldFirst", 40002, 0)); });
-    auto b = std::async(std::launch::async, [&] { return second.AnswerOneQuery(FarAnnounce("FarOldSecond", 40002, 0)); });
-    auto found = FoundFar(ENetDiscoveryService::FindSessions(NetworkSessionType::SystemLink));
-    ASSERT_TRUE(a.get() && b.get());
-    ASSERT_EQ(found.size(), 2u);
-    std::vector<std::string> names{found[0].getHostGamertagProperty(), found[1].getHostGamertagProperty()};
-    std::sort(names.begin(), names.end());
-    EXPECT_EQ(names, (std::vector<std::string>{"FarOldFirst", "FarOldSecond"}));
-}
-
 TEST_F(SystemLinkDiscoveryTest, AnAddressThatDoesNotResolveIsSkipped)
 {
     FakeFarHost far;
@@ -693,6 +676,107 @@ TEST_F(SystemLinkDiscoveryTest, AReportNoAnnounceClaimsIsNotTheListedHosts)
     ASSERT_TRUE(hosts.get());
     ASSERT_EQ(found.size(), 1u);
     EXPECT_EQ(Upstream(found, "FarFirst"), 0);
+}
+
+TEST_F(SystemLinkDiscoveryTest, TwoHostsWithoutAnInstanceIdOnOnePortAreListedApartByGamertag)
+{
+    FakeFarHost first("127.0.0.2"), second("127.0.0.3");
+    ASSERT_TRUE(first.Ready() && second.Ready());
+    SystemLinkDiscovery::setExtraSearchAddressesProperty({first.SearchAddress(), second.SearchAddress()});
+
+    // Older CNA hosts send no instance id; one port alone must not merge two of them (two hosts
+    // by one address cannot share a port, so the fakes need two addresses).
+    auto a = std::async(std::launch::async, [&] { return first.AnswerOneQuery(FarAnnounce("FarOldFirst", 40002, 0)); });
+    auto b = std::async(std::launch::async, [&] { return second.AnswerOneQuery(FarAnnounce("FarOldSecond", 40002, 0)); });
+    auto found = FoundFar(ENetDiscoveryService::FindSessions(NetworkSessionType::SystemLink));
+    ASSERT_TRUE(a.get() && b.get());
+    ASSERT_EQ(found.size(), 2u);
+    std::vector<std::string> names{found[0].getHostGamertagProperty(), found[1].getHostGamertagProperty()};
+    std::sort(names.begin(), names.end());
+    EXPECT_EQ(names, (std::vector<std::string>{"FarOldFirst", "FarOldSecond"}));
+}
+
+// An older host (no instance id) whose gamertag changed between two replies by the same address
+// is still one host.
+TEST_F(SystemLinkDiscoveryTest, ALegacyHostRenamedBetweenTwoRepliesIsListedOnce)
+{
+    FakeFarHost far;
+    ASSERT_TRUE(far.Ready());
+    SystemLinkDiscovery::setExtraSearchAddressesProperty({far.SearchAddress()});
+
+    auto host = std::async(std::launch::async, [&]
+    {
+        const auto from = far.WaitForQuery();
+        if (!from) return false;
+        const bool sent = far.Send(*from, NetDiscoveryProtocol::Encode(FarAnnounce("FarBefore", 40006, 0)));
+        return far.Send(*from, NetDiscoveryProtocol::Encode(FarAnnounce("FarAfter", 40006, 0))) && sent;
+    });
+    const auto found = FoundFar(ENetDiscoveryService::FindSessions(NetworkSessionType::SystemLink));
+    ASSERT_TRUE(host.get());
+    EXPECT_EQ(found.size(), 1u);
+}
+
+// One probe by the listed address must not keep out a whole train the host sent by its second
+// address before that address's announce arrived.
+TEST_F(SystemLinkDiscoveryTest, AnAliasTrainBehindALonePrimaryProbeIsMeasured)
+{
+    FakeFarHost firstPath("127.0.0.1"), secondPath("127.0.0.3");
+    ASSERT_TRUE(firstPath.Ready() && secondPath.Ready());
+    SystemLinkDiscovery::setExtraSearchAddressesProperty({firstPath.SearchAddress(), secondPath.SearchAddress()});
+
+    auto host = std::async(std::launch::async, [&]
+    {
+        const auto toFirst = firstPath.WaitForQuery();
+        const auto toSecond = secondPath.WaitForQuery();
+        if (!toFirst || !toSecond) return false;
+        bool sent = firstPath.Send(*toFirst, NetDiscoveryProtocol::Encode(FarAnnounce("FarHost", 40000, 4)));
+        sent = firstPath.Send(*toFirst, Probe(40000, 0)) && sent;
+        for (uint8_t index = 0; index < kQosProbeCount; ++index)
+        {
+            std::this_thread::sleep_for(std::chrono::milliseconds(1));
+            sent = secondPath.Send(*toSecond, Probe(40000, index)) && sent;
+        }
+        return secondPath.Send(*toSecond, NetDiscoveryProtocol::Encode(FarAnnounce("FarHost", 40000, 4))) && sent;
+    });
+    const auto found = FoundFar(ENetDiscoveryService::FindSessions(NetworkSessionType::SystemLink));
+    ASSERT_TRUE(host.get());
+    ASSERT_EQ(found.size(), 1u);
+    EXPECT_GT(Downstream(found, "FarHost"), 0) << "the second address's complete train was dropped";
+}
+
+// A partial train by one address and a later complete train by the other are two measurements;
+// splicing the second's tail onto the first would time seven probes over the gap between them.
+TEST_F(SystemLinkDiscoveryTest, TwoPathsTrainsAreTimedApart)
+{
+    FakeFarHost firstPath("127.0.0.1"), secondPath("127.0.0.3");
+    ASSERT_TRUE(firstPath.Ready() && secondPath.Ready());
+    SystemLinkDiscovery::setExtraSearchAddressesProperty({firstPath.SearchAddress(), secondPath.SearchAddress()});
+
+    auto host = std::async(std::launch::async, [&]
+    {
+        const auto toFirst = firstPath.WaitForQuery();
+        const auto toSecond = secondPath.WaitForQuery();
+        if (!toFirst || !toSecond) return false;
+        bool sent = firstPath.Send(*toFirst, NetDiscoveryProtocol::Encode(FarAnnounce("FarHost", 40000, 5)));
+        sent = secondPath.Send(*toSecond, NetDiscoveryProtocol::Encode(FarAnnounce("FarHost", 40000, 5))) && sent;
+        for (uint8_t index = 0; index < 4; ++index)
+        {
+            std::this_thread::sleep_for(std::chrono::milliseconds(1));
+            sent = firstPath.Send(*toFirst, Probe(40000, index)) && sent;
+        }
+        std::this_thread::sleep_for(std::chrono::milliseconds(60));
+        // About 1 ms apart: 7 x 1200 bytes over ~7 ms, near 1.2 MB/s; spliced, ~70 ms, ~120 kB/s.
+        for (uint8_t index = 0; index < kQosProbeCount; ++index)
+        {
+            std::this_thread::sleep_for(std::chrono::milliseconds(1));
+            sent = secondPath.Send(*toSecond, Probe(40000, index)) && sent;
+        }
+        return sent;
+    });
+    const auto found = FoundFar(ENetDiscoveryService::FindSessions(NetworkSessionType::SystemLink));
+    ASSERT_TRUE(host.get());
+    ASSERT_EQ(found.size(), 1u);
+    EXPECT_GT(Downstream(found, "FarHost"), 300'000) << "the two paths' trains were spliced";
 }
 #endif
 #endif

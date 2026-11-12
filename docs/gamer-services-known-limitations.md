@@ -60,7 +60,8 @@ sessions are listed with the address the reply came from, so `Join` is unchanged
 (0, the default, is ephemeral), so a router can forward it with discovery port 61190; a joining
 session stays ephemeral. Announces carry a random host instance id after the older fields, so a
 searcher lists two hosts on the same fixed port apart; a host without it (an older CNA) is
-identified by its port and gamertag, so two such hosts sharing both are listed once. The extension has no C route yet (planned under CBIND-127) and no effect in the browser, which
+identified by its port and gamertag, or by an address it already answered from, so two such hosts
+sharing both are listed once. The extension has no C route yet (planned under CBIND-127) and no effect in the browser, which
 has no SystemLink discovery.
 
 Listed so that nobody reads an older document as saying they are missing. Achievements (service

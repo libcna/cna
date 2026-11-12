@@ -61,8 +61,15 @@ namespace CNA::Internal::Net
             // of those paths.
             std::vector<std::string> Aliases;
             double RoundtripMs = 0.0;
-            int FirstIndex = -1, LastIndex = -1;
-            std::chrono::steady_clock::time_point FirstArrival, LastArrival;
+            // One probe train per path the host answered by: two paths' trains never mix, since
+            // splicing them would time one train's tail by another's start.
+            struct ProbeTrain
+            {
+                std::string Address;
+                int FirstIndex = -1, LastIndex = -1;
+                std::chrono::steady_clock::time_point FirstArrival, LastArrival;
+            };
+            std::vector<ProbeTrain> Trains;
             // What the host's responder measured of this machine's train to it.
             int UpstreamBytesPerSecond = 0;
         };
@@ -89,13 +96,22 @@ namespace CNA::Internal::Net
                 || std::find(found.Aliases.begin(), found.Aliases.end(), address) != found.Aliases.end();
         }
 
-        // Records one probe of a host's first train; a repeated train (the host answered the
-        // broadcast and the loopback copy of the query) is ignored.
-        void RecordProbe(Found& found, const DiscoveryQosProbeMessage& probe, std::chrono::steady_clock::time_point at)
+        // Records one probe of the first train that came by one of a host's paths; a repeated train
+        // on that path (the host answered the broadcast and the loopback copy of the query) is
+        // ignored.
+        void RecordProbe(Found& found, const std::string& address, const DiscoveryQosProbeMessage& probe,
+                         std::chrono::steady_clock::time_point at)
         {
-            if (found.FirstIndex < 0) { found.FirstIndex = found.LastIndex = probe.Index; found.FirstArrival = found.LastArrival = at; return; }
-            if (probe.Index <= found.LastIndex) return;
-            found.LastIndex = probe.Index; found.LastArrival = at;
+            const auto train = std::find_if(found.Trains.begin(), found.Trains.end(),
+                [&](const Found::ProbeTrain& candidate) { return candidate.Address == address; });
+            if (train == found.Trains.end())
+            {
+                found.Trains.push_back(Found::ProbeTrain{address, probe.Index, probe.Index, at, at});
+                return;
+            }
+            if (probe.Index <= train->LastIndex) return;
+            train->LastIndex = probe.Index;
+            train->LastArrival = at;
         }
 
         // Bytes per second of a train: the probes after the first over the time they took to arrive.
@@ -109,9 +125,20 @@ namespace CNA::Internal::Net
             return static_cast<int>(std::min(rate, 2147483647.0));
         }
 
+        // The most complete of a host's trains; on a tie, the one by the address it is listed with.
         int DownstreamEstimate(const Found& found)
         {
-            return TrainRate(found.FirstIndex, found.LastIndex, found.FirstArrival, found.LastArrival);
+            const Found::ProbeTrain* best = nullptr;
+            for (const Found::ProbeTrain& train : found.Trains)
+            {
+                const int span = train.LastIndex - train.FirstIndex;
+                const int bestSpan = best != nullptr ? best->LastIndex - best->FirstIndex : -1;
+                if (span > bestSpan || (span == bestSpan && train.Address == found.Address))
+                    best = &train;
+            }
+            return best != nullptr
+                ? TrainRate(best->FirstIndex, best->LastIndex, best->FirstArrival, best->LastArrival)
+                : 0;
         }
 
         // A hosting machine's upstream responder: its own socket and thread, so a querier's train is
@@ -435,21 +462,18 @@ namespace CNA::Internal::Net
                 [&](const Found& found) { return found.Announce.ConnectPort == connectPort && AnsweredFrom(found, ip); });
         }
 
-        // Probes and reports that overtook the announce of the path they came by. A listing times one
-        // train: an alias's buffered probes are another path's train, adopted only while the
-        // listing has none, since appending older arrivals to a train already timed would run its
-        // clock backwards.
+        // Probes and reports that overtook the announce of the path they came by. The probes start
+        // that path's own train, in their arrival order.
         void AdoptEarlyArrivals(Found& found, const std::string& address)
         {
-            if (found.FirstIndex < 0)
-                for (const EarlyProbe& arrival : *earlyProbes_)
-                    if (arrival.ConnectPort == found.Announce.ConnectPort && arrival.Address == address)
-                    {
-                        DiscoveryQosProbeMessage early;
-                        early.ConnectPort = arrival.ConnectPort;
-                        early.Index = arrival.Index;
-                        RecordProbe(found, early, arrival.At);
-                    }
+            for (const EarlyProbe& arrival : *earlyProbes_)
+                if (arrival.ConnectPort == found.Announce.ConnectPort && arrival.Address == address)
+                {
+                    DiscoveryQosProbeMessage early;
+                    early.ConnectPort = arrival.ConnectPort;
+                    early.Index = arrival.Index;
+                    RecordProbe(found, address, early, arrival.At);
+                }
             for (const EarlyReport& report : earlyReports_)
                 if (report.ConnectPort == found.Announce.ConnectPort && report.Address == address)
                     found.UpstreamBytesPerSecond = report.BytesPerSecond;
@@ -512,7 +536,8 @@ namespace CNA::Internal::Net
                             // fixed port (CNA::Net::SystemLinkDiscovery::setHostPortProperty). A host
                             // that sends none (0, an older CNA) is identified by its port and its
                             // gamertag, so two such hosts on one port still list apart unless they
-                            // also share the gamertag.
+                            // also share the gamertag; an address it already answered from stays
+                            // its own even if the gamertag changed between two replies.
                             const auto known = std::find_if(
                                 currentResults_->begin(), currentResults_->end(),
                                 [&](const Found& existing)
@@ -520,7 +545,8 @@ namespace CNA::Internal::Net
                                     return existing.Announce.ConnectPort == announce.ConnectPort
                                         && existing.Announce.HostInstance == announce.HostInstance
                                         && (announce.HostInstance != 0
-                                            || existing.Announce.HostGamertag == announce.HostGamertag);
+                                            || existing.Announce.HostGamertag == announce.HostGamertag
+                                            || AnsweredFrom(existing, address));
                                 }
                             );
                             if (known != currentResults_->end())
@@ -597,7 +623,7 @@ namespace CNA::Internal::Net
                             const auto at = std::chrono::steady_clock::now();
                             const auto probe = NetDiscoveryProtocol::DecodeQosProbe(data);
                             auto found = FoundHost(probe.ConnectPort, fromAddress);
-                            if (found != currentResults_->end()) RecordProbe(*found, probe, at);
+                            if (found != currentResults_->end()) RecordProbe(*found, HostIp(fromAddress), probe, at);
                             else if (earlyProbes_->size() < 64)
                                 earlyProbes_->push_back(EarlyProbe{probe.ConnectPort, HostIp(fromAddress), probe.Index, at});
                         }
