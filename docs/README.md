@@ -306,4 +306,4 @@ their stated metadata/source checks, rather than proving complete behavioral par
 
 Use the owning page's reproduction route and evidence scope. Run GPU/window tests through
 `tools/platform/run_gpu_tests_private.sh`; repository build and contribution rules are in
-[AGENTS.md](../AGENTS.md) and [CLAUDE.md](../CLAUDE.md).
+[CONTRIBUTING.md](../CONTRIBUTING.md).

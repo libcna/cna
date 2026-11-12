@@ -18,6 +18,7 @@ Goals:
 ## 2. Status and where to look
 
 - Current state, known bugs and limitations: [KNOWN_ISSUES.md](KNOWN_ISSUES.md), the one authoritative bug list.
+- How to change CNA (behaviour rules, conventions, tests, builds, commits): [CONTRIBUTING.md](CONTRIBUTING.md).
 - Index of the documentation: [`docs/README.md`](docs/README.md). What a task ID in a comment belonged to:
   [`docs/task-id-index.md`](docs/task-id-index.md).
 - Graphics: what each renderer supports is [`docs/graphics-renderer-feature-matrix.md`](docs/graphics-renderer-feature-matrix.md).
