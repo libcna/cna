@@ -91,13 +91,12 @@ page under `docs/` (index: `docs/README.md`), deliberate divergences from FNA an
   synchronously fired stopped callback does not destroy the track inside the stop call.
 - Reviews of 2026-11-12 (rv-sfx, rv-media, rv-storage, rv-fix7), source-traced and not fixed:
   Audio -- after Apply3D, setting Pitch keeps the Doppler factor where XNA's set_Pitch writes the
-  base ratio alone (KernelSoundEffectInstance.SetPitch IL_0026-005e; rv-sfx #3); buffers submitted
-  to a paused DynamicSoundEffectInstance wait for the next update after Resume, where XNA submits at
-  SubmitBuffer whatever the state (AllocateData IL_001c-0029; #5); Stop(true) before the first Play
-  keeps staged buffers that XNA's already allocated voice flushes
-  (`StopDirectCallWhileNeverPlayedDoesNotClearPendingBuffers` pins FNA; #6); SoundEffect.FromStream
+  base ratio alone (KernelSoundEffectInstance.SetPitch IL_0026-005e; rv-sfx #3); SoundEffect.FromStream
   accepts fmt chunks XNA refuses (wrong nAvgBytesPerSec, cbSize other than 0, a 20-byte fmt; #10).
-  Whether XNA posts BufferNeeded for buffers a Stop flushes is unmeasured; CNA discards them.
+  An immediate DynamicSoundEffectInstance.Stop flushes XNA's voice, and each flushed buffer that
+  leaves one or two pending posts a BufferNeeded (KernelSoundEffectInstance.Stop IL_0011-0062 with
+  OnBufferEnd IL_004b-006a in the Stopping state, source-traced, unmeasured); CNA's Stop posts none
+  and discards undelivered notifications.
   Media -- queue and collection reads share disposal state XNA keeps apart (rv-media #3); switching
   between distinct Videos of equal size recreates the frame textures XNA reuses (#5); public playback
   calls have no serialization (#9); PlayPosition past 2,147,483,647 ms (about 24.86 days) returns

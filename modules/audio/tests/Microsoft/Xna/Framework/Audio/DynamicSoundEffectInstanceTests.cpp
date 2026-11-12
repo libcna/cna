@@ -313,23 +313,58 @@ TEST(DynamicSoundEffectInstanceTest, PendingBufferCountAccumulatesAcrossMultiple
     EXPECT_EQ(d.getPendingBufferCountProperty(), 3);
 }
 
-// P9-DYNAMIC-001: matches FNA's Stop()/Stop(bool) guard (`handle == IntPtr.Zero -> return`,
-// SoundEffectInstance.cs) -- calling the no-arg Stop() directly (not via Stop(bool)) on an
-// instance that was never played must be a safe no-op, not clear staged buffers. Previously
-// DynamicSoundEffectInstance::Stop() duplicated StopInternal()'s unconditional buffer-clearing
-// logic instead of delegating through Stop(bool)'s existing guard, so calling it directly here
-// used to drop PendingBufferCount to 0.
-TEST(DynamicSoundEffectInstanceTest, StopDirectCallWhileNeverPlayedDoesNotClearPendingBuffers)
+// Review rv-sfx #6: XNA's voice exists from the constructor (..ctor IL_0043-0048) and an
+// immediate Stop flushes the buffers queued on it (KernelSoundEffectInstance.Stop IL_0011-0062),
+// so buffers submitted before the first Play are gone after Stop()/Stop(true) and that Play starts
+// empty. FNA (and CNA before) returned early without a voice and kept them. A non-immediate Stop
+// before any Play changes nothing.
+TEST(DynamicSoundEffectInstanceTest, ImmediateStopBeforeTheFirstPlayFlushesSubmittedBuffers)
 {
+    using Access = Microsoft::Xna::Framework::Audio::DynamicSoundEffectInstanceTestAccess;
     DynamicSoundEffectInstance d(44100, AudioChannels::Stereo);
     std::vector<unsigned char> pcm(64, 0);
     d.SubmitBuffer(pcm);
-    ASSERT_EQ(d.getPendingBufferCountProperty(), 1);
+    d.Stop(false);
+    EXPECT_EQ(d.getPendingBufferCountProperty(), 1) << "a non-immediate Stop flushes nothing";
 
     d.Stop();
-
-    EXPECT_EQ(d.getPendingBufferCountProperty(), 1);
+    EXPECT_EQ(d.getPendingBufferCountProperty(), 0);
+    EXPECT_TRUE(Access::QueuedBuffers(d).empty());
     EXPECT_EQ(d.getStateProperty(), SoundState::Stopped);
+
+    d.SubmitBuffer(pcm);
+    d.SubmitBuffer(pcm);
+    d.Stop(true);
+    EXPECT_EQ(d.getPendingBufferCountProperty(), 0);
+}
+
+// Review rv-sfx #5: XNA submits to the voice whatever its state (AllocateData IL_001c-0029), so a
+// buffer given to a paused instance is already on the stream when it resumes -- not staged until
+// the next dispatcher update.
+TEST(DynamicSoundEffectInstanceTest, ABufferSubmittedWhilePausedIsOnTheStreamAtResume)
+{
+    using Access = Microsoft::Xna::Framework::Audio::DynamicSoundEffectInstanceTestAccess;
+    UseDummyAudioDriver();
+    DynamicSoundEffectInstance d(8000, AudioChannels::Stereo);
+    try
+    {
+        d.Play();
+    }
+    catch (...)
+    {
+        GTEST_SKIP() << "no audio device (dummy driver unavailable)";
+    }
+    if (d.getStateProperty() != SoundState::Playing)
+        GTEST_SKIP() << "no audio device (dummy driver unavailable)";
+    d.Pause();
+    ASSERT_EQ(d.getStateProperty(), SoundState::Paused);
+    d.SubmitBuffer(std::vector<unsigned char>(4 * 8000, 0)); // one second
+    EXPECT_TRUE(Access::QueuedBuffers(d).empty()) << "submitted to the stream, not staged";
+    EXPECT_EQ(d.getPendingBufferCountProperty(), 1);
+    d.Resume();
+    EXPECT_EQ(d.getStateProperty(), SoundState::Playing);
+    EXPECT_EQ(d.getPendingBufferCountProperty(), 1);
+    d.Stop(true);
 }
 
 // TQ-032: SubmitBuffer(byte[],int,int) IL_0047-0051, 006a-0074,
@@ -919,9 +954,8 @@ TEST(DynamicSoundEffectInstanceTest, PendingBufferCountUnaffectedAcrossPause)
 }
 
 // P9-DYNAMIC-001: a real (immediate) Stop() after playback has actually started must clear all
-// pending buffers, matching FNA's Stop(true) -> ClearBuffers() -- distinct from
-// StopDirectCallWhileNeverPlayedDoesNotClearPendingBuffers above, which covers the guarded
-// never-played case.
+// pending buffers, as XNA's immediate Stop flushes them; ImmediateStopBeforeTheFirstPlayFlushes-
+// SubmittedBuffers above covers the never-played case.
 TEST(DynamicSoundEffectInstanceTest, PendingBufferCountResetsToZeroAfterStopWhilePlaying)
 {
     DynamicSoundEffectInstance d(44100, AudioChannels::Stereo);

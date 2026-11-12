@@ -358,12 +358,17 @@ namespace Microsoft::Xna::Framework::Audio
     {
         if (getIsDisposedProperty())
             throw System::ObjectDisposedException("DynamicSoundEffectInstance");
-        // Matches FNA's early return when there is no active voice/track yet (e.g. Stop() called
-        // before any Play()) -- only once playback has actually started does a non-immediate
-        // Stop become a meaningful (and, for dynamic instances, invalid) request.
+        // Before any Play() there is no track. XNA's voice exists from the constructor
+        // (DynamicSoundEffectInstance..ctor IL_0043-0048) and an immediate Stop flushes its queued
+        // buffers (KernelSoundEffectInstance.Stop IL_0011-0062), so the staged buffers go; a
+        // non-immediate Stop has no started voice to be invalid about.
 #ifdef SOUND_ENABLED
         if (!AsTrackD(GetLiveTrackHandle()))
         {
+            if (immediate)
+            {
+                ClearBuffers();
+            }
             return;
         }
 #endif
@@ -434,8 +439,7 @@ namespace Microsoft::Xna::Framework::Audio
         {
             return;
         }
-        // Public Stop intentionally preserves staged buffers before the first Play. Disposal
-        // must release CNA-owned queued storage even when no native voice was ever created.
+        // Disposal releases CNA-owned queued storage even when no native voice was ever created.
         StopInternal();
         DestroyStream();                 // frees the queued mixer stream
         // StopInternal has nulled track_, so the base hook only marks the instance disposed.
@@ -521,7 +525,10 @@ namespace Microsoft::Xna::Framework::Audio
         {
             std::lock_guard<std::mutex> lock(queueMutex_);
             queuedBuffers_.push_back(std::move(chunk));
-            if (getStateProperty() == SoundState::Playing)
+            // XNA submits to the voice whatever its state (AllocateData IL_001c-0029), so data
+            // given to a paused instance is already there when it resumes.
+            const SoundState state = getStateProperty();
+            if (state == SoundState::Playing || state == SoundState::Paused)
             {
                 SubmitQueuedToStreamLocked();
             }
@@ -581,7 +588,10 @@ namespace Microsoft::Xna::Framework::Audio
         {
             std::lock_guard<std::mutex> lock(queueMutex_);
             queuedBuffers_.push_back(std::move(chunk));
-            if (getStateProperty() == SoundState::Playing)
+            // XNA submits to the voice whatever its state (AllocateData IL_001c-0029), so data
+            // given to a paused instance is already there when it resumes.
+            const SoundState state = getStateProperty();
+            if (state == SoundState::Playing || state == SoundState::Paused)
             {
                 SubmitQueuedToStreamLocked();
             }
