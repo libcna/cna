@@ -422,6 +422,12 @@ namespace Microsoft::Xna::Framework::Audio
         playing_ = false;
 
         ClearBuffers();
+        {
+            // A stopped voice's undelivered notifications go with its buffers; a ClearBuffersEXT
+            // on a playing one keeps them, as a starving stream still needs its answer.
+            std::lock_guard<std::mutex> lock(queueMutex_);
+            pendingNotifications_ = 0;
+        }
 
         std::lock_guard<std::mutex> lock(Microsoft::Xna::Framework::FrameworkDispatcher::StreamsMutex);
         auto& streams = Microsoft::Xna::Framework::FrameworkDispatcher::Streams;
@@ -609,8 +615,6 @@ namespace Microsoft::Xna::Framework::Audio
             std::lock_guard<std::mutex> lock(queueMutex_);
             queuedBuffers_.clear();
             submittedChunkSizes_.clear();
-            // A stopped voice's undelivered notifications go with its buffers.
-            pendingNotifications_ = 0;
         }
 
 #ifdef SOUND_ENABLED

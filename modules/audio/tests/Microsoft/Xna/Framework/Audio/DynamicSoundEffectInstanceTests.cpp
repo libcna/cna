@@ -1500,6 +1500,33 @@ TEST(DynamicSoundEffectInstanceTest, DryStreamCadenceAndPauseStopGatesUseLiteral
     EXPECT_EQ(d.getPendingBufferCountProperty(), 0);
 }
 
+// ClearBuffersEXT (a CNA extension; XNA has none) empties a playing stream without stopping it, so
+// the notification Play posted is still delivered -- a starving stream needs it. Only Stop discards.
+TEST(DynamicSoundEffectInstanceTest, ClearBuffersKeepsANotificationPlayPosted)
+{
+    UseDummyAudioDriver();
+    DynamicSoundEffectInstance d(8000, AudioChannels::Stereo);
+    int calls = 0;
+    d.BufferNeeded += [&](System::Object*, const System::EventArgs&) { ++calls; };
+    d.SubmitBuffer(std::vector<unsigned char>(4 * 8000, 0));
+    d.SubmitBuffer(std::vector<unsigned char>(4 * 8000, 0));
+    try
+    {
+        d.Play();
+    }
+    catch (...)
+    {
+        GTEST_SKIP() << "no audio device (dummy driver unavailable)";
+    }
+    if (d.getStateProperty() != SoundState::Playing)
+        GTEST_SKIP() << "no audio device (dummy driver unavailable)";
+    d.ClearBuffers();
+    EXPECT_EQ(d.getPendingBufferCountProperty(), 0);
+    d.Update();
+    EXPECT_EQ(calls, 1) << "two buffers pending at Play posted one; clearing does not take it back";
+    d.Stop(true);
+}
+
 // Owner decision 2026-11-12: three buffers pending at Play post nothing (more than two), and each
 // completion that leaves at most two posts one (OnBufferEnd IL_004b-006a) -- three in all. The
 // count drops as the buffers finish, before any update (get_PendingBufferCount IL_002f-0035 reads
