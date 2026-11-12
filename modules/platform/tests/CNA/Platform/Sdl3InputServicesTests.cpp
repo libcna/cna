@@ -179,6 +179,20 @@ TEST(Sdl3MouseTest, WheelEventsAccumulateInXnaUnitsIncludingFractionsOfANotch)
     EXPECT_EQ(precise.GetSnapshot().scrollY, 240);
 }
 
+// RV-FIX5 review #1: an event that moves only the other axis adds nothing to this one. A carried
+// remainder rounded at a half unit flipped sign and moved the total 8, 7, 8, 7.
+TEST(Sdl3MouseTest, AWheelEventOfZeroOnOneAxisLeavesThatAxisAlone)
+{
+    CNA::Platform::Sdl3::Sdl3Mouse mouse;
+    mouse.ObserveEvent(MouseWheelEvent{17, 0.0f, 0.0625f});
+    EXPECT_EQ(mouse.GetSnapshot().scrollY, 8);
+    for (int i = 0; i < 4; ++i)
+    {
+        mouse.ObserveEvent(MouseWheelEvent{17, 1.0f, 0.0f});
+        EXPECT_EQ(mouse.GetSnapshot().scrollY, 8) << "event " << i;
+    }
+}
+
 TEST_F(Sdl3InputTest, PositionWithNoWindowIsRecordedWithoutANativeWarp)
 {
     EXPECT_NO_THROW(platform_->GetMouse()->SetPosition(0, 12, 34));

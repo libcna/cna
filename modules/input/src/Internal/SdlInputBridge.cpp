@@ -38,17 +38,16 @@ namespace
 
     // XNA adds each WM_MOUSEWHEEL delta, in 1/120-notch units, as it comes
     // (MouseMessageHooker.WndProc IL_0008-001b): a precision wheel's half notch is 60. SDL reports
-    // notches as a float; the units are added, and what a non-integer amount leaves over is carried
-    // to the next event so the total stays exact.
-    double g_wheelResidualX = 0.0;
-    double g_wheelResidualY = 0.0;
-    int WheelUnits(double& residual, const float notches)
+    // notches as a float; the exact running sum of their units is kept, and each event adds the
+    // change of its rounded value -- so the total stays exact and an event of zero adds zero.
+    double g_wheelExactX = 0.0;
+    double g_wheelExactY = 0.0;
+    int WheelUnits(double& exact, const float notches)
     {
         if (!std::isfinite(notches)) return 0;
-        const double units = residual + static_cast<double>(notches) * 120.0;
-        const double whole = std::round(units);
-        residual = units - whole;
-        return static_cast<int>(std::clamp(whole, -2147483648.0, 2147483647.0));
+        const double before = std::round(exact);
+        exact += static_cast<double>(notches) * 120.0;
+        return static_cast<int>(std::clamp(std::round(exact) - before, -2147483648.0, 2147483647.0));
     }
     bool g_textInputControlDown[7] = {};
     bool g_textInputSuppress = false;
@@ -565,6 +564,9 @@ namespace CNA::Internal::Input
         emulated_mouse_touch_position() = {};
         g_scancodeModeTestOverride.reset();
         announced_joysticks().clear();
+        // The wheel totals the reset clears start from zero again, so do their exact sums.
+        g_wheelExactX = 0.0;
+        g_wheelExactY = 0.0;
     }
 
     void PlatformInputBridge::ProcessEvent(const CNA::Platform::PlatformEvent& event)
@@ -623,8 +625,8 @@ namespace CNA::Internal::Input
             }
             else if constexpr (std::is_same_v<Event, MouseWheelEvent>)
             {
-                InputManager::AddScrollWheelDelta(WheelUnits(g_wheelResidualY, value.y));
-                InputManager::AddHorizontalScrollWheelDelta(WheelUnits(g_wheelResidualX, value.x));
+                InputManager::AddScrollWheelDelta(WheelUnits(g_wheelExactY, value.y));
+                InputManager::AddHorizontalScrollWheelDelta(WheelUnits(g_wheelExactX, value.x));
             }
             else if constexpr (std::is_same_v<Event, DeviceEvent>)
             {

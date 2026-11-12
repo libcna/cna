@@ -250,6 +250,14 @@ namespace
         return Mouse::GetState().getScrollWheelValueProperty() - before;
     }
 
+    // Applies a horizontal-only wheel event and returns the change of the VERTICAL value.
+    int horizontalWheelDeltaThenVertical(const float x)
+    {
+        const int before = Mouse::GetState().getScrollWheelValueProperty();
+        PlatformInputBridge::ProcessEvent(MouseWheelEvent{0, x, 0.0f});
+        return Mouse::GetState().getScrollWheelValueProperty() - before;
+    }
+
     // N-005: drives a horizontal-only wheel event (wheel.x) and returns the delta applied to the CNAEXT/EXT
     // horizontal accumulator.
     int horizontalWheelDelta(const float x)
@@ -266,6 +274,23 @@ TEST(PlatformInputBridgeMouseWheelTest, WholeNotchesScaleBy120)
     EXPECT_EQ(wheelDelta(1.0f), 120);
     EXPECT_EQ(wheelDelta(-1.0f), -120);
     EXPECT_EQ(wheelDelta(3.0f), 360);
+}
+
+// RV-FIX5 review #1/#4/#5: an event of zero on an axis adds nothing to it; the reset clears the
+// exact sums with the totals; the total clamps instead of overflowing a signed int.
+TEST(PlatformInputBridgeMouseWheelTest, ZeroOnAnAxisAddsNothingAndTheResetForgetsFractions)
+{
+    InputManager::ResetAllForTests();
+    EXPECT_EQ(wheelDelta(0.0625f), 8);
+    for (int i = 0; i < 4; ++i) EXPECT_EQ(horizontalWheelDeltaThenVertical(1.0f), 0) << i;
+    InputManager::ResetAllForTests();
+    EXPECT_EQ(wheelDelta(0.002f), 0);
+    InputManager::ResetAllForTests();
+    EXPECT_EQ(wheelDelta(0.003f), 0) << "a fraction from before the reset was still counted";
+    InputManager::ResetAllForTests();
+    for (int i = 0; i < 20; ++i) PlatformInputBridge::ProcessEvent(mouseWheelEvent(1.0e6f));
+    EXPECT_EQ(Mouse::GetState().getScrollWheelValueProperty(), 2147483647);
+    InputManager::ResetAllForTests();
 }
 
 TEST(PlatformInputBridgeMouseWheelTest, ZeroDeltaLeavesValueUnchanged)

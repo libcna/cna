@@ -1,4 +1,6 @@
 // SPDX-License-Identifier: MS-PL
+#include <limits>
+#include <algorithm>
 #include "CNA/Internal/Input/InputManager.hpp"
 #include "CNA/Internal/Input/SdlInputBridge.hpp"
 #include "CNA/Internal/Input/GestureDetector.hpp"
@@ -102,16 +104,26 @@ namespace CNA::Internal::Input
         }
     }
 
+    namespace
+    {
+        // Widened and clamped as the platform mouse's own total is: a signed int overflow would be
+        // undefined behaviour in C++.
+        void AddClamped(int& total, const int delta)
+        {
+            total = static_cast<int>(std::clamp(static_cast<long long>(total) + delta,
+                                                static_cast<long long>(std::numeric_limits<int>::min()),
+                                                static_cast<long long>(std::numeric_limits<int>::max())));
+        }
+    }
+
     void InputManager::AddScrollWheelDelta(const int delta)
     {
-        auto& mouseState = getInternalInputState().Mouse;
-        mouseState.ScrollWheelValue += delta;
+        AddClamped(getInternalInputState().Mouse.ScrollWheelValue, delta);
     }
 
     void InputManager::AddHorizontalScrollWheelDelta(const int delta)
     {
-        auto& mouseState = getInternalInputState().Mouse;
-        mouseState.HorizontalScrollWheelValue += delta;
+        AddClamped(getInternalInputState().Mouse.HorizontalScrollWheelValue, delta);
     }
 
     void InputManager::SetMouseRelativeMode(const bool enabled)
