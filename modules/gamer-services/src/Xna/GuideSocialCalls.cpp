@@ -30,12 +30,22 @@ namespace Microsoft::Xna::Framework::GamerServices
 {
     void Guide::DelayNotifications(System::TimeSpan delay)
     {
+        // XNA Refresh DelayNotifications IL_0009: the kernel packet needs initialized gamer services.
+        CNA::Internal::GamerServices::throwIfGamerServicesNotInitialized();
         // Defers the Guide's own notifications (game invitations); at most 120 s, an active delay stays.
         CNA::Internal::GamerServices::delayNotifications(static_cast<long long>(delay.getTotalMillisecondsProperty()));
     }
 
     namespace {
         namespace Service = CNA::Internal::GamerServices;
+        // XNA Refresh ExecuteKernelCall IL_0000-000d checks the player (CNA keeps its four-player
+        // range), then IL_000e/IL_0034 reach GamerServicesDispatcher.get_PacketBuffer, which refuses
+        // uninitialized gamer services (owner decision 2026-11-12).
+        void RequirePlayer(PlayerIndex player) {
+            const auto index=static_cast<int>(player);
+            if(index<0||index>3)throw System::ArgumentOutOfRangeException("player");
+        }
+        void RequireInitialized() { CNA::Internal::GamerServices::throwIfGamerServicesNotInitialized(); }
         SignedInGamer* SocialActor(PlayerIndex player) {
             const auto index=static_cast<int>(player);
             if(index<0||index>3)throw System::ArgumentOutOfRangeException("player");
@@ -100,19 +110,21 @@ namespace Microsoft::Xna::Framework::GamerServices
         // Reference: text shorter than 256 characters, then the recipient list, then the Guide.
         if(text.size()>=256)throw System::ArgumentException("Text is too long.","text");
         ValidateRecipients(recipients);
+        RequireInitialized(); // XNA ShowComposeMessage IL_0060-0065
         if(CNA::Internal::GamerServices::guideIsVisible())throw GuideAlreadyVisibleException("The function cannot be completed at this time: the Guide UI is already active. Wait until Guide.IsVisible is false before issuing this call.");
         auto* actor=SocialActor(player);RequireCommunication(actor);std::vector<std::string> tags;
         for(auto* gamer:recipients)tags.push_back(gamer->getGamertagProperty());
         Compose(player,Service::GamerAccess::userId(*actor),tags,text);
     }
     void Guide::ShowFriendRequest(PlayerIndex player,Gamer* gamer) {
-        ValidateGamer(gamer);
+        RequirePlayer(player);ValidateGamer(gamer);RequireInitialized();
         if(CNA::Internal::GamerServices::guideIsVisible())throw GuideAlreadyVisibleException("The function cannot be completed at this time: the Guide UI is already active. Wait until Guide.IsVisible is false before issuing this call.");
         (void)SocialActor(player);
         // The gamer card leads with the friend request.
         CNA::Internal::GamerServices::GuideUi::open(CNA::Internal::GamerServices::GuideUi::gamerCardScreen(player,gamer->getGamertagProperty()),player);
     }
     void Guide::ShowFriends(PlayerIndex player) {
+        RequirePlayer(player);RequireInitialized();
         if(CNA::Internal::GamerServices::guideIsVisible())throw GuideAlreadyVisibleException("The function cannot be completed at this time: the Guide UI is already active. Wait until Guide.IsVisible is false before issuing this call.");
         (void)SocialActor(player);
         CNA::Internal::GamerServices::GuideUi::open(CNA::Internal::GamerServices::GuideUi::friendsScreen(player),player);
@@ -126,6 +138,7 @@ namespace Microsoft::Xna::Framework::GamerServices
             if(!gamer)throw System::ArgumentException("Gamer is null.","recipients");
             if(gamer->getIsDisposedProperty())throw System::ObjectDisposedException("recipients");
         }
+        RequireInitialized(); // XNA ShowGameInvite IL_0009-000e
         if(CNA::Internal::GamerServices::guideIsVisible())throw GuideAlreadyVisibleException("The function cannot be completed at this time: the Guide UI is already active. Wait until Guide.IsVisible is false before issuing this call.");
         auto* actor=SocialActor(player);RequireCommunication(actor);
         if(!Service::activeOnlineSession())
@@ -147,6 +160,7 @@ namespace Microsoft::Xna::Framework::GamerServices
         if (static_cast<int>(player) < 0 || static_cast<int>(player) > 3)
             throw System::ArgumentOutOfRangeException("player");
         ValidateGamer(gamer);
+        RequireInitialized();
         if(CNA::Internal::GamerServices::guideIsVisible())throw GuideAlreadyVisibleException("The function cannot be completed at this time: the Guide UI is already active. Wait until Guide.IsVisible is false before issuing this call.");
         auto* actor=SocialActor(player);
         if(gamer->getGamertagProperty()!=actor->getGamertagProperty()&&
@@ -157,6 +171,7 @@ namespace Microsoft::Xna::Framework::GamerServices
 
     void Guide::ShowMessages(PlayerIndex player)
     {
+        RequirePlayer(player);RequireInitialized();
         if(CNA::Internal::GamerServices::guideIsVisible())throw GuideAlreadyVisibleException("The function cannot be completed at this time: the Guide UI is already active. Wait until Guide.IsVisible is false before issuing this call.");
         (void)SocialActor(player);
         CNA::Internal::GamerServices::GuideUi::open(CNA::Internal::GamerServices::GuideUi::messagesScreen(player),player);
@@ -164,6 +179,7 @@ namespace Microsoft::Xna::Framework::GamerServices
 
     void Guide::ShowParty(PlayerIndex player)
     {
+        RequirePlayer(player);RequireInitialized();
         if(CNA::Internal::GamerServices::guideIsVisible())throw GuideAlreadyVisibleException("The function cannot be completed at this time: the Guide UI is already active. Wait until Guide.IsVisible is false before issuing this call.");
         (void)SocialActor(player);
         CNA::Internal::GamerServices::GuideUi::open(CNA::Internal::GamerServices::GuideUi::partyScreen(player),player);
@@ -171,6 +187,7 @@ namespace Microsoft::Xna::Framework::GamerServices
 
     void Guide::ShowPartySessions(PlayerIndex player)
     {
+        RequirePlayer(player);RequireInitialized();
         if(CNA::Internal::GamerServices::guideIsVisible())throw GuideAlreadyVisibleException("The function cannot be completed at this time: the Guide UI is already active. Wait until Guide.IsVisible is false before issuing this call.");
         (void)SocialActor(player);
         CNA::Internal::GamerServices::GuideUi::open(CNA::Internal::GamerServices::GuideUi::partySessionsScreen(player),player);
@@ -178,7 +195,7 @@ namespace Microsoft::Xna::Framework::GamerServices
 
     void Guide::ShowPlayerReview(PlayerIndex player, Gamer* gamer)
     {
-        ValidateGamer(gamer);
+        RequirePlayer(player);ValidateGamer(gamer);RequireInitialized();
         if(CNA::Internal::GamerServices::guideIsVisible())throw GuideAlreadyVisibleException("The function cannot be completed at this time: the Guide UI is already active. Wait until Guide.IsVisible is false before issuing this call.");
         (void)SocialActor(player);
         CNA::Internal::GamerServices::GuideUi::open(CNA::Internal::GamerServices::GuideUi::reviewScreen(player,gamer->getGamertagProperty()),player);
@@ -186,6 +203,7 @@ namespace Microsoft::Xna::Framework::GamerServices
 
     void Guide::ShowPlayers(PlayerIndex player)
     {
+        RequirePlayer(player);RequireInitialized();
         if(CNA::Internal::GamerServices::guideIsVisible())throw GuideAlreadyVisibleException("The function cannot be completed at this time: the Guide UI is already active. Wait until Guide.IsVisible is false before issuing this call.");
         (void)SocialActor(player);
         CNA::Internal::GamerServices::GuideUi::open(CNA::Internal::GamerServices::GuideUi::playersScreen(player),player);
@@ -193,6 +211,8 @@ namespace Microsoft::Xna::Framework::GamerServices
 
     void Guide::ShowAchievementsEXT(PlayerIndex player)
     {
+        // CNA's own pane follows the same rule as the XNA screens above.
+        RequirePlayer(player);RequireInitialized();
         if(CNA::Internal::GamerServices::guideIsVisible())throw GuideAlreadyVisibleException("The function cannot be completed at this time: the Guide UI is already active. Wait until Guide.IsVisible is false before issuing this call.");
         (void)SocialActor(player);
         CNA::Internal::GamerServices::GuideUi::open(CNA::Internal::GamerServices::GuideUi::achievementsScreen(player),player);

@@ -2201,7 +2201,8 @@ CNA_C_API CNA_Result cna_guide_reset_pending_message_box_ext(void);
  * @brief Delays guide notifications.
  *
  * @param delay_ticks Delay in 100-nanosecond ticks.
- * @return `CNA_RESULT_SUCCESS`.
+ * @return `CNA_RESULT_SUCCESS`, or `CNA_RESULT_INVALID_STATE` before gamer services are
+ *         initialized.
  *
  * Defers the Guide's own notifications (game invitations) for at most 120 seconds; an active
  * delay is kept rather than shortened.
@@ -2217,14 +2218,16 @@ CNA_C_API CNA_Result cna_guide_delay_notifications(int64_t delay_ticks);
  *        call; may be null when @p recipient_count is zero.
  * @param recipient_count Number of recipients.
  * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_NOT_SUPPORTED` without a signed-in service player,
- *         `CNA_RESULT_INVALID_STATE` while another Guide screen is open, or a documented
- *         argument/handle/thread failure.
+ *         `CNA_RESULT_INVALID_STATE` before gamer services are initialized or while another Guide
+ *         screen is open, or a documented argument/handle/thread failure.
  *
  * Every `cna_guide_show_*` screen below is a CNA Guide overlay drawn by the game's gamer-services
  * component and backed by the configured CNA account service (docs/gamer-services-server.md). A
  * screen belongs to a signed-in service player: without one (for example with no service
  * configured) it refuses with `CNA_RESULT_NOT_SUPPORTED`, and while another Guide screen is open it
  * refuses with `CNA_RESULT_INVALID_STATE`.
+ * Before gamer services are initialized each screen refuses with `CNA_RESULT_INVALID_STATE` too,
+ * after its own argument checks (XNA's GamerServicesDispatcher.get_PacketBuffer).
  */
 CNA_C_API CNA_Result cna_guide_show_compose_message(
     CNA_PlayerIndex player,
@@ -2238,8 +2241,8 @@ CNA_C_API CNA_Result cna_guide_show_compose_message(
  * @param player One of the `CNA_PLAYER_INDEX_*` identities.
  * @param gamer Gamer handle the request is for.
  * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_NOT_SUPPORTED` without a signed-in service player,
- *         `CNA_RESULT_INVALID_STATE` while another Guide screen is open, or a documented
- *         argument/handle/thread failure.
+ *         `CNA_RESULT_INVALID_STATE` before gamer services are initialized or while another Guide
+ *         screen is open, or a documented argument/handle/thread failure.
  */
 CNA_C_API CNA_Result cna_guide_show_friend_request(CNA_PlayerIndex player, CNA_GamerHandle gamer);
 
@@ -2248,8 +2251,8 @@ CNA_C_API CNA_Result cna_guide_show_friend_request(CNA_PlayerIndex player, CNA_G
  *
  * @param player One of the `CNA_PLAYER_INDEX_*` identities.
  * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_NOT_SUPPORTED` without a signed-in service player,
- *         `CNA_RESULT_INVALID_STATE` while another Guide screen is open, or
- *         `CNA_RESULT_INVALID_ARGUMENT` for an undefined identity.
+ *         `CNA_RESULT_INVALID_STATE` before gamer services are initialized or while another Guide
+ *         screen is open, or `CNA_RESULT_INVALID_ARGUMENT` for an undefined identity.
  */
 CNA_C_API CNA_Result cna_guide_show_friends(CNA_PlayerIndex player);
 
@@ -2261,8 +2264,8 @@ CNA_C_API CNA_Result cna_guide_show_friends(CNA_PlayerIndex player);
  *        call; may be null when @p recipient_count is zero.
  * @param recipient_count Number of recipients.
  * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_NOT_SUPPORTED` without a signed-in service player,
- *         `CNA_RESULT_INVALID_STATE` while another Guide screen is open, or a documented
- *         argument/handle/thread failure.
+ *         `CNA_RESULT_INVALID_STATE` before gamer services are initialized or while another Guide
+ *         screen is open, or a documented argument/handle/thread failure.
  */
 CNA_C_API CNA_Result cna_guide_show_game_invite(
     CNA_PlayerIndex player,
@@ -2283,8 +2286,8 @@ CNA_C_API CNA_Result cna_guide_show_game_invite_for_session(CNA_StringView sessi
  * @param player One of the `CNA_PLAYER_INDEX_*` identities.
  * @param gamer Gamer handle whose card to show.
  * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_NOT_SUPPORTED` without a signed-in service player,
- *         `CNA_RESULT_INVALID_STATE` while another Guide screen is open, or a documented
- *         argument/handle/thread failure.
+ *         `CNA_RESULT_INVALID_STATE` before gamer services are initialized or while another Guide
+ *         screen is open, or a documented argument/handle/thread failure.
  */
 CNA_C_API CNA_Result cna_guide_show_gamer_card(CNA_PlayerIndex player, CNA_GamerHandle gamer);
 
@@ -2293,9 +2296,10 @@ CNA_C_API CNA_Result cna_guide_show_gamer_card(CNA_PlayerIndex player, CNA_Gamer
  *
  * @param player One of the `CNA_PLAYER_INDEX_*` identities.
  * @return `CNA_RESULT_SUCCESS` (the Guide's Game content page -- CNA has no store -- with XNA's
- *         Test Purchase while trial mode is simulated), `CNA_RESULT_INVALID_STATE` for a player
- *         not signed in or without the purchase privilege, or while another Guide screen is open,
- *         or `CNA_RESULT_INVALID_ARGUMENT` for an undefined identity.
+ *         Test Purchase while trial mode is simulated), `CNA_RESULT_INVALID_STATE` for a player not
+ *         signed in or without the purchase privilege, before gamer services are initialized, or
+ *         while another Guide screen is open, or `CNA_RESULT_INVALID_ARGUMENT` for an undefined
+ *         identity.
  */
 CNA_C_API CNA_Result cna_guide_show_marketplace(CNA_PlayerIndex player);
 
@@ -2304,8 +2308,8 @@ CNA_C_API CNA_Result cna_guide_show_marketplace(CNA_PlayerIndex player);
  *
  * @param player One of the `CNA_PLAYER_INDEX_*` identities.
  * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_NOT_SUPPORTED` without a signed-in service player,
- *         `CNA_RESULT_INVALID_STATE` while another Guide screen is open, or
- *         `CNA_RESULT_INVALID_ARGUMENT` for an undefined identity.
+ *         `CNA_RESULT_INVALID_STATE` before gamer services are initialized or while another Guide
+ *         screen is open, or `CNA_RESULT_INVALID_ARGUMENT` for an undefined identity.
  */
 CNA_C_API CNA_Result cna_guide_show_messages(CNA_PlayerIndex player);
 
@@ -2314,8 +2318,8 @@ CNA_C_API CNA_Result cna_guide_show_messages(CNA_PlayerIndex player);
  *
  * @param player One of the `CNA_PLAYER_INDEX_*` identities.
  * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_NOT_SUPPORTED` without a signed-in service player,
- *         `CNA_RESULT_INVALID_STATE` while another Guide screen is open, or
- *         `CNA_RESULT_INVALID_ARGUMENT` for an undefined identity.
+ *         `CNA_RESULT_INVALID_STATE` before gamer services are initialized or while another Guide
+ *         screen is open, or `CNA_RESULT_INVALID_ARGUMENT` for an undefined identity.
  */
 CNA_C_API CNA_Result cna_guide_show_party(CNA_PlayerIndex player);
 
@@ -2324,8 +2328,8 @@ CNA_C_API CNA_Result cna_guide_show_party(CNA_PlayerIndex player);
  *
  * @param player One of the `CNA_PLAYER_INDEX_*` identities.
  * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_NOT_SUPPORTED` without a signed-in service player,
- *         `CNA_RESULT_INVALID_STATE` while another Guide screen is open, or
- *         `CNA_RESULT_INVALID_ARGUMENT` for an undefined identity.
+ *         `CNA_RESULT_INVALID_STATE` before gamer services are initialized or while another Guide
+ *         screen is open, or `CNA_RESULT_INVALID_ARGUMENT` for an undefined identity.
  */
 CNA_C_API CNA_Result cna_guide_show_party_sessions(CNA_PlayerIndex player);
 
@@ -2335,8 +2339,8 @@ CNA_C_API CNA_Result cna_guide_show_party_sessions(CNA_PlayerIndex player);
  * @param player One of the `CNA_PLAYER_INDEX_*` identities.
  * @param gamer Gamer handle to review.
  * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_NOT_SUPPORTED` without a signed-in service player,
- *         `CNA_RESULT_INVALID_STATE` while another Guide screen is open, or a documented
- *         argument/handle/thread failure.
+ *         `CNA_RESULT_INVALID_STATE` before gamer services are initialized or while another Guide
+ *         screen is open, or a documented argument/handle/thread failure.
  */
 CNA_C_API CNA_Result cna_guide_show_player_review(CNA_PlayerIndex player, CNA_GamerHandle gamer);
 
@@ -2345,8 +2349,8 @@ CNA_C_API CNA_Result cna_guide_show_player_review(CNA_PlayerIndex player, CNA_Ga
  *
  * @param player One of the `CNA_PLAYER_INDEX_*` identities.
  * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_NOT_SUPPORTED` without a signed-in service player,
- *         `CNA_RESULT_INVALID_STATE` while another Guide screen is open, or
- *         `CNA_RESULT_INVALID_ARGUMENT` for an undefined identity.
+ *         `CNA_RESULT_INVALID_STATE` before gamer services are initialized or while another Guide
+ *         screen is open, or `CNA_RESULT_INVALID_ARGUMENT` for an undefined identity.
  */
 CNA_C_API CNA_Result cna_guide_show_players(CNA_PlayerIndex player);
 
@@ -2370,8 +2374,8 @@ CNA_C_API CNA_Result cna_guide_show_sign_in(int32_t pane_count, CNA_Bool online_
  *
  * @param player One of the `CNA_PLAYER_INDEX_*` identities.
  * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_NOT_SUPPORTED` without a signed-in service player,
- *         `CNA_RESULT_INVALID_STATE` while another Guide screen is open, or
- *         `CNA_RESULT_INVALID_ARGUMENT` for an undefined identity.
+ *         `CNA_RESULT_INVALID_STATE` before gamer services are initialized or while another Guide
+ *         screen is open, or `CNA_RESULT_INVALID_ARGUMENT` for an undefined identity.
  *
  * CNAEXT: the canonical guide has no achievements screen of its own.
  */

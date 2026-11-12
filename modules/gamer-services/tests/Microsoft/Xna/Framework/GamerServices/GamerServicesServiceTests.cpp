@@ -1328,12 +1328,12 @@ TEST_F(GuideTest, DelayNotificationsDoesNotThrow) {
     EXPECT_NO_THROW(Guide::DelayNotifications(System::TimeSpan::FromSeconds(1)));
 }
 
-// Without a configured service, argument validation still runs first (reference order) and every
-// service-backed pane refuses rather than silently doing nothing.
+// Initialized (the fixture's assumption) but without a configured service, argument validation
+// still runs first (reference order) and every service-backed pane refuses rather than silently
+// doing nothing. UninitializedGamerServicesRefuseTheKernelCalls covers the uninitialized refusal.
 TEST_F(GuideTest, ShowMethodsValidateThenRequireTheService) {
     if (GamerServicesDispatcher::getIsInitializedProperty())
         GTEST_SKIP() << "another test initialized gamer services in this process";
-    CNA::Internal::GamerServices::setGuideAssumesInitializedForTesting(false);
     EXPECT_THROW(Guide::ShowComposeMessage(PlayerIndex::One, std::string(256, 'a'), {}), System::ArgumentException);
     EXPECT_THROW(Guide::ShowComposeMessage(PlayerIndex::One, "hi", {nullptr}), System::ArgumentException);
     EXPECT_THROW(Guide::ShowComposeMessage(PlayerIndex::One, "hi", {}), GamerServicesNotAvailableException);
@@ -1350,9 +1350,8 @@ TEST_F(GuideTest, ShowMethodsValidateThenRequireTheService) {
     EXPECT_THROW(Guide::ShowPartySessions(PlayerIndex::One), GamerServicesNotAvailableException);
     EXPECT_THROW(Guide::ShowPlayerReview(PlayerIndex::One, nullptr), System::ArgumentNullException);
     EXPECT_THROW(Guide::ShowPlayers(PlayerIndex::One), GamerServicesNotAvailableException);
-    // ShowSignIn reaches the kernel packet first (XNA ShowSignIn IL_0027), so it refuses the
-    // uninitialized dispatcher itself; see UninitializedGamerServicesRefuseTheKernelCalls.
-    EXPECT_THROW(Guide::ShowSignIn(1, false), System::InvalidOperationException);
+    // An online-only sign-in needs the service; a local one would open the offline sign-in pane.
+    EXPECT_THROW(Guide::ShowSignIn(1, true), GamerServicesNotAvailableException);
     EXPECT_THROW(Guide::ShowAchievementsEXT(PlayerIndex::One), GamerServicesNotAvailableException);
     EXPECT_FALSE(CNA::Internal::GamerServices::guideIsVisible());
 }
@@ -1374,10 +1373,12 @@ void ExpectNotInitialized(Action&& action, const char* what) {
 }
 }
 
-// Owner decision 2026-11-12: XNA's BeginShowMessageBox (IL_001e), BeginShowKeyboardInput (IL_0101),
-// ShowSignIn (IL_0027) and a changing NotificationPosition (IL_0008) reach
-// GamerServicesDispatcher.get_PacketBuffer, which throws GamerServicesNotInitialized
-// (IL_0000-0011) before initialization -- after each call's own argument checks, and an unchanged
+// Owner decisions 2026-11-12: XNA's BeginShowMessageBox (IL_001e), BeginShowKeyboardInput (IL_0101),
+// ShowSignIn (IL_0027), a changing NotificationPosition (IL_0008), DelayNotifications (IL_0009),
+// ShowComposeMessage (IL_0060), ShowGameInvite (IL_0009), ShowMarketplace (after its privilege
+// checks) and every ExecuteKernelCall screen (IL_000e/IL_0034, after the player and gamer checks)
+// reach GamerServicesDispatcher.get_PacketBuffer, which throws GamerServicesNotInitialized
+// (IL_0000-0011) before initialization -- after each call's own argument checks; an unchanged
 // NotificationPosition returns before it (IL_0000-0006).
 TEST_F(GuideTest, UninitializedGamerServicesRefuseTheKernelCalls) {
     if (GamerServicesDispatcher::getIsInitializedProperty())
@@ -1408,6 +1409,32 @@ TEST_F(GuideTest, UninitializedGamerServicesRefuseTheKernelCalls) {
         before == NotificationPosition::TopLeft ? NotificationPosition::BottomRight : NotificationPosition::TopLeft;
     ExpectNotInitialized([&] { Guide::setNotificationPositionProperty(other); }, "set_NotificationPosition");
     EXPECT_EQ(Guide::getNotificationPositionProperty(), before) << "a refused change is not stored";
+
+    ExpectNotInitialized([] { Guide::DelayNotifications(System::TimeSpan::FromSeconds(1)); },
+                         "DelayNotifications");
+    const auto undefined = static_cast<PlayerIndex>(7);
+    EXPECT_THROW(Guide::ShowFriends(undefined), System::ArgumentOutOfRangeException) << "player first";
+    EXPECT_THROW(Guide::ShowGamerCard(undefined, nullptr), System::ArgumentOutOfRangeException);
+    EXPECT_THROW(Guide::ShowGamerCard(PlayerIndex::One, nullptr), System::ArgumentNullException);
+    EXPECT_THROW(Guide::ShowFriendRequest(undefined, nullptr), System::ArgumentOutOfRangeException);
+    EXPECT_THROW(Guide::ShowFriendRequest(PlayerIndex::One, nullptr), System::ArgumentNullException);
+    EXPECT_THROW(Guide::ShowPlayerReview(PlayerIndex::One, nullptr), System::ArgumentNullException);
+    EXPECT_THROW(Guide::ShowComposeMessage(PlayerIndex::One, std::string(256, 'a'), {}),
+                 System::ArgumentException);
+    EXPECT_THROW(Guide::ShowGameInvite(PlayerIndex::One, std::vector<Gamer*>{nullptr}),
+                 System::ArgumentException);
+    EXPECT_THROW(Guide::ShowGameInvite(std::string("session-id")), System::NotSupportedException)
+        << "the Windows Phone overload never reaches the kernel";
+    EXPECT_THROW(Guide::ShowMarketplace(PlayerIndex::One), GamerPrivilegeException)
+        << "the signed-in and privilege checks come first";
+    ExpectNotInitialized([] { Guide::ShowFriends(PlayerIndex::One); }, "ShowFriends");
+    ExpectNotInitialized([] { Guide::ShowMessages(PlayerIndex::One); }, "ShowMessages");
+    ExpectNotInitialized([] { Guide::ShowParty(PlayerIndex::One); }, "ShowParty");
+    ExpectNotInitialized([] { Guide::ShowPartySessions(PlayerIndex::One); }, "ShowPartySessions");
+    ExpectNotInitialized([] { Guide::ShowPlayers(PlayerIndex::One); }, "ShowPlayers");
+    ExpectNotInitialized([] { Guide::ShowAchievementsEXT(PlayerIndex::One); }, "ShowAchievementsEXT");
+    ExpectNotInitialized([] { Guide::ShowComposeMessage(PlayerIndex::One, "hi", {}); }, "ShowComposeMessage");
+    ExpectNotInitialized([] { Guide::ShowGameInvite(PlayerIndex::One, std::vector<Gamer*>{}); }, "ShowGameInvite");
 
     EXPECT_FALSE(CNA::Internal::GamerServices::guideIsVisible());
     ExpectNotInitialized([] { (void)Guide::getIsVisibleProperty(); }, "get_IsVisible");

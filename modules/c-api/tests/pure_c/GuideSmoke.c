@@ -88,6 +88,22 @@ static int validate_uninitialized_kernel_calls(void)
         cna_guide_show_sign_in(1, CNA_FALSE) != CNA_RESULT_INVALID_STATE) {
         return 0;
     }
+    /* The service screens refuse the same way, after their own player checks; the Windows Phone
+       invite overload never reaches the kernel. */
+    if (cna_guide_delay_notifications(INT64_C(1000000)) != CNA_RESULT_INVALID_STATE ||
+        cna_guide_show_friends(UINT32_C(99)) != CNA_RESULT_INVALID_ARGUMENT ||
+        cna_guide_show_friends(CNA_PLAYER_INDEX_ONE) != CNA_RESULT_INVALID_STATE ||
+        cna_guide_show_messages(CNA_PLAYER_INDEX_ONE) != CNA_RESULT_INVALID_STATE ||
+        cna_guide_show_players(CNA_PLAYER_INDEX_ONE) != CNA_RESULT_INVALID_STATE ||
+        cna_guide_show_party(CNA_PLAYER_INDEX_ONE) != CNA_RESULT_INVALID_STATE ||
+        cna_guide_show_party_sessions(CNA_PLAYER_INDEX_ONE) != CNA_RESULT_INVALID_STATE ||
+        cna_guide_show_achievements_ext(CNA_PLAYER_INDEX_ONE) != CNA_RESULT_INVALID_STATE ||
+        cna_guide_show_compose_message(CNA_PLAYER_INDEX_ONE, view("Hi"), 0, UINT64_C(0)) !=
+            CNA_RESULT_INVALID_STATE ||
+        cna_guide_show_game_invite(CNA_PLAYER_INDEX_ONE, 0, UINT64_C(0)) != CNA_RESULT_INVALID_STATE ||
+        cna_guide_show_game_invite_for_session(view("session")) != CNA_RESULT_NOT_SUPPORTED) {
+        return 0;
+    }
     return cna_guide_get_has_pending_message_box_ext(&flag) == CNA_RESULT_SUCCESS &&
         flag == CNA_FALSE &&
         cna_guide_get_has_pending_keyboard_input_ext(&flag) == CNA_RESULT_SUCCESS &&
@@ -324,8 +340,7 @@ static int validate_screens(const CNA_SignedInGamerHandle gamer)
         cna_guide_show_messages(CNA_PLAYER_INDEX_ONE) != CNA_RESULT_NOT_SUPPORTED ||
         cna_guide_show_player_review(CNA_PLAYER_INDEX_ONE, gamer) != CNA_RESULT_NOT_SUPPORTED ||
         cna_guide_show_players(CNA_PLAYER_INDEX_ONE) != CNA_RESULT_NOT_SUPPORTED ||
-        /* Sign-in needs initialized gamer services first (XNA ShowSignIn IL_0027). */
-        cna_guide_show_sign_in(2, CNA_TRUE) != CNA_RESULT_INVALID_STATE ||
+        cna_guide_show_sign_in(2, CNA_TRUE) != CNA_RESULT_NOT_SUPPORTED ||
         cna_guide_show_achievements_ext(CNA_PLAYER_INDEX_ONE) != CNA_RESULT_NOT_SUPPORTED) {
         return 0;
     }
@@ -529,9 +544,6 @@ int main(void)
                                        CNA_PLAYER_INDEX_ONE, &gamer) != CNA_RESULT_SUCCESS) {
         status = CNA_TEST_FAIL(5);
     }
-    if (status == 0 && !validate_screens(gamer)) {
-        status = CNA_TEST_FAIL(6);
-    }
     /* Both renderers refuse a handle that is not the surface they need, which is the boundary this
        container can exercise: drawing itself needs a font and a backbuffer a headless tree has not
        got. */
@@ -547,7 +559,11 @@ int main(void)
     if (status == 0 && !validate_dispatcher(game)) {
         status = CNA_TEST_FAIL(8);
     }
-    /* Initialized from here. The game is never run, so an End that would wait still refuses. */
+    /* Initialized from here, without a configured service. The game is never run, so an End that
+       would wait still refuses. */
+    if (status == 0 && !validate_screens(gamer)) {
+        status = CNA_TEST_FAIL(6);
+    }
     if (status == 0 && !validate_notification_position()) {
         status = CNA_TEST_FAIL(15);
     }
