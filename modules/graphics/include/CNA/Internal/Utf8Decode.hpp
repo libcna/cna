@@ -12,19 +12,22 @@ namespace CNA::Internal
      * @brief Decodes one UTF-8 code point from a byte string starting at the given
      *        index, advancing the index past the bytes consumed.
      *
-     * SpriteFont's glyph map is keyed by a single UTF-16 code unit (charcs), so
-     * this only decodes code points within the Basic Multilingual Plane -- every
-     * glyph a SpriteFont atlas can hold fits in one. Invalid or truncated
-     * sequences, and code points outside the BMP, decode to '?' and always
-     * advance the index by at least one byte so callers can't spin forever on
-     * malformed input.
+     * SpriteFont's glyph map is keyed by a single UTF-16 code unit (charcs), and XNA's
+     * SpriteFont walks a .NET string one UTF-16 code unit at a time (StringProxy.get_Item
+     * IL_0008-001c): a character above U+FFFF is its two surrogates, each looked up on its own.
+     * Given @p lowSurrogate, such a character decodes to its high surrogate and stores its low one
+     * there for the caller to process next; without it, it decodes to '?'. Invalid or truncated
+     * sequences decode to '?' and always advance the index by at least one byte so callers can't
+     * spin forever on malformed input.
      *
      * @param text  The UTF-8 encoded string being scanned.
      * @param index In/out byte offset into @p text; advanced past the decoded
      *              sequence.
+     * @param lowSurrogate Receives the low surrogate of a supplementary character, else unchanged.
      * @return The decoded UTF-16 code unit.
      */
-    inline SharpRuntime::charcs DecodeUtf8CodePoint(const std::string& text, std::size_t& index)
+    inline SharpRuntime::charcs DecodeUtf8CodePoint(const std::string& text, std::size_t& index,
+                                                    SharpRuntime::charcs* lowSurrogate = nullptr)
     {
         const auto lead = static_cast<unsigned char>(text[index]);
 
@@ -66,6 +69,10 @@ namespace CNA::Internal
         }
 
         index += static_cast<std::size_t>(extraBytes) + 1;
-        return decoded <= 0xFFFF ? static_cast<SharpRuntime::charcs>(decoded) : u'?';
+        if (decoded <= 0xFFFF) return static_cast<SharpRuntime::charcs>(decoded);
+        if (decoded > 0x10FFFF || lowSurrogate == nullptr) return u'?';
+        const char32_t offset = decoded - 0x10000;
+        *lowSurrogate = static_cast<SharpRuntime::charcs>(0xDC00 + (offset & 0x3FF));
+        return static_cast<SharpRuntime::charcs>(0xD800 + (offset >> 10));
     }
 }

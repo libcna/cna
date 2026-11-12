@@ -25,6 +25,7 @@
 #include "System/NotSupportedException.hpp"
 #include "CNA/Internal/Renderers/Common/XnaStateConversion.hpp"
 #include "CNA/Internal/Utf8Decode.hpp"
+#include <utility>
 #include "System/ArgumentException.hpp"
 #include "System/InvalidOperationException.hpp"
 #include "System/NotSupportedException.hpp"
@@ -1037,9 +1038,14 @@ namespace Microsoft::Xna::Framework::Graphics
         Vector2 curOffset(0.0f, 0.0f);
         bool firstInLine = true;
 
-        for (std::size_t i = 0; i < text.size();)
+        // One UTF-16 code unit at a time, as XNA's StringProxy walks a .NET string: a supplementary
+        // character is its high surrogate, then its low one.
+        charcs pendingLowSurrogate = 0;
+        for (std::size_t i = 0; i < text.size() || pendingLowSurrogate != 0;)
         {
-            const charcs c = CNA::Internal::DecodeUtf8CodePoint(text, i);
+            const charcs c = pendingLowSurrogate != 0
+                ? std::exchange(pendingLowSurrogate, charcs{0})
+                : CNA::Internal::DecodeUtf8CodePoint(text, i, &pendingLowSurrogate);
 
             if (c == u'\r') continue;
             if (c == u'\n')

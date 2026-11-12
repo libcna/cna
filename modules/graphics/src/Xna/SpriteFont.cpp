@@ -7,6 +7,7 @@
 #include <algorithm>
 #include <cstddef>
 #include "CNA/Internal/Utf8Decode.hpp"
+#include <utility>
 #include "System/ArgumentException.hpp"
 
 namespace Microsoft::Xna::Framework::Graphics
@@ -144,9 +145,14 @@ namespace Microsoft::Xna::Framework::Graphics
         // IL_00da-0108 groups (Spacing + previous C) and (A + B) separately in Single.
         float pendingRightBearing = 0.0f;
 
-        for (std::size_t i = 0; i < text.size();)
+        // One UTF-16 code unit at a time, as XNA's StringProxy walks a .NET string: a supplementary
+        // character is its high surrogate, then its low one.
+        charcs pendingLowSurrogate = 0;
+        for (std::size_t i = 0; i < text.size() || pendingLowSurrogate != 0;)
         {
-            const charcs c = CNA::Internal::DecodeUtf8CodePoint(text, i);
+            const charcs c = pendingLowSurrogate != 0
+                ? std::exchange(pendingLowSurrogate, charcs{0})
+                : CNA::Internal::DecodeUtf8CodePoint(text, i, &pendingLowSurrogate);
 
             if (c == u'\r')
             {

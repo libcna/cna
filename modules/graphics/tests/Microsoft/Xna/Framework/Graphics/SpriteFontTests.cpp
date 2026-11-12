@@ -271,6 +271,19 @@ TEST(SpriteFontTest, SetSpacing)
     EXPECT_FLOAT_EQ(font.getSpacingProperty(), 5.0f);
 }
 
+// RV-SPRITE review #1: XNA walks the text one UTF-16 code unit at a time (StringProxy.get_Item
+// IL_0008-001c; InternalMeasure IL_003b-0157), so a supplementary character -- an emoji -- is two
+// surrogates, each looked up on its own: two default glyphs, or ArgumentException("character")
+// without a default. CNA measured one '?'.
+TEST(SpriteFontTest, ASupplementaryCharacterIsTwoUtf16CodeUnits)
+{
+    const std::string emoji = "\xF0\x9F\x98\x80"; // U+1F600
+    const SpriteFont withDefault = makeFontA(0.0f, u'A');
+    EXPECT_EQ(withDefault.MeasureString(emoji), withDefault.MeasureString("AA"));
+    const SpriteFont withoutDefault = makeFontA();
+    expectCharacterArgumentException([&] { (void)withoutDefault.MeasureString(emoji); });
+}
+
 TEST(SpriteFontTest, SetDefaultCharacterToValue)
 {
     SpriteFont font = makeFontA();
