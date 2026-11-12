@@ -70,6 +70,13 @@ void systemGuideButton(Microsoft::Xna::Framework::PlayerIndex player);
  * (the reference's IsVisibleNoThrow). @return True while a message box, keyboard, sign-in or
  * social pane is visible. */
 bool guideIsVisible();
+/** @brief Throws XNA's GamerServicesNotInitialized InvalidOperationException unless
+ * GamerServicesDispatcher was initialized (the reference GamerServicesDispatcher.get_PacketBuffer
+ * IL_0000-0011, which every Guide call that reaches the kernel goes through). */
+void throwIfGamerServicesNotInitialized();
+/** @brief Lets Guide tests that cannot initialize the process-wide dispatcher open dialogs as if it
+ * were initialized. @param assumed True to skip the initialization refusal, false to restore it. */
+void setGuideAssumesInitializedForTesting(bool assumed);
 /** @brief Gets the frames a Guide End call runs while it waits for an answer: the live game's,
  * unless a test installed its own. @return The frames, or null without a game. */
 CNA::Internal::Runtime::IModalFrames* guideModalFrames();

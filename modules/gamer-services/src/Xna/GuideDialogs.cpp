@@ -456,8 +456,7 @@ namespace Microsoft::Xna::Framework::GamerServices
     bool Guide::getIsVisibleProperty()
     {
         // XNA Refresh Guide.get_IsVisible IL_0007..0011: GamerServicesNotInitialized resource.
-        if (!GamerServicesDispatcher::getIsInitializedProperty())
-            throw System::InvalidOperationException("The Gamer Services functionality must be initialized before you call this method. The easiest way to do that is to add a GamerServicesComponent to the Game.Components collection in the constructor of your Game class.");
+        CNA::Internal::GamerServices::throwIfGamerServicesNotInitialized();
         return CNA::Internal::GamerServices::guideIsVisible();
     }
 
@@ -495,6 +494,9 @@ namespace Microsoft::Xna::Framework::GamerServices
             throw System::ArgumentException("This string must be less than 256 characters long.", "description");
         if (DecodeUtf8ToUtf16(defaultText).size() >= 256)
             throw System::ArgumentException("This string must be less than 256 characters long.", "defaultText");
+        // XNA Refresh BeginShowKeyboardInput IL_0101: the kernel packet needs initialized gamer
+        // services (owner decision 2026-11-12).
+        CNA::Internal::GamerServices::throwIfGamerServicesNotInitialized();
         // XNA Refresh ErrorHandler.GetExceptionFromResult IL_0105..010f.
         if (CNA::Internal::GamerServices::guideIsVisible())
             throw GuideAlreadyVisibleException("The function cannot be completed at this time: the Guide UI is already active. Wait until Guide.IsVisible is false before issuing this call.");
@@ -679,6 +681,9 @@ namespace Microsoft::Xna::Framework::GamerServices
         std::any state
     ) {
         ValidateShowMessageBoxArgs(player, title, text, buttons, focusButton);
+        // XNA Refresh BeginShowMessageBox IL_001e: the kernel packet needs initialized gamer
+        // services (owner decision 2026-11-12).
+        CNA::Internal::GamerServices::throwIfGamerServicesNotInitialized();
         // XNA Refresh ErrorHandler.GetExceptionFromResult IL_0105..010f.
         if (CNA::Internal::GamerServices::guideIsVisible())
             throw GuideAlreadyVisibleException("The function cannot be completed at this time: the Guide UI is already active. Wait until Guide.IsVisible is false before issuing this call.");
@@ -764,6 +769,13 @@ System::IAsyncResult* showGuideKeyboardInput(Microsoft::Xna::Framework::PlayerIn
     const std::string& defaultText,System::AsyncCallback callback,std::any state,bool usePasswordMode) {
     return Microsoft::Xna::Framework::GamerServices::OpenKeyboardInputInternal(
         title,description,defaultText,std::move(callback),std::move(state),usePasswordMode);
+}
+namespace { std::atomic<bool> guideAssumesInitializedForTesting{false}; }
+void setGuideAssumesInitializedForTesting(bool assumed) {guideAssumesInitializedForTesting=assumed;}
+void throwIfGamerServicesNotInitialized() {
+    if(!guideAssumesInitializedForTesting&&
+       !Microsoft::Xna::Framework::GamerServices::GamerServicesDispatcher::getIsInitializedProperty())
+        throw System::InvalidOperationException("The Gamer Services functionality must be initialized before you call this method. The easiest way to do that is to add a GamerServicesComponent to the Game.Components collection in the constructor of your Game class.");
 }
 bool guideIsVisible() {
     namespace Xna=Microsoft::Xna::Framework::GamerServices;

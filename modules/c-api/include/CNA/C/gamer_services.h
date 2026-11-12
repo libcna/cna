@@ -1866,7 +1866,9 @@ CNA_C_API CNA_Result cna_guide_get_notification_position(CNA_NotificationPositio
  * @brief Sets where the guide draws its notifications.
  *
  * @param position One of the `CNA_NOTIFICATION_POSITION_*` identities.
- * @return `CNA_RESULT_SUCCESS` or `CNA_RESULT_INVALID_ARGUMENT` for an undefined identity.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_ARGUMENT` for an undefined identity, or
+ *         `CNA_RESULT_INVALID_STATE` for a changed position before gamer services are initialized
+ *         (an unchanged one succeeds).
  */
 CNA_C_API CNA_Result cna_guide_set_notification_position(CNA_NotificationPosition position);
 
@@ -1897,8 +1899,9 @@ CNA_C_API CNA_Result cna_guide_set_simulate_trial_mode(CNA_Bool simulate);
  * @param callback Callback invoked when the input completes or is cancelled; may be null.
  * @param context Caller context passed back to @p callback.
  * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_ARGUMENT` for a title, description or default
- *         text of 256 or more UTF-16 units or an undefined player, `CNA_RESULT_INVALID_STATE` when
- *         the Guide is already visible, or a documented argument/thread failure.
+ *         text of 256 or more UTF-16 units or an undefined player, `CNA_RESULT_INVALID_STATE` before
+ *         gamer services are initialized or when the Guide is already visible, or a documented
+ *         argument/thread failure.
  *
  * **This one really is asynchronous**, unlike every other begin/end pair in this ABI: the input stays
  * pending until the user confirms or cancels it, and only then does @p callback run. Poll
@@ -2099,8 +2102,8 @@ CNA_C_API CNA_Result cna_guide_reset_pending_keyboard_input_ext(void);
  * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_ARGUMENT` for an empty or 256-character (or
  *         longer, in UTF-16 units) title, text or button caption, a button count outside one to
  *         three, a focus button outside them, or an undefined player or icon,
- *         `CNA_RESULT_INVALID_STATE` when the Guide is already visible, or a documented
- *         argument/thread failure.
+ *         `CNA_RESULT_INVALID_STATE` before gamer services are initialized or when the Guide is
+ *         already visible, or a documented argument/thread failure.
  *
  * Asynchronous in the same real sense the keyboard input is: it stays pending until a button is
  * chosen. The canonical API has a second overload without the player, which is player one.
@@ -2356,10 +2359,9 @@ CNA_C_API CNA_Result cna_guide_show_players(CNA_PlayerIndex player);
  *
  * @param pane_count How many sign-in panes to show.
  * @param online_only Non-zero to require an online sign-in.
- * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_NOT_SUPPORTED` when gamer services are not initialized
- *         or `online_only` is set without a configured CNA account service,
- *         `CNA_RESULT_INVALID_STATE` while another Guide screen is open, or a documented argument
- *         failure.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_NOT_SUPPORTED` when `online_only` is set without a
+ *         configured CNA account service, `CNA_RESULT_INVALID_STATE` before gamer services are
+ *         initialized or while another Guide screen is open, or a documented argument failure.
  */
 CNA_C_API CNA_Result cna_guide_show_sign_in(int32_t pane_count, CNA_Bool online_only);
 

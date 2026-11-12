@@ -45,21 +45,67 @@ static int validate_settings(void)
     if (cna_guide_get_is_visible(&flag) != CNA_RESULT_INVALID_STATE) {
         return 0;
     }
-    if (cna_guide_set_notification_position(CNA_NOTIFICATION_POSITION_BOTTOM_RIGHT) !=
+    /* Before gamer services are initialized an unchanged position is accepted and a change is
+       refused, as XNA's set_NotificationPosition returns early for an unchanged value
+       (IL_0000-0006) and otherwise needs the kernel packet (IL_0008); owner decision 2026-11-12.
+       validate_notification_position covers the initialized round trip. */
+    if (cna_guide_get_notification_position(&position) != CNA_RESULT_SUCCESS ||
+        position != CNA_NOTIFICATION_POSITION_BOTTOM_CENTER ||
+        cna_guide_set_notification_position(CNA_NOTIFICATION_POSITION_BOTTOM_CENTER) !=
             CNA_RESULT_SUCCESS ||
-        cna_guide_get_notification_position(&position) != CNA_RESULT_SUCCESS ||
-        position != CNA_NOTIFICATION_POSITION_BOTTOM_RIGHT ||
+        cna_guide_set_notification_position(CNA_NOTIFICATION_POSITION_BOTTOM_RIGHT) !=
+            CNA_RESULT_INVALID_STATE ||
         cna_guide_set_notification_position(UINT32_C(9999)) != CNA_RESULT_INVALID_ARGUMENT) {
         return 0;
     }
     if (cna_guide_get_notification_position(&position) != CNA_RESULT_SUCCESS ||
-        position != CNA_NOTIFICATION_POSITION_BOTTOM_RIGHT) return 0;
+        position != CNA_NOTIFICATION_POSITION_BOTTOM_CENTER) return 0;
     return cna_guide_set_simulate_trial_mode(CNA_TRUE) == CNA_RESULT_SUCCESS &&
         cna_guide_get_simulate_trial_mode(&flag) == CNA_RESULT_SUCCESS && flag == CNA_TRUE &&
         cna_guide_set_simulate_trial_mode(CNA_FALSE) == CNA_RESULT_SUCCESS;
 }
 
 /* The keyboard input is the one operation in this ABI that genuinely stays pending. */
+/* Owner decision 2026-11-12: before gamer services are initialized the Guide calls that reach
+   XNA's kernel packet (GamerServicesDispatcher.get_PacketBuffer IL_0000-0011) refuse -- after
+   their own argument checks -- and open nothing. */
+static int validate_uninitialized_kernel_calls(void)
+{
+    const CNA_StringView buttons[1] = {{"OK", 2}};
+    char long_text[256];
+    const CNA_StringView long_view = {long_text, sizeof(long_text)};
+    CNA_Bool flag = CNA_TRUE;
+    memset(long_text, 'x', sizeof(long_text));
+    if (cna_guide_begin_show_message_box(CNA_PLAYER_INDEX_ONE, view("T"), view("B"), buttons,
+            UINT64_C(0), 0, CNA_MESSAGE_BOX_ICON_NONE, 0, 0) != CNA_RESULT_INVALID_ARGUMENT ||
+        cna_guide_begin_show_message_box(CNA_PLAYER_INDEX_ONE, view("T"), view("B"), buttons,
+            UINT64_C(1), 0, CNA_MESSAGE_BOX_ICON_NONE, 0, 0) != CNA_RESULT_INVALID_STATE ||
+        cna_guide_begin_show_keyboard_input(CNA_PLAYER_INDEX_ONE, long_view, view(""), view(""),
+            CNA_FALSE, 0, 0) != CNA_RESULT_INVALID_ARGUMENT ||
+        cna_guide_begin_show_keyboard_input(CNA_PLAYER_INDEX_ONE, view("T"), view(""), view(""),
+            CNA_FALSE, 0, 0) != CNA_RESULT_INVALID_STATE ||
+        cna_guide_show_sign_in(3, CNA_FALSE) != CNA_RESULT_INVALID_ARGUMENT ||
+        cna_guide_show_sign_in(1, CNA_FALSE) != CNA_RESULT_INVALID_STATE) {
+        return 0;
+    }
+    return cna_guide_get_has_pending_message_box_ext(&flag) == CNA_RESULT_SUCCESS &&
+        flag == CNA_FALSE &&
+        cna_guide_get_has_pending_keyboard_input_ext(&flag) == CNA_RESULT_SUCCESS &&
+        flag == CNA_FALSE;
+}
+
+static int validate_notification_position(void)
+{
+    CNA_NotificationPosition position = UINT32_C(0);
+    return cna_guide_set_notification_position(CNA_NOTIFICATION_POSITION_BOTTOM_RIGHT) ==
+            CNA_RESULT_SUCCESS &&
+        cna_guide_get_notification_position(&position) == CNA_RESULT_SUCCESS &&
+        position == CNA_NOTIFICATION_POSITION_BOTTOM_RIGHT &&
+        cna_guide_set_notification_position(UINT32_C(9999)) == CNA_RESULT_INVALID_ARGUMENT &&
+        cna_guide_get_notification_position(&position) == CNA_RESULT_SUCCESS &&
+        position == CNA_NOTIFICATION_POSITION_BOTTOM_RIGHT;
+}
+
 static int validate_keyboard_input(void)
 {
     CNA_Bool flag = UINT8_C(9);
@@ -278,7 +324,8 @@ static int validate_screens(const CNA_SignedInGamerHandle gamer)
         cna_guide_show_messages(CNA_PLAYER_INDEX_ONE) != CNA_RESULT_NOT_SUPPORTED ||
         cna_guide_show_player_review(CNA_PLAYER_INDEX_ONE, gamer) != CNA_RESULT_NOT_SUPPORTED ||
         cna_guide_show_players(CNA_PLAYER_INDEX_ONE) != CNA_RESULT_NOT_SUPPORTED ||
-        cna_guide_show_sign_in(2, CNA_TRUE) != CNA_RESULT_NOT_SUPPORTED ||
+        /* Sign-in needs initialized gamer services first (XNA ShowSignIn IL_0027). */
+        cna_guide_show_sign_in(2, CNA_TRUE) != CNA_RESULT_INVALID_STATE ||
         cna_guide_show_achievements_ext(CNA_PLAYER_INDEX_ONE) != CNA_RESULT_NOT_SUPPORTED) {
         return 0;
     }
@@ -472,14 +519,8 @@ int main(void)
     if (!validate_settings()) {
         return CNA_TEST_FAIL(1);
     }
-    if (!validate_keyboard_input()) {
-        return CNA_TEST_FAIL(2);
-    }
-    if (!validate_message_box()) {
-        return CNA_TEST_FAIL(3);
-    }
-    if (!validate_rejected_requests_preserve_answers()) {
-        return CNA_TEST_FAIL(13);
+    if (!validate_uninitialized_kernel_calls()) {
+        return CNA_TEST_FAIL(14);
     }
     if (cna_game_create(&game_info, &game) != CNA_RESULT_SUCCESS) {
         return CNA_TEST_FAIL(4);
@@ -505,6 +546,19 @@ int main(void)
     }
     if (status == 0 && !validate_dispatcher(game)) {
         status = CNA_TEST_FAIL(8);
+    }
+    /* Initialized from here. The game is never run, so an End that would wait still refuses. */
+    if (status == 0 && !validate_notification_position()) {
+        status = CNA_TEST_FAIL(15);
+    }
+    if (status == 0 && !validate_keyboard_input()) {
+        status = CNA_TEST_FAIL(2);
+    }
+    if (status == 0 && !validate_message_box()) {
+        status = CNA_TEST_FAIL(3);
+    }
+    if (status == 0 && !validate_rejected_requests_preserve_answers()) {
+        status = CNA_TEST_FAIL(13);
     }
     if (status == 0 && !validate_component_routes(game)) {
         status = CNA_TEST_FAIL(9);

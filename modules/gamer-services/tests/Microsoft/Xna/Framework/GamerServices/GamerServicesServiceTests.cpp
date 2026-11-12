@@ -77,6 +77,17 @@
 using namespace Microsoft::Xna::Framework::GamerServices;
 using Microsoft::Xna::Framework::PlayerIndex;
 
+// The Guide's dialogs, sign-in and NotificationPosition setter refuse until gamer services are
+// initialized (XNA GamerServicesDispatcher.get_PacketBuffer IL_0000-0011, owner decision
+// 2026-11-12). This suite cannot initialize the process-wide dispatcher (see above), so each Guide
+// test opens its dialogs as if it were; GuideTest.*Uninitialized* switch that off to pin the
+// refusal itself.
+class GuideTest : public ::testing::Test {
+protected:
+    void SetUp() override { CNA::Internal::GamerServices::setGuideAssumesInitializedForTesting(true); }
+    void TearDown() override { CNA::Internal::GamerServices::setGuideAssumesInitializedForTesting(false); }
+};
+
 // --- GamerServicesDispatcher ---
 
 TEST(GamerServicesDispatcherTest, IsInitializedDefaultsFalse) {
@@ -118,7 +129,7 @@ TEST(GamerServicesDispatcherTest, UpdateAsyncReturnsIsInitialized) {
 
 // XNA's IsTrialMode setter is internal: each dispatcher update latches it (SystemGuideTest covers
 // that); setting SimulateTrialMode alone changes only the request.
-TEST(GuideTest, SimulateTrialModeGetSet) {
+TEST_F(GuideTest, SimulateTrialModeGetSet) {
     const bool trial = Guide::getIsTrialModeProperty();
     Guide::setSimulateTrialModeProperty(true);
     EXPECT_TRUE(Guide::getSimulateTrialModeProperty());
@@ -132,11 +143,11 @@ TEST(GuideTest, SimulateTrialModeGetSet) {
 // IsVisible reflects the Guide's panes (XNA's setter is internal). The public getter needs
 // initialized gamer services, which this suite never initializes; the pane state behind it is read
 // directly (SystemGuideTests covers the public property).
-TEST(GuideTest, IsVisibleFalseWithNothingPending) {
+TEST_F(GuideTest, IsVisibleFalseWithNothingPending) {
     EXPECT_FALSE(CNA::Internal::GamerServices::guideIsVisible());
 }
 
-TEST(GuideTest, NotificationPositionDefaultAndSet) {
+TEST_F(GuideTest, NotificationPositionDefaultAndSet) {
     // Reference default: BottomCenter.
     EXPECT_EQ(NotificationPosition::BottomCenter, Guide::getNotificationPositionProperty());
     Guide::setNotificationPositionProperty(NotificationPosition::TopLeft);
@@ -144,7 +155,7 @@ TEST(GuideTest, NotificationPositionDefaultAndSet) {
     Guide::setNotificationPositionProperty(NotificationPosition::BottomCenter);
 }
 
-TEST(GuideTest, IsScreenSaverEnabledGetSet) {
+TEST_F(GuideTest, IsScreenSaverEnabledGetSet) {
     CNA::Platform::IPlatform& platform = CNA::Platform::GetCurrentPlatform();
     if (platform.GetDisplays() == nullptr)
     {
@@ -175,7 +186,7 @@ TEST(GuideTest, IsScreenSaverEnabledGetSet) {
 }
 
 
-TEST(GuideTest, ScreenSaverWithoutDisplaysAlwaysReportsEnabled) {
+TEST_F(GuideTest, ScreenSaverWithoutDisplaysAlwaysReportsEnabled) {
     // XNA Refresh get_IsScreenSaverEnabled IL_0000..0001 returns true; setter IL_0000 is a no-op.
     // This covers CNA's no-display branch deterministically without the older test's GTEST_SKIP.
     struct NoDisplays final : CNA::Platform::Testing::PlatformTestDecorator {
@@ -250,7 +261,7 @@ namespace {
     }
 }
 
-TEST(GuideTest, BeginShowKeyboardInputDoesNotCompleteSynchronously) {
+TEST_F(GuideTest, BeginShowKeyboardInputDoesNotCompleteSynchronously) {
     KeyboardInputGuard guard;
     System::IAsyncResult* result = Guide::BeginShowKeyboardInput(
         PlayerIndex::One, "title", "description", "default", System::AsyncCallback{}, std::any{}
@@ -263,7 +274,7 @@ TEST(GuideTest, BeginShowKeyboardInputDoesNotCompleteSynchronously) {
     delete result;
 }
 
-TEST(GuideTest, TypedTextIsReturnedExactlyAfterEnter) {
+TEST_F(GuideTest, TypedTextIsReturnedExactlyAfterEnter) {
     KeyboardInputGuard guard;
     System::IAsyncResult* result = Guide::BeginShowKeyboardInput(
         PlayerIndex::One, "title", "description", "", System::AsyncCallback{}, std::any{}
@@ -276,7 +287,7 @@ TEST(GuideTest, TypedTextIsReturnedExactlyAfterEnter) {
     delete result;
 }
 
-TEST(GuideTest, PasswordModeOverloadCompletesTheSameWayAsNonPasswordOverload) {
+TEST_F(GuideTest, PasswordModeOverloadCompletesTheSameWayAsNonPasswordOverload) {
     KeyboardInputGuard guard;
     System::IAsyncResult* result = Guide::BeginShowKeyboardInput(
         PlayerIndex::Two, "title", "description", "", System::AsyncCallback{}, std::any{}, true
@@ -290,7 +301,7 @@ TEST(GuideTest, PasswordModeOverloadCompletesTheSameWayAsNonPasswordOverload) {
 
 // Plan checklist: "confirm defaultText pre-seeds correctly" / "a user who presses Enter
 // immediately gets the default, matching real XNA semantics."
-TEST(GuideTest, DefaultTextPreSeedsAndIsReturnedIfEnterPressedImmediately) {
+TEST_F(GuideTest, DefaultTextPreSeedsAndIsReturnedIfEnterPressedImmediately) {
     KeyboardInputGuard guard;
     System::IAsyncResult* result = Guide::BeginShowKeyboardInput(
         PlayerIndex::One, "title", "description", "default text", System::AsyncCallback{}, std::any{}
@@ -300,7 +311,7 @@ TEST(GuideTest, DefaultTextPreSeedsAndIsReturnedIfEnterPressedImmediately) {
     delete result;
 }
 
-TEST(GuideTest, DefaultTextIsEditableBeforeConfirming) {
+TEST_F(GuideTest, DefaultTextIsEditableBeforeConfirming) {
     KeyboardInputGuard guard;
     System::IAsyncResult* result = Guide::BeginShowKeyboardInput(
         PlayerIndex::One, "title", "description", "abc", System::AsyncCallback{}, std::any{}
@@ -312,7 +323,7 @@ TEST(GuideTest, DefaultTextIsEditableBeforeConfirming) {
 }
 
 // Plan checklist: "confirm a surrogate pair (an emoji) round-trips correctly."
-TEST(GuideTest, SurrogatePairEmojiRoundTripsCorrectly) {
+TEST_F(GuideTest, SurrogatePairEmojiRoundTripsCorrectly) {
     KeyboardInputGuard guard;
     System::IAsyncResult* result = Guide::BeginShowKeyboardInput(
         PlayerIndex::One, "title", "description", "", System::AsyncCallback{}, std::any{}
@@ -328,7 +339,7 @@ TEST(GuideTest, SurrogatePairEmojiRoundTripsCorrectly) {
 
 // Backspace after an emoji must delete the whole code point (both surrogate halves), not just
 // the low surrogate.
-TEST(GuideTest, BackspaceAfterEmojiRemovesTheWholeSurrogatePair) {
+TEST_F(GuideTest, BackspaceAfterEmojiRemovesTheWholeSurrogatePair) {
     KeyboardInputGuard guard;
     System::IAsyncResult* result = Guide::BeginShowKeyboardInput(
         PlayerIndex::One, "title", "description", "", System::AsyncCallback{}, std::any{}
@@ -340,7 +351,7 @@ TEST(GuideTest, BackspaceAfterEmojiRemovesTheWholeSurrogatePair) {
     delete result;
 }
 
-TEST(GuideTest, BackspaceRemovesLastTypedCharacter) {
+TEST_F(GuideTest, BackspaceRemovesLastTypedCharacter) {
     KeyboardInputGuard guard;
     System::IAsyncResult* result = Guide::BeginShowKeyboardInput(
         PlayerIndex::One, "title", "description", "", System::AsyncCallback{}, std::any{}
@@ -353,7 +364,7 @@ TEST(GuideTest, BackspaceRemovesLastTypedCharacter) {
     delete result;
 }
 
-TEST(GuideTest, EndShowKeyboardInputThrowsIfCalledTooEarly) {
+TEST_F(GuideTest, EndShowKeyboardInputThrowsIfCalledTooEarly) {
     KeyboardInputGuard guard;
     System::IAsyncResult* result = Guide::BeginShowKeyboardInput(
         PlayerIndex::One, "title", "description", "", System::AsyncCallback{}, std::any{}
@@ -365,11 +376,11 @@ TEST(GuideTest, EndShowKeyboardInputThrowsIfCalledTooEarly) {
     delete result;
 }
 
-TEST(GuideTest, EndShowKeyboardInputThrowsForMismatchedResult) {
+TEST_F(GuideTest, EndShowKeyboardInputThrowsForMismatchedResult) {
     EXPECT_THROW(Guide::EndShowKeyboardInput(nullptr), System::ArgumentException);
 }
 
-TEST(GuideTest, BeginShowKeyboardInputThrowsWhileAnotherIsPending) {
+TEST_F(GuideTest, BeginShowKeyboardInputThrowsWhileAnotherIsPending) {
     KeyboardInputGuard guard;
     System::IAsyncResult* first = Guide::BeginShowKeyboardInput(
         PlayerIndex::One, "title", "description", "", System::AsyncCallback{}, std::any{}
@@ -387,7 +398,7 @@ TEST(GuideTest, BeginShowKeyboardInputThrowsWhileAnotherIsPending) {
 
 // Reference BeginShowKeyboardInput: title, description and default text each under 256 UTF-16
 // units; a defined player.
-TEST(GuideTest, BeginShowKeyboardInputValidatesArgumentsLikeTheReference) {
+TEST_F(GuideTest, BeginShowKeyboardInputValidatesArgumentsLikeTheReference) {
     KeyboardInputGuard guard;
     const std::string tooLong(256, 'x');
     for (const auto& [title, description, text] : std::vector<std::tuple<std::string, std::string, std::string>>{
@@ -408,7 +419,7 @@ TEST(GuideTest, BeginShowKeyboardInputValidatesArgumentsLikeTheReference) {
 // Regression: GuideAction once stored its AsyncCallback without invoking it. Confirms
 // the callback now fires exactly once, on Enter (not at Begin*, since this action no longer
 // completes synchronously), with the correct IAsyncResult identity and AsyncState.
-TEST(GuideTest, BeginShowKeyboardInputInvokesCallbackExactlyOnceOnEnterWithCorrectIdentity) {
+TEST_F(GuideTest, BeginShowKeyboardInputInvokesCallbackExactlyOnceOnEnterWithCorrectIdentity) {
     KeyboardInputGuard guard;
     int callCount = 0;
     System::IAsyncResult* observedResult = nullptr;
@@ -444,7 +455,7 @@ TEST(GuideTest, BeginShowKeyboardInputInvokesCallbackExactlyOnceOnEnterWithCorre
 // reflected a real pending request, and there was no cancel path at all. The tests below cover
 // each of those four gaps directly.
 
-TEST(GuideTest, TitleAndDescriptionAreStoredForRendering) {
+TEST_F(GuideTest, TitleAndDescriptionAreStoredForRendering) {
     KeyboardInputGuard guard;
     System::IAsyncResult* result = Guide::BeginShowKeyboardInput(
         PlayerIndex::One, "Enter your name", "Used for the leaderboard", "", System::AsyncCallback{}, std::any{}
@@ -455,12 +466,12 @@ TEST(GuideTest, TitleAndDescriptionAreStoredForRendering) {
     delete result;
 }
 
-TEST(GuideTest, GetPendingKeyboardInputTitleThrowsWhenNothingPending) {
+TEST_F(GuideTest, GetPendingKeyboardInputTitleThrowsWhenNothingPending) {
     EXPECT_THROW(Guide::GetPendingKeyboardInputTitleForTestingEXT(), System::InvalidOperationException);
     EXPECT_THROW(Guide::GetPendingKeyboardInputDescriptionForTestingEXT(), System::InvalidOperationException);
 }
 
-TEST(GuideTest, HasPendingKeyboardInputEXTReflectsRealState) {
+TEST_F(GuideTest, HasPendingKeyboardInputEXTReflectsRealState) {
     KeyboardInputGuard guard;
     EXPECT_FALSE(Guide::getHasPendingKeyboardInputEXTProperty());
     System::IAsyncResult* result = Guide::BeginShowKeyboardInput(
@@ -474,7 +485,7 @@ TEST(GuideTest, HasPendingKeyboardInputEXTReflectsRealState) {
 
 // The keyboard prompt is the sample's other overlay (the high-score name entry) and owns the
 // screen the same way.
-TEST(GuideTest, AVisibleKeyboardPromptWithholdsTouchInputFromTheGame) {
+TEST_F(GuideTest, AVisibleKeyboardPromptWithholdsTouchInputFromTheGame) {
     using Microsoft::Xna::Framework::Input::Touch::TouchPanel;
 
     KeyboardInputGuard guard;
@@ -488,7 +499,7 @@ TEST(GuideTest, AVisibleKeyboardPromptWithholdsTouchInputFromTheGame) {
     delete result;
 }
 
-TEST(GuideTest, IsVisibleReflectsPendingKeyboardInput) {
+TEST_F(GuideTest, IsVisibleReflectsPendingKeyboardInput) {
     KeyboardInputGuard guard;
     EXPECT_FALSE(CNA::Internal::GamerServices::guideIsVisible());
     System::IAsyncResult* result = Guide::BeginShowKeyboardInput(
@@ -500,7 +511,7 @@ TEST(GuideTest, IsVisibleReflectsPendingKeyboardInput) {
     delete result;
 }
 
-TEST(GuideTest, WasKeyboardInputCanceledEXTFalseAfterNormalConfirm) {
+TEST_F(GuideTest, WasKeyboardInputCanceledEXTFalseAfterNormalConfirm) {
     KeyboardInputGuard guard;
     System::IAsyncResult* result = Guide::BeginShowKeyboardInput(
         PlayerIndex::One, "title", "description", "", System::AsyncCallback{}, std::any{}
@@ -512,7 +523,7 @@ TEST(GuideTest, WasKeyboardInputCanceledEXTFalseAfterNormalConfirm) {
     delete result;
 }
 
-TEST(GuideTest, SimulateKeyboardInputCancelEXTCancelsAndClearsBuffer) {
+TEST_F(GuideTest, SimulateKeyboardInputCancelEXTCancelsAndClearsBuffer) {
     KeyboardInputGuard guard;
     int callCount = 0;
     System::IAsyncResult* result = Guide::BeginShowKeyboardInput(
@@ -535,11 +546,11 @@ TEST(GuideTest, SimulateKeyboardInputCancelEXTCancelsAndClearsBuffer) {
     delete result;
 }
 
-TEST(GuideTest, SimulateKeyboardInputCancelEXTThrowsWhenNothingPending) {
+TEST_F(GuideTest, SimulateKeyboardInputCancelEXTThrowsWhenNothingPending) {
     EXPECT_THROW(Guide::SimulateKeyboardInputCancelEXT(), System::InvalidOperationException);
 }
 
-TEST(GuideTest, WasKeyboardInputCanceledEXTThrowsForMismatchedResult) {
+TEST_F(GuideTest, WasKeyboardInputCanceledEXTThrowsForMismatchedResult) {
     EXPECT_THROW(Guide::WasKeyboardInputCanceledEXT(nullptr), System::ArgumentException);
 }
 
@@ -547,7 +558,7 @@ TEST(GuideTest, WasKeyboardInputCanceledEXTThrowsForMismatchedResult) {
 // RenderPendingKeyboardInputEXT call (smoke-tested, mirrors RenderPendingMessageBoxEXT's own
 // established pattern) must never resolve the pending request by itself - only a real Escape
 // press or SimulateKeyboardInputCancelEXT/Enter can.
-TEST(GuideTest, RenderPendingKeyboardInputDoesNotAutoCompleteAndSupportsPasswordMasking) {
+TEST_F(GuideTest, RenderPendingKeyboardInputDoesNotAutoCompleteAndSupportsPasswordMasking) {
     using namespace Microsoft::Xna::Framework;
     using namespace Microsoft::Xna::Framework::Graphics;
 
@@ -589,7 +600,7 @@ TEST(GuideTest, RenderPendingKeyboardInputDoesNotAutoCompleteAndSupportsPassword
 // usePasswordMode, the display text must be the real typed text unmasked. Together with the test
 // above, this covers both branches of ComputeDisplayText, so neither "always mask" nor "never
 // mask" could pass both tests.
-TEST(GuideTest, RenderPendingKeyboardInputDisplaysRealTextWhenPasswordModeIsOff) {
+TEST_F(GuideTest, RenderPendingKeyboardInputDisplaysRealTextWhenPasswordModeIsOff) {
     using namespace Microsoft::Xna::Framework;
     using namespace Microsoft::Xna::Framework::Graphics;
 
@@ -608,7 +619,7 @@ TEST(GuideTest, RenderPendingKeyboardInputDisplaysRealTextWhenPasswordModeIsOff)
     delete result;
 }
 
-TEST(GuideTest, RenderPendingKeyboardInputIsNoOpWhenNothingPending) {
+TEST_F(GuideTest, RenderPendingKeyboardInputIsNoOpWhenNothingPending) {
     using namespace Microsoft::Xna::Framework;
     using namespace Microsoft::Xna::Framework::Graphics;
 
@@ -643,7 +654,7 @@ namespace {
 // own Draw(), so without this the tap that misses a message-box button falls straight through to
 // whatever the game is drawing underneath -- in NinjAcademy, back onto the menu entry that raised
 // the box, which then raised a second one and terminated on "A message box is already pending."
-TEST(GuideTest, AVisibleMessageBoxWithholdsTouchInputFromTheGame) {
+TEST_F(GuideTest, AVisibleMessageBoxWithholdsTouchInputFromTheGame) {
     using Microsoft::Xna::Framework::Input::Touch::GestureSample;
     using Microsoft::Xna::Framework::Input::Touch::GestureType;
     using Microsoft::Xna::Framework::Input::Touch::TouchPanel;
@@ -681,7 +692,7 @@ TEST(GuideTest, AVisibleMessageBoxWithholdsTouchInputFromTheGame) {
 }
 
 // A gesture queued before the overlay went up must not fire the frame it comes down either.
-TEST(GuideTest, ARaisedOverlayDiscardsGesturesAlreadyQueued) {
+TEST_F(GuideTest, ARaisedOverlayDiscardsGesturesAlreadyQueued) {
     using Microsoft::Xna::Framework::Input::Touch::GestureSample;
     using Microsoft::Xna::Framework::Input::Touch::GestureType;
     using Microsoft::Xna::Framework::Input::Touch::TouchPanel;
@@ -707,12 +718,12 @@ TEST(GuideTest, ARaisedOverlayDiscardsGesturesAlreadyQueued) {
     delete result;
 }
 
-TEST(GuideTest, HasPendingMessageBoxDefaultsFalse) {
+TEST_F(GuideTest, HasPendingMessageBoxDefaultsFalse) {
     MessageBoxGuard guard;
     EXPECT_FALSE(Guide::getHasPendingMessageBoxEXTProperty());
 }
 
-TEST(GuideTest, BeginShowMessageBoxDoesNotThrowAndReturnsValidResult) {
+TEST_F(GuideTest, BeginShowMessageBoxDoesNotThrowAndReturnsValidResult) {
     MessageBoxGuard guard;
     System::IAsyncResult* result = Guide::BeginShowMessageBox(
         "title", "text", std::vector<std::string>{"OK", "Cancel"}, 0, MessageBoxIcon::Alert,
@@ -725,7 +736,7 @@ TEST(GuideTest, BeginShowMessageBoxDoesNotThrowAndReturnsValidResult) {
     delete result;
 }
 
-TEST(GuideTest, BeginShowMessageBoxPlayerOverloadDoesNotThrowAndReturnsValidResult) {
+TEST_F(GuideTest, BeginShowMessageBoxPlayerOverloadDoesNotThrowAndReturnsValidResult) {
     MessageBoxGuard guard;
     System::IAsyncResult* result = Guide::BeginShowMessageBox(
         PlayerIndex::One, "title", "text", std::vector<std::string>{"OK"}, 0, MessageBoxIcon::None,
@@ -737,7 +748,7 @@ TEST(GuideTest, BeginShowMessageBoxPlayerOverloadDoesNotThrowAndReturnsValidResu
     delete result;
 }
 
-TEST(GuideTest, BeginShowMessageBoxRejectsEmptyButtons) {
+TEST_F(GuideTest, BeginShowMessageBoxRejectsEmptyButtons) {
     MessageBoxGuard guard;
     EXPECT_THROW(
         Guide::BeginShowMessageBox(
@@ -749,7 +760,7 @@ TEST(GuideTest, BeginShowMessageBoxRejectsEmptyButtons) {
     EXPECT_FALSE(Guide::getHasPendingMessageBoxEXTProperty());
 }
 
-TEST(GuideTest, BeginShowMessageBoxThrowsWhileAnotherIsPending) {
+TEST_F(GuideTest, BeginShowMessageBoxThrowsWhileAnotherIsPending) {
     MessageBoxGuard guard;
     System::IAsyncResult* first = Guide::BeginShowMessageBox(
         "title", "text", std::vector<std::string>{"OK"}, 0, MessageBoxIcon::None,
@@ -769,7 +780,7 @@ TEST(GuideTest, BeginShowMessageBoxThrowsWhileAnotherIsPending) {
 
 // Reference Guide.ValidateShowMessageBoxArgs: title and text non-empty and under 256 UTF-16 units,
 // one to three buttons each non-empty and under 256, focus within them.
-TEST(GuideTest, BeginShowMessageBoxValidatesArgumentsLikeTheReference) {
+TEST_F(GuideTest, BeginShowMessageBoxValidatesArgumentsLikeTheReference) {
     MessageBoxGuard guard;
     const auto show = [](const std::string& title, const std::string& text, std::vector<std::string> buttons, int focus,
                          PlayerIndex player = PlayerIndex::One) {
@@ -834,7 +845,7 @@ struct ForeignGuideResult final : System::IAsyncResult {
 };
 }
 
-TEST(GuideTest, ForeignEndResultsAreRejectedBeforeTheirPropertiesAreRead) {
+TEST_F(GuideTest, ForeignEndResultsAreRejectedBeforeTheirPropertiesAreRead) {
     // XOverlappedAsyncResult.PrepareForEndFunction IL_000e..0022 uses a type check,
     // ArgumentException(IAsyncNotFromBegin), with no ParamName and no result access.
     // PrepareForEndFunction IL_0000..000d: null uses ArgumentNullException("result").
@@ -865,7 +876,7 @@ TEST(GuideTest, ForeignEndResultsAreRejectedBeforeTheirPropertiesAreRead) {
     }
 }
 
-TEST(GuideTest, CancelledMessageBoxHasNoChoiceAndEndCanOnlyConsumeItOnce) {
+TEST_F(GuideTest, CancelledMessageBoxHasNoChoiceAndEndCanOnlyConsumeItOnce) {
     // EndShowMessageBox IL_0098..00ad maps the cancellation sentinel to Nullable<int> without a value.
     // PrepareForEndFunction IL_0023..0035 refuses a repeated End, even for cancellation.
     MessageBoxGuard boxes;
@@ -881,7 +892,7 @@ TEST(GuideTest, CancelledMessageBoxHasNoChoiceAndEndCanOnlyConsumeItOnce) {
     }
 }
 
-TEST(GuideTest, KeyboardRepeatedEndHasRefreshDiagnostic) {
+TEST_F(GuideTest, KeyboardRepeatedEndHasRefreshDiagnostic) {
     // XOverlappedAsyncResult.PrepareForEndFunction IL_0023..0035, CannotEndTwice resource.
     KeyboardInputGuard keyboards;
     std::unique_ptr<System::IAsyncResult> result(Guide::BeginShowKeyboardInput(
@@ -894,7 +905,7 @@ TEST(GuideTest, KeyboardRepeatedEndHasRefreshDiagnostic) {
     }
 }
 
-TEST(GuideTest, PendingEndClaimsTheResultBeforePumpingCallbacks) {
+TEST_F(GuideTest, PendingEndClaimsTheResultBeforePumpingCallbacks) {
     // PrepareForEndFunction IL_0036..0048 sets endHasBeenCalled before waiting.
     // A callback reached during CNA's modal wait must not consume that same result a second time.
     MessageBoxGuard boxes;
@@ -926,7 +937,7 @@ TEST(GuideTest, PendingEndClaimsTheResultBeforePumpingCallbacks) {
     EXPECT_EQ(2, frames.frames);
 }
 
-TEST(GuideTest, EndFollowsTheReferenceChecks) {
+TEST_F(GuideTest, EndFollowsTheReferenceChecks) {
     MessageBoxGuard boxes;
     KeyboardInputGuard keyboards;
     EXPECT_THROW((void)Guide::EndShowMessageBox(nullptr), System::ArgumentNullException);
@@ -949,7 +960,7 @@ TEST(GuideTest, EndFollowsTheReferenceChecks) {
 // Reference End waits for the user's answer. CNA's Guide is drawn by the game, so the wait runs the
 // game's modal frames until the answer arrives: EndShowMessageBox(BeginShowMessageBox(...)) works
 // as a single call, as it does on the console.
-TEST(GuideTest, EndWaitsForTheAnswerWhileTheGamesModalFramesRun) {
+TEST_F(GuideTest, EndWaitsForTheAnswerWhileTheGamesModalFramesRun) {
     MessageBoxGuard boxes;
     KeyboardInputGuard keyboards;
     ScriptedModalFrames frames;
@@ -969,7 +980,7 @@ TEST(GuideTest, EndWaitsForTheAnswerWhileTheGamesModalFramesRun) {
 
 // With no running game nothing could answer the Guide, so End refuses rather than hang, and stays
 // callable for when the answer comes.
-TEST(GuideTest, EndWithoutARunningGameRefusesAndCanBeCalledAgainOnceAnswered) {
+TEST_F(GuideTest, EndWithoutARunningGameRefusesAndCanBeCalledAgainOnceAnswered) {
     MessageBoxGuard boxes;
     ModalFramesGuard none(nullptr);
     auto box = ShowTwoButtonBox();
@@ -979,7 +990,7 @@ TEST(GuideTest, EndWithoutARunningGameRefusesAndCanBeCalledAgainOnceAnswered) {
     EXPECT_EQ(0, Guide::EndShowMessageBox(box.get()));
 }
 
-TEST(GuideTest, EndShowMessageBoxThrowsIfCalledTooEarly) {
+TEST_F(GuideTest, EndShowMessageBoxThrowsIfCalledTooEarly) {
     MessageBoxGuard guard;
     System::IAsyncResult* result = Guide::BeginShowMessageBox(
         "title", "text", std::vector<std::string>{"OK"}, 0, MessageBoxIcon::None,
@@ -991,14 +1002,14 @@ TEST(GuideTest, EndShowMessageBoxThrowsIfCalledTooEarly) {
     delete result;
 }
 
-TEST(GuideTest, EndShowMessageBoxThrowsForMismatchedResult) {
+TEST_F(GuideTest, EndShowMessageBoxThrowsForMismatchedResult) {
     EXPECT_THROW(Guide::EndShowMessageBox(nullptr), System::ArgumentException);
 }
 
 // The synthetic "render frame -> simulate click -> End" cycle the plan calls for: a real
 // RenderPendingMessageBoxEXT call (smoke-tested below) followed by a real SimulateMessageBoxClickEXT
 // completion, confirming EndShowMessageBox returns exactly the clicked button's index.
-TEST(GuideTest, RenderSimulateClickEndCycleReturnsCorrectButtonIndex) {
+TEST_F(GuideTest, RenderSimulateClickEndCycleReturnsCorrectButtonIndex) {
     using namespace Microsoft::Xna::Framework;
     using namespace Microsoft::Xna::Framework::Graphics;
 
@@ -1056,7 +1067,7 @@ namespace
 // on the press let the release arrive as a tap on whatever the box had been covering: in
 // NinjAcademy that was the loading screen behind it, which then started a second content load and
 // displayed a game that had already consumed the saved state, so "resume" showed a score of 0.
-TEST(GuideTest, TheClickThatAnswersAMessageBoxDoesNotAlsoReachTheGame) {
+TEST_F(GuideTest, TheClickThatAnswersAMessageBoxDoesNotAlsoReachTheGame) {
     using namespace Microsoft::Xna::Framework;
     using namespace Microsoft::Xna::Framework::Graphics;
     using Microsoft::Xna::Framework::Input::Touch::GestureSample;
@@ -1133,7 +1144,7 @@ TEST(GuideTest, TheClickThatAnswersAMessageBoxDoesNotAlsoReachTheGame) {
     delete result;
 }
 
-TEST(GuideTest, RenderPendingMessageBoxIsNoOpWhenNothingPending) {
+TEST_F(GuideTest, RenderPendingMessageBoxIsNoOpWhenNothingPending) {
     using namespace Microsoft::Xna::Framework;
     using namespace Microsoft::Xna::Framework::Graphics;
 
@@ -1166,7 +1177,7 @@ namespace {
 
 // A keyboard answers a message box the way the console Guide is answered: the key that is already
 // down when the box opens does nothing, arrows move the focus, Enter chooses, Escape cancels.
-TEST(GuideTest, MessageBoxesAnswerToTheKeyboard) {
+TEST_F(GuideTest, MessageBoxesAnswerToTheKeyboard) {
     using namespace Microsoft::Xna::Framework;
     using namespace Microsoft::Xna::Framework::Graphics;
     using CNA::Platform::KeyCode;
@@ -1218,7 +1229,7 @@ TEST(GuideTest, MessageBoxesAnswerToTheKeyboard) {
 // new: opened while Enter was down (the game's own Enter raising it, say), it took that Enter as a
 // fresh press and answered itself. The regression first showed only when an earlier test in the
 // same process had left a box with the same text; this pins it directly.
-TEST(GuideTest, AnIdenticalMessageBoxOpenedWhileEnterIsDownDoesNotAnswerItself) {
+TEST_F(GuideTest, AnIdenticalMessageBoxOpenedWhileEnterIsDownDoesNotAnswerItself) {
     using namespace Microsoft::Xna::Framework;
     using namespace Microsoft::Xna::Framework::Graphics;
     using CNA::Platform::KeyCode;
@@ -1262,7 +1273,7 @@ TEST(GuideTest, AnIdenticalMessageBoxOpenedWhileEnterIsDownDoesNotAnswerItself) 
 // Task 3.1 checklist: "focusButton parameter is honored as the initial default selection."
 // GetPendingMessageBoxFocusButtonForTestingEXT confirms it round-trips correctly without
 // requiring pixel readback of the rendered highlight.
-TEST(GuideTest, FocusButtonRoundTripsToPendingMessageBox) {
+TEST_F(GuideTest, FocusButtonRoundTripsToPendingMessageBox) {
     MessageBoxGuard guard;
     System::IAsyncResult* result = Guide::BeginShowMessageBox(
         "title", "text", std::vector<std::string>{"A", "B", "C"}, 2, MessageBoxIcon::None,
@@ -1273,12 +1284,12 @@ TEST(GuideTest, FocusButtonRoundTripsToPendingMessageBox) {
     delete result;
 }
 
-TEST(GuideTest, SimulateMessageBoxClickThrowsWhenNothingPending) {
+TEST_F(GuideTest, SimulateMessageBoxClickThrowsWhenNothingPending) {
     MessageBoxGuard guard;
     EXPECT_THROW(Guide::SimulateMessageBoxClickEXT(0), System::InvalidOperationException);
 }
 
-TEST(GuideTest, SimulateMessageBoxClickThrowsForOutOfRangeIndex) {
+TEST_F(GuideTest, SimulateMessageBoxClickThrowsForOutOfRangeIndex) {
     MessageBoxGuard guard;
     System::IAsyncResult* result = Guide::BeginShowMessageBox(
         "title", "text", std::vector<std::string>{"OK"}, 0, MessageBoxIcon::None,
@@ -1292,7 +1303,7 @@ TEST(GuideTest, SimulateMessageBoxClickThrowsForOutOfRangeIndex) {
 
 // Reentrancy regression: a callback that calls BeginShowMessageBox again must see
 // pendingMessageBox_ already cleared, not stale.
-TEST(GuideTest, CallbackCanReentrantlyBeginANewMessageBox) {
+TEST_F(GuideTest, CallbackCanReentrantlyBeginANewMessageBox) {
     MessageBoxGuard guard;
     System::IAsyncResult* second = nullptr;
     System::IAsyncResult* first = Guide::BeginShowMessageBox(
@@ -1313,15 +1324,16 @@ TEST(GuideTest, CallbackCanReentrantlyBeginANewMessageBox) {
     delete second;
 }
 
-TEST(GuideTest, DelayNotificationsDoesNotThrow) {
+TEST_F(GuideTest, DelayNotificationsDoesNotThrow) {
     EXPECT_NO_THROW(Guide::DelayNotifications(System::TimeSpan::FromSeconds(1)));
 }
 
 // Without a configured service, argument validation still runs first (reference order) and every
 // service-backed pane refuses rather than silently doing nothing.
-TEST(GuideTest, ShowMethodsValidateThenRequireTheService) {
+TEST_F(GuideTest, ShowMethodsValidateThenRequireTheService) {
     if (GamerServicesDispatcher::getIsInitializedProperty())
         GTEST_SKIP() << "another test initialized gamer services in this process";
+    CNA::Internal::GamerServices::setGuideAssumesInitializedForTesting(false);
     EXPECT_THROW(Guide::ShowComposeMessage(PlayerIndex::One, std::string(256, 'a'), {}), System::ArgumentException);
     EXPECT_THROW(Guide::ShowComposeMessage(PlayerIndex::One, "hi", {nullptr}), System::ArgumentException);
     EXPECT_THROW(Guide::ShowComposeMessage(PlayerIndex::One, "hi", {}), GamerServicesNotAvailableException);
@@ -1338,12 +1350,70 @@ TEST(GuideTest, ShowMethodsValidateThenRequireTheService) {
     EXPECT_THROW(Guide::ShowPartySessions(PlayerIndex::One), GamerServicesNotAvailableException);
     EXPECT_THROW(Guide::ShowPlayerReview(PlayerIndex::One, nullptr), System::ArgumentNullException);
     EXPECT_THROW(Guide::ShowPlayers(PlayerIndex::One), GamerServicesNotAvailableException);
-    EXPECT_THROW(Guide::ShowSignIn(1, false), GamerServicesNotAvailableException);
+    // ShowSignIn reaches the kernel packet first (XNA ShowSignIn IL_0027), so it refuses the
+    // uninitialized dispatcher itself; see UninitializedGamerServicesRefuseTheKernelCalls.
+    EXPECT_THROW(Guide::ShowSignIn(1, false), System::InvalidOperationException);
     EXPECT_THROW(Guide::ShowAchievementsEXT(PlayerIndex::One), GamerServicesNotAvailableException);
     EXPECT_FALSE(CNA::Internal::GamerServices::guideIsVisible());
 }
 
-TEST(GuideTest, KeyboardCallbackCanEndAndBeginAgainWithoutLeakingInput) {
+namespace {
+const char* const GamerServicesNotInitialized = "The Gamer Services functionality must be initialized before you call this method. The easiest "
+    "way to do that is to add a GamerServicesComponent to the Game.Components collection in the "
+    "constructor of your Game class.";
+
+template <typename Action>
+void ExpectNotInitialized(Action&& action, const char* what) {
+    try {
+        action();
+        ADD_FAILURE() << what << " ran with uninitialized gamer services";
+    } catch (const System::InvalidOperationException& e) {
+        EXPECT_EQ(typeid(e), typeid(System::InvalidOperationException)) << what;
+        EXPECT_EQ(std::string(e.what()), GamerServicesNotInitialized) << what;
+    }
+}
+}
+
+// Owner decision 2026-11-12: XNA's BeginShowMessageBox (IL_001e), BeginShowKeyboardInput (IL_0101),
+// ShowSignIn (IL_0027) and a changing NotificationPosition (IL_0008) reach
+// GamerServicesDispatcher.get_PacketBuffer, which throws GamerServicesNotInitialized
+// (IL_0000-0011) before initialization -- after each call's own argument checks, and an unchanged
+// NotificationPosition returns before it (IL_0000-0006).
+TEST_F(GuideTest, UninitializedGamerServicesRefuseTheKernelCalls) {
+    if (GamerServicesDispatcher::getIsInitializedProperty())
+        GTEST_SKIP() << "another test initialized gamer services in this process";
+    CNA::Internal::GamerServices::setGuideAssumesInitializedForTesting(false);
+
+    EXPECT_THROW(Guide::BeginShowMessageBox("t", "x", {}, 0, MessageBoxIcon::None, {}, {}),
+                 System::ArgumentException) << "argument checks come first";
+    ExpectNotInitialized([] { (void)Guide::BeginShowMessageBox("t", "x", {"OK"}, 0, MessageBoxIcon::None, {}, {}); },
+                         "BeginShowMessageBox");
+    ExpectNotInitialized([] { (void)Guide::BeginShowMessageBox(PlayerIndex::Two, "t", "x", {"OK"}, 0, MessageBoxIcon::None, {}, {}); },
+                         "BeginShowMessageBox(player)");
+
+    EXPECT_THROW(Guide::BeginShowKeyboardInput(PlayerIndex::One, std::string(256, 'a'), "", "", {}, {}),
+                 System::ArgumentException) << "argument checks come first";
+    ExpectNotInitialized([] { (void)Guide::BeginShowKeyboardInput(PlayerIndex::One, "t", "d", "", {}, {}); },
+                         "BeginShowKeyboardInput");
+    ExpectNotInitialized([] { (void)Guide::BeginShowKeyboardInput(PlayerIndex::One, "t", "d", "", {}, {}, true); },
+                         "BeginShowKeyboardInput(password)");
+
+    EXPECT_THROW(Guide::ShowSignIn(3, false), System::ArgumentException) << "pane count comes first";
+    ExpectNotInitialized([] { Guide::ShowSignIn(1, false); }, "ShowSignIn");
+    ExpectNotInitialized([] { Guide::ShowSignIn(2, true); }, "ShowSignIn(online)");
+
+    const NotificationPosition before = Guide::getNotificationPositionProperty();
+    EXPECT_NO_THROW(Guide::setNotificationPositionProperty(before)) << "an unchanged value returns first";
+    const NotificationPosition other =
+        before == NotificationPosition::TopLeft ? NotificationPosition::BottomRight : NotificationPosition::TopLeft;
+    ExpectNotInitialized([&] { Guide::setNotificationPositionProperty(other); }, "set_NotificationPosition");
+    EXPECT_EQ(Guide::getNotificationPositionProperty(), before) << "a refused change is not stored";
+
+    EXPECT_FALSE(CNA::Internal::GamerServices::guideIsVisible());
+    ExpectNotInitialized([] { (void)Guide::getIsVisibleProperty(); }, "get_IsVisible");
+}
+
+TEST_F(GuideTest, KeyboardCallbackCanEndAndBeginAgainWithoutLeakingInput) {
     // Guide.hpp BeginShowKeyboardInput callback/state contract: result is complete before callback; a completed prompt
     // releases its modal slot. CNA's text-input seam must then belong only to the new prompt.
     KeyboardInputGuard guard;
@@ -1373,7 +1443,7 @@ TEST(GuideTest, KeyboardCallbackCanEndAndBeginAgainWithoutLeakingInput) {
     EXPECT_THROW((void)Guide::EndShowKeyboardInput(first.get()), System::InvalidOperationException);
 }
 
-TEST(GuideTest, ThrowingMessageBoxCallbackLeavesCompletedAnswerAndReleasesModalSlot) {
+TEST_F(GuideTest, ThrowingMessageBoxCallbackLeavesCompletedAnswerAndReleasesModalSlot) {
     // Guide.hpp BeginShowMessageBox: callback runs on completion. A callback exception
     // cannot undo the already completed answer or retain the single active prompt.
     MessageBoxGuard guard;
@@ -1427,7 +1497,7 @@ void ExpectRefreshArgument(Call call, const char* parameter, const char* message
 }
 }
 
-TEST(GuideTest, RefreshMessageBoxDiagnosticsAndPrecedence) {
+TEST_F(GuideTest, RefreshMessageBoxDiagnosticsAndPrecedence) {
     // ValidateShowMessageBoxArgs IL_000e..018e; resource keys StringNullEmptyOrTooLong,
     // StringCollectionInvalid. Invalid arguments win over the already-visible refusal.
     MessageBoxGuard guard;
@@ -1460,7 +1530,7 @@ TEST(GuideTest, RefreshMessageBoxDiagnosticsAndPrecedence) {
     EXPECT_EQ(std::optional<int>(1), Guide::EndShowMessageBox(pending.get()));
 }
 
-TEST(GuideTest, RefreshKeyboardDiagnosticsCoverBothOverloads) {
+TEST_F(GuideTest, RefreshKeyboardDiagnosticsCoverBothOverloads) {
     // BeginShowKeyboardInput IL_002c..00ee; six-argument overload IL_0000..000e passes false.
     MessageBoxGuard boxes;
     KeyboardInputGuard keyboards;
@@ -1486,7 +1556,7 @@ TEST(GuideTest, RefreshKeyboardDiagnosticsCoverBothOverloads) {
     EXPECT_EQ(std::optional<int>(0), Guide::EndShowMessageBox(pending.get()));
 }
 
-TEST(GuideTest, RefreshVisibleRefusalHasActionableMessageForBothDialogKinds) {
+TEST_F(GuideTest, RefreshVisibleRefusalHasActionableMessageForBothDialogKinds) {
     // ErrorHandler.GetExceptionFromResult IL_0105..010f: GamerServicesGuideAlreadyVisible.
     MessageBoxGuard boxes;
     KeyboardInputGuard keyboards;
@@ -1506,7 +1576,7 @@ TEST(GuideTest, RefreshVisibleRefusalHasActionableMessageForBothDialogKinds) {
     EXPECT_EQ("", Guide::EndShowKeyboardInput(pending.get()));
 }
 
-TEST(GuideTest, SignInPaneCountsValidateBeforeTheVisibleGuideIsRefused) {
+TEST_F(GuideTest, SignInPaneCountsValidateBeforeTheVisibleGuideIsRefused) {
     // XNA Guide.ShowSignIn IL_0000..001b accepts exactly 1, 2, 4 and names paneCount.
     MessageBoxGuard boxes;
     auto pending = ShowTwoButtonBox();
@@ -1524,7 +1594,7 @@ TEST(GuideTest, SignInPaneCountsValidateBeforeTheVisibleGuideIsRefused) {
 }
 
 
-TEST(GuideTest, SignInInvalidPaneDiagnosticMatchesRefresh) {
+TEST_F(GuideTest, SignInInvalidPaneDiagnosticMatchesRefresh) {
     // ShowSignIn IL_0000..001b validates before dispatch. Resource ShowSignInPaneCountInvalid.
     for (bool onlineOnly : {false, true}) {
         for (int count : {-1, 0, 3, 5}) {
@@ -1540,7 +1610,7 @@ TEST(GuideTest, SignInInvalidPaneDiagnosticMatchesRefresh) {
     }
 }
 
-TEST(GuideTest, GamerCardInvalidPlayerPrecedesNullGamerAndVisibleGuide) {
+TEST_F(GuideTest, GamerCardInvalidPlayerPrecedesNullGamerAndVisibleGuide) {
     // ExecuteKernelCall(callType, player, gamer) IL_0000..0033: player, null, disposed.
     // Restrict this regression to undefined players; the established 4-player extension is unchanged.
     MessageBoxGuard boxes;
@@ -1556,7 +1626,7 @@ TEST(GuideTest, GamerCardInvalidPlayerPrecedesNullGamerAndVisibleGuide) {
     EXPECT_EQ(std::optional<int>(0), Guide::EndShowMessageBox(pending.get()));
 }
 
-TEST(GuideTest, DisposedGamerCardUsesRefreshDiagnosticBeforeVisibility) {
+TEST_F(GuideTest, DisposedGamerCardUsesRefreshDiagnosticBeforeVisibility) {
     // ExecuteKernelCall(player,gamer) IL_001c..0033: ObjectDisposedException("gamer", GamerInvalid).
     MessageBoxGuard boxes;
     auto pending = ShowTwoButtonBox();
@@ -1572,7 +1642,7 @@ TEST(GuideTest, DisposedGamerCardUsesRefreshDiagnosticBeforeVisibility) {
     EXPECT_EQ(std::optional<int>(0), Guide::EndShowMessageBox(pending.get()));
 }
 
-TEST(GuideTest, SignInAndGamerCardVisibleDiagnosticsMatchRefresh) {
+TEST_F(GuideTest, SignInAndGamerCardVisibleDiagnosticsMatchRefresh) {
     // ErrorHandler.GetExceptionFromResult IL_0105..010f: GamerServicesGuideAlreadyVisible.
     MessageBoxGuard boxes;
     auto pending = ShowTwoButtonBox();
@@ -1590,7 +1660,7 @@ TEST(GuideTest, SignInAndGamerCardVisibleDiagnosticsMatchRefresh) {
     EXPECT_EQ(std::optional<int>(1), Guide::EndShowMessageBox(pending.get()));
 }
 
-TEST(GuideTest, SocialArgumentsValidateBeforeTheVisibleGuideIsRefused) {
+TEST_F(GuideTest, SocialArgumentsValidateBeforeTheVisibleGuideIsRefused) {
     // XNA ShowComposeMessage IL_0018..0065 validates text then recipients;
     // Gamer.ValidateGamerList rejects >100 recipients or null elements. Calls with a
     // gamer use ExecuteKernelCall(player,gamer), IL_000e..0033 for the null guard.
@@ -1626,7 +1696,7 @@ TEST(GuideTest, SocialArgumentsValidateBeforeTheVisibleGuideIsRefused) {
     EXPECT_EQ(0, Guide::EndShowMessageBox(pending.get()));
 }
 
-TEST(GuideTest, ValidationOrderAndParameterNamesSurviveAnAlreadyVisibleGuide) {
+TEST_F(GuideTest, ValidationOrderAndParameterNamesSurviveAnAlreadyVisibleGuide) {
     // XNA ValidateShowMessageBoxArgs IL_0000..018e: player, title, text,
     // buttons, focusButton; BeginShowKeyboardInput IL_0000..00ee: player,
     // title, description, defaultText. These checks precede dispatch/visibility refusal.
@@ -1673,7 +1743,7 @@ TEST(GuideTest, ValidationOrderAndParameterNamesSurviveAnAlreadyVisibleGuide) {
 }
 
 
-TEST(GuideTest, EmbeddedNulCountsInEveryDialogLengthCheck) {
+TEST_F(GuideTest, EmbeddedNulCountsInEveryDialogLengthCheck) {
     // XNA Refresh String.Length includes U+0000: ValidateShowMessageBoxArgs IL_0016..0021,
     // IL_005f..006a, IL_00ca..00d5; BeginShowKeyboardInput IL_002c..00ee.
     // 'x' + NUL + 253 'x' = 255 units; one more 'x' = 256, regardless of C-string termination.
@@ -1717,7 +1787,7 @@ TEST(GuideTest, EmbeddedNulCountsInEveryDialogLengthCheck) {
     }
 }
 
-TEST(GuideTest, SupplementaryCharactersCountAsTwoUtf16UnitsInEveryDialogField) {
+TEST_F(GuideTest, SupplementaryCharactersCountAsTwoUtf16UnitsInEveryDialogField) {
     // XNA string.Length checks (ValidateShowMessageBoxArgs IL_000e..018e,
     // BeginShowKeyboardInput IL_002c..00ee) count UTF-16 units, not UTF-8 bytes or code points.
     // 127 U+1F600 (4 UTF-8 bytes, 2 UTF-16 units each) + 'x' = 255 units;
@@ -1753,7 +1823,7 @@ TEST(GuideTest, SupplementaryCharactersCountAsTwoUtf16UnitsInEveryDialogField) {
     }
 }
 
-TEST(GuideTest, WaitHandlesSignalOnlyWhenTheDialogCompletes) {
+TEST_F(GuideTest, WaitHandlesSignalOnlyWhenTheDialogCompletes) {
     // XNA XOverlappedAsyncResult::.ctor IL_0033..003a creates ManualResetEvent(false);
     // CompletedSynchronously IL_0000..0001 always returns false. EndShow* delegates
     // to PrepareForEndFunction (IL_003d..0048 waits for that event).
@@ -1781,7 +1851,7 @@ TEST(GuideTest, WaitHandlesSignalOnlyWhenTheDialogCompletes) {
     EXPECT_TRUE(Guide::WasKeyboardInputCanceledEXT(input.get()));
 }
 
-TEST(GuideTest, EndingAnOlderCompletedDialogDoesNotConsumeTheCurrentDialog) {
+TEST_F(GuideTest, EndingAnOlderCompletedDialogDoesNotConsumeTheCurrentDialog) {
     // XNA EndShow* consumes the supplied result (IL_0000..0006), not the newest
     // Guide request. A completed result remains valid until its own matching End.
     MessageBoxGuard boxes;

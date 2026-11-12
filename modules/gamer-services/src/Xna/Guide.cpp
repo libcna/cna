@@ -7,6 +7,7 @@
 // GamerServicesDispatcher::Initialize installs. Reading IsTrialMode must not link any of them,
 // let alone the avatar system the full Guide draws (docs/link-size-architecture.md).
 #include "Microsoft/Xna/Framework/GamerServices/Guide.hpp"
+#include "../Internal/GuideOverlay.hpp"
 #include "CNA/Platform/CurrentPlatform.hpp"
 #include "CNA/Platform/IPlatform.hpp"
 #include "CNA/Platform/IPlatformSystemServices.hpp"
@@ -42,8 +43,13 @@ namespace Microsoft::Xna::Framework::GamerServices
 
     void Guide::setNotificationPositionProperty(NotificationPosition value)
     {
-        if (value != position_)
-            position_ = value;
+        // XNA Refresh set_NotificationPosition IL_0000-0006 returns for an unchanged value; a change
+        // goes to the kernel (IL_0008), which needs initialized gamer services (owner decision
+        // 2026-11-12), and is stored only after it (IL_007e).
+        if (value == position_)
+            return;
+        CNA::Internal::GamerServices::throwIfGamerServicesNotInitialized();
+        position_ = value;
     }
 
     bool Guide::getSimulateTrialModeProperty()          { return simulateTrialMode_; }
