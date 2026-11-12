@@ -388,23 +388,37 @@ namespace Microsoft::Xna::Framework::Audio
                 for (auto* sb : xactImpl_->soundBanks) if (sb) sb->engine_ = nullptr;
                 for (auto* wb : xactImpl_->waveBanks) if (wb) wb->engine_ = nullptr;
             }
+            const auto releaseImpl = [this]
+            {
+                rendererDetails_.clear();
+#ifdef SOUND_ENABLED
+                // Retire callback-owned storage before the impl, through the mixer barrier.
+                if(xactImpl_ && xactImpl_->wetGeneration==CNA::Internal::Audio::GetMixerEngineGeneration())
+                    for(auto bus:xactImpl_->wetBuses)CNA::Internal::Audio::ReleaseReverbBus(bus);
+#endif
+                xactImpl_.reset();
+            };
             std::vector<std::pair<WaveBank*, std::weak_ptr<char>>> waveBanks;
             std::vector<std::pair<SoundBank*, std::weak_ptr<char>>> soundBanks;
             std::vector<std::pair<Cue*, std::weak_ptr<char>>> cues;
-            if (xactImpl_)
+            try
             {
-                for (auto* wb : xactImpl_->waveBanks) if (wb) waveBanks.emplace_back(wb, wb->lifetime_);
-                for (auto* sb : xactImpl_->soundBanks) if (sb) soundBanks.emplace_back(sb, sb->lifetime_);
-                for (auto* cue : xactImpl_->activeCues) if (cue) cues.emplace_back(cue, cue->lifetime_);
+                if (xactImpl_)
+                {
+                    for (auto* wb : xactImpl_->waveBanks) if (wb) waveBanks.emplace_back(wb, wb->lifetime_);
+                    for (auto* sb : xactImpl_->soundBanks) if (sb) soundBanks.emplace_back(sb, sb->lifetime_);
+                    for (auto* cue : xactImpl_->activeCues) if (cue) cues.emplace_back(cue, cue->lifetime_);
+                }
             }
-
-            rendererDetails_.clear();
-#ifdef SOUND_ENABLED
-            // Retire callback-owned storage before the impl, through the mixer barrier.
-            if(xactImpl_ && xactImpl_->wetGeneration==CNA::Internal::Audio::GetMixerEngineGeneration())
-                for(auto bus:xactImpl_->wetBuses)CNA::Internal::Audio::ReleaseReverbBus(bus);
-#endif
-            xactImpl_.reset();
+            catch (...)
+            {
+                // Out of memory for the list: the banks, detached above, will not unregister
+                // again, so their raw entries go with the impl -- Update and every other engine
+                // call then sees a released engine instead of walking freed banks.
+                releaseImpl();
+                throw;
+            }
+            releaseImpl();
 
             // A throwing handler does not leave the rest attached to a released engine: every
             // dependent is disposed, then the first exception propagates (as from XNA's loop),
