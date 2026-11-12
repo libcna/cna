@@ -1341,11 +1341,13 @@ TEST(WaveBankTest, DisposeForceStopsStillPlayingCue)
     try
     {
         AudioEngine& engine = SharedEngine();
-        WaveBank wb(&engine, XwbFixturePath());
+        // The four-second entry: the shared 100-frame fixture can finish between Play and the
+        // IsPlaying check under the dummy driver (as in IsInUseTrueWhilePausedNotJustWhilePlaying).
+        WaveBank wb(&engine, LongXwbFixturePath());
         ASSERT_TRUE(wb.getIsPreparedProperty());
-        SoundBank sb(&engine, XsbFixturePath());
+        SoundBank sb(&engine, LongXsbFixturePath());
 
-        std::unique_ptr<Cue> cue(sb.GetCue("Boom"));
+        std::unique_ptr<Cue> cue(sb.GetCue(kLongCueName));
         cue->Play();
 
         if (!wb.getIsInUseProperty())

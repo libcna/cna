@@ -2771,7 +2771,9 @@ TEST(CueTest, PlayCalledTwiceWhileAlreadyPlayingIsANoOpAndDoesNotDuplicateInstan
 
     try
     {
-        std::unique_ptr<Cue> cue(SharedApply3DBank().GetCue("Apply3DCue"));
+        // The one-second LongCue, not the ~1 ms Apply3DCue: the dummy driver can finish a 1 ms
+        // sound between the two Play calls, and the finished instance is then (correctly) gone.
+        std::unique_ptr<Cue> cue(SharedLongBank().GetCue("LongCue"));
         cue->Play();
 
         SoundEffectInstance* first = CueTestAccess::ActiveInstance(*cue, 0);
