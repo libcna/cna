@@ -11,7 +11,11 @@
 
 #include "System/ArgumentOutOfRangeException.hpp"
 #include "System/FormatException.hpp"
+#include "SharpRuntime/SharpRuntimeHelper.hpp"
+// Write(decimal)/ReadDecimal exist only where sharp-runtime has a native 128-bit integer (not MSVC).
+#if SHARP_RUNTIME_HAS_NATIVE_INT128
 #include "System/Decimal.hpp"
+#endif
 #include "System/IO/EndOfStreamException.hpp"
 #include "System/IO/IOException.hpp"
 #include "Microsoft/Xna/Framework/Net/PacketReader.hpp"
@@ -94,8 +98,12 @@ TEST(PacketWriterTest, CharactersStringLiteralsArraysAndDecimalsUseTheInheritedD
     w.Write("AB");
     const SharpRuntime::bytecs bytes[2] = {42, 43};
     w.Write(bytes);
+#if SHARP_RUNTIME_HAS_NATIVE_INT128
     w.Write(System::Decimal(7));
     EXPECT_EQ(w.getLengthProperty(), 1 + 3 + 2 + 16);
+#else
+    EXPECT_EQ(w.getLengthProperty(), 1 + 3 + 2);
+#endif
 
     PacketReader r;
     std::vector<uint8_t> data(static_cast<std::size_t>(w.getLengthProperty()));
@@ -107,7 +115,9 @@ TEST(PacketWriterTest, CharactersStringLiteralsArraysAndDecimalsUseTheInheritedD
     EXPECT_EQ(r.ReadString(), "AB");
     EXPECT_EQ(r.ReadByte(), 42);
     EXPECT_EQ(r.ReadByte(), 43);
+#if SHARP_RUNTIME_HAS_NATIVE_INT128
     EXPECT_EQ(r.ReadDecimal(), System::Decimal(7));
+#endif
     EXPECT_EQ(r.Read(), -1);
 }
 
