@@ -74,6 +74,8 @@ static int runtime(void)
         CNA_GestureSample sample;
         CNA_Bool available = CNA_FALSE;
         CHECK(cna_touch_panel_set_input_suppressed_ext(game, CNA_FALSE) == CNA_RESULT_SUCCESS);
+        /* XNA refuses gesture reads until EnabledGestures has been assigned. */
+        CHECK(cna_touch_panel_set_enabled_gestures(game, CNA_GESTURE_TYPE_NONE) == CNA_RESULT_SUCCESS);
         CHECK(cna_gesture_sample_init(&sample) == CNA_RESULT_SUCCESS);
         sample.gesture_type = CNA_GESTURE_TYPE_TAP;
         CHECK(cna_touch_panel_enqueue_gesture_ext(game, &sample) == CNA_RESULT_SUCCESS);

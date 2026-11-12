@@ -2362,12 +2362,17 @@ static int validate_touch_panel_family(const CNA_Handle game)
         }
     }
 
-    /* An empty queue is a refusal, not an empty sample: the canonical read throws. */
+    /* An empty queue is a refusal, not an empty sample: the canonical read throws. Before
+       EnabledGestures is first assigned both reads refuse (XNA get_IsGestureAvailable and
+       ReadGesture IL_0000-0011); assigning None counts. */
     memset(&sample, 0, sizeof(sample));
     sample.struct_size = sizeof(CNA_GestureSample);
     sample.struct_version = UINT32_C(1);
     read_back = sample;
     if (cna_touch_panel_reset_for_tests_ext(game) != CNA_RESULT_SUCCESS ||
+        cna_touch_panel_get_is_gesture_available(game, &flag) != CNA_RESULT_INVALID_STATE ||
+        cna_touch_panel_read_gesture(game, &read_back) != CNA_RESULT_INVALID_STATE ||
+        cna_touch_panel_set_enabled_gestures(game, CNA_GESTURE_TYPE_NONE) != CNA_RESULT_SUCCESS ||
         cna_touch_panel_get_is_gesture_available(game, &flag) != CNA_RESULT_SUCCESS ||
         flag != CNA_FALSE ||
         cna_touch_panel_read_gesture(game, &read_back) != CNA_RESULT_INVALID_STATE) {
@@ -2515,8 +2520,8 @@ static int validate_touch_panel_family(const CNA_Handle game)
         cna_touch_panel_reset_for_tests_ext(game) != CNA_RESULT_SUCCESS ||
         cna_touch_panel_get_enabled_gestures(game, &gestures) != CNA_RESULT_SUCCESS ||
         gestures != CNA_GESTURE_TYPE_NONE ||
-        cna_touch_panel_get_is_gesture_available(game, &flag) != CNA_RESULT_SUCCESS ||
-        flag != CNA_FALSE ||
+        /* The reset also forgets that EnabledGestures was ever assigned: gesture reads refuse. */
+        cna_touch_panel_get_is_gesture_available(game, &flag) != CNA_RESULT_INVALID_STATE ||
         cna_touch_panel_get_touch_device_exists_ext(game, &flag) != CNA_RESULT_SUCCESS ||
         flag != CNA_FALSE ||
         cna_touch_panel_get_display_width(game, &value) != CNA_RESULT_SUCCESS || value != 0 ||

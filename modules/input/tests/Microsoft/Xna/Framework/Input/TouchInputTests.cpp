@@ -8,6 +8,8 @@
 #include "Microsoft/Xna/Framework/DisplayOrientation.hpp"
 #include "Microsoft/Xna/Framework/Input/Touch/TouchPanel.hpp"
 #include "System/InvalidOperationException.hpp"
+#include "System/ArgumentException.hpp"
+#include "CNA/Internal/Input/InputManager.hpp"
 
 #include <stdexcept>
 #include <string>
@@ -121,8 +123,53 @@ TEST(TouchInputTest, GetStateOrdersMultipleTouchesByAscendingIdRegardlessOfInser
     ResetTouchState();
 }
 
+// RV-INPUT review #4: XNA's gesture reads refuse until EnabledGestures has been assigned
+// (get_IsGestureAvailable / ReadGesture IL_0000-0011, FrameworkResources.GesturesNotEnabled); any
+// accepted assignment counts, None included (set_EnabledGestures IL_001a-001b). An empty queue then
+// names GesturesNotAvailable (ReadGesture IL_0012-001c).
+TEST(TouchInputTest, GestureReadsRefuseUntilEnabledGesturesIsAssigned)
+{
+    CNA::Internal::Input::InputManager::ResetAllForTests();
+    const std::string notEnabled =
+        "This operation cannot be completed until TouchPanel.EnabledGestures is assigned.";
+    try { (void)TouchPanel::getIsGestureAvailableProperty(); ADD_FAILURE() << "IsGestureAvailable accepted"; }
+    catch (const System::InvalidOperationException& e) { EXPECT_EQ(std::string(e.what()), notEnabled); }
+    try { (void)TouchPanel::ReadGesture(); ADD_FAILURE() << "ReadGesture accepted"; }
+    catch (const System::InvalidOperationException& e) { EXPECT_EQ(std::string(e.what()), notEnabled); }
+
+    TouchPanel::setEnabledGesturesProperty(GestureType::None);
+    EXPECT_FALSE(TouchPanel::getIsGestureAvailableProperty());
+    try { (void)TouchPanel::ReadGesture(); ADD_FAILURE() << "ReadGesture of an empty queue accepted"; }
+    catch (const System::InvalidOperationException& e)
+    {
+        EXPECT_EQ(std::string(e.what()),
+                  "No gestures are available at this time.  TouchPanel.ReadGesture should only be "
+                  "called when TouchPanel.IsGestureAvailable is true.");
+    }
+    CNA::Internal::Input::InputManager::ResetAllForTests();
+}
+
+// RV-INPUT review #7: Helpers.ValidateOrientation IL_000f-0019 throws ArgumentException with
+// FrameworkResources.InvalidDisplayOrientation, keeping the previous orientation.
+TEST(TouchInputTest, AnInvalidOrientationNamesXnasMessage)
+{
+    const DisplayOrientation previous = TouchPanel::getDisplayOrientationProperty();
+    try
+    {
+        TouchPanel::setDisplayOrientationProperty(static_cast<DisplayOrientation>(3));
+        ADD_FAILURE() << "orientation 3 accepted";
+    }
+    catch (const System::ArgumentException& e)
+    {
+        EXPECT_EQ(e.getMessageProperty(), "The specified DisplayOrientation is invalid.");
+    }
+    EXPECT_EQ(TouchPanel::getDisplayOrientationProperty(), previous);
+}
+
 TEST(TouchInputTest, EnqueueGestureAndReadGestureFollowFifoOrder)
 {
+    // XNA refuses gesture reads until EnabledGestures has been assigned; an unchanged value counts.
+    TouchPanel::setEnabledGesturesProperty(TouchPanel::getEnabledGesturesProperty());
     while (TouchPanel::getIsGestureAvailableProperty())
     {
         (void)TouchPanel::ReadGesture();
@@ -151,6 +198,8 @@ TEST(TouchInputTest, EnqueueGestureAndReadGestureFollowFifoOrder)
 // is enqueued, and false again after the last one is read (FNA: `IsGestureAvailable => gestures.Count > 0`).
 TEST(TouchInputTest, IsGestureAvailableReflectsQueueState)
 {
+    // XNA refuses gesture reads until EnabledGestures has been assigned; an unchanged value counts.
+    TouchPanel::setEnabledGesturesProperty(TouchPanel::getEnabledGesturesProperty());
     while (TouchPanel::getIsGestureAvailableProperty())
     {
         (void)TouchPanel::ReadGesture();
@@ -167,6 +216,8 @@ TEST(TouchInputTest, IsGestureAvailableReflectsQueueState)
 
 TEST(TouchInputTest, ReadGestureThrowsInvalidOperationExceptionWhenQueueIsEmpty)
 {
+    // XNA refuses gesture reads until EnabledGestures has been assigned; an unchanged value counts.
+    TouchPanel::setEnabledGesturesProperty(TouchPanel::getEnabledGesturesProperty());
     while (TouchPanel::getIsGestureAvailableProperty())
     {
         (void)TouchPanel::ReadGesture();
@@ -217,6 +268,8 @@ TEST(TouchInputTest, DefaultEnabledGesturesIsNone)
 TEST(TouchInputTest, ChangingEnabledGesturesDoesNotClearTheQueue)
 {
     const GestureType previous = TouchPanel::getEnabledGesturesProperty();
+    // XNA refuses gesture reads until EnabledGestures has been assigned; an unchanged value counts.
+    TouchPanel::setEnabledGesturesProperty(TouchPanel::getEnabledGesturesProperty());
     while (TouchPanel::getIsGestureAvailableProperty())
     {
         (void)TouchPanel::ReadGesture();

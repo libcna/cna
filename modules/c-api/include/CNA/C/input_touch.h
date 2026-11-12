@@ -642,9 +642,12 @@ CNA_C_API CNA_Result cna_touch_panel_set_enabled_gestures(
  *
  * @param game Active owned or callback-borrowed game handle.
  * @param out_available Receives `CNA_TRUE` when a gesture is queued.
- * @return `CNA_RESULT_SUCCESS` or a documented argument/handle/thread/native failure.
+ * @return `CNA_RESULT_SUCCESS`; `CNA_RESULT_INVALID_STATE` before enabled gestures were ever
+ *         assigned; or a documented argument/handle/thread/native failure.
  *
- * Check this before `cna_touch_panel_read_gesture`, which refuses on an empty queue.
+ * Check this before `cna_touch_panel_read_gesture`, which refuses on an empty queue. As in XNA,
+ * both refuse until `cna_touch_panel_set_enabled_gestures` has been called once, with any accepted
+ * value including `CNA_GESTURE_TYPE_NONE`.
  */
 CNA_C_API CNA_Result cna_touch_panel_get_is_gesture_available(
     CNA_Handle game,
@@ -742,8 +745,8 @@ CNA_C_API CNA_Result cna_touch_panel_set_touch_device_exists_ext(
  *
  * @param game Active owned or callback-borrowed game handle.
  * @param out_sample Caller-provided versioned structure to receive the gesture.
- * @return `CNA_RESULT_SUCCESS`; `CNA_RESULT_INVALID_STATE` when no gesture is queued; or a
- *         documented argument/handle/thread/native failure.
+ * @return `CNA_RESULT_SUCCESS`; `CNA_RESULT_INVALID_STATE` when no gesture is queued or enabled
+ *         gestures were never assigned; or a documented argument/handle/thread/native failure.
  *
  * An empty queue is a **refusal**, not an empty sample: the canonical operation throws, and C
  * preserves that rather than inventing a default answer. Check

@@ -76,6 +76,14 @@ namespace Microsoft::Xna::Framework::Input::Touch
     TouchPanel::intcs TouchPanel::displayHeight_ = 0;
     DisplayOrientation TouchPanel::displayOrientation_ = DisplayOrientation::Default;
     GestureType TouchPanel::enabledGestures_ = GestureType::None;
+    namespace
+    {
+        // XNA's _haveGestureBeenEnabled: set by any accepted EnabledGestures assignment, None
+        // included (set_EnabledGestures IL_001a-001b); the gesture reads refuse until then.
+        bool haveGesturesBeenEnabled = false;
+        constexpr const char* kGesturesNotEnabled =
+            "This operation cannot be completed until TouchPanel.EnabledGestures is assigned.";
+    }
     std::uintptr_t TouchPanel::windowHandle_ = 0;
     bool TouchPanel::touchDeviceExists_ = false;
     bool TouchPanel::mouseTouchEmulationEnabled_ = false;
@@ -118,7 +126,8 @@ namespace Microsoft::Xna::Framework::Input::Touch
         if (value != DisplayOrientation::Default && value != DisplayOrientation::LandscapeLeft &&
             value != DisplayOrientation::LandscapeRight && value != DisplayOrientation::Portrait)
         {
-            throw System::ArgumentException("DisplayOrientation");
+            // Helpers.ValidateOrientation IL_000f-0019: FrameworkResources.InvalidDisplayOrientation.
+            throw System::ArgumentException("The specified DisplayOrientation is invalid.");
         }
         displayOrientation_ = value;
     }
@@ -136,10 +145,13 @@ namespace Microsoft::Xna::Framework::Input::Touch
             throw System::ArgumentException("EnabledGestures");
         }
         enabledGestures_ = value;
+        haveGesturesBeenEnabled = true;
     }
 
     bool TouchPanel::getIsGestureAvailableProperty()
     {
+        // get_IsGestureAvailable IL_0000-0011 refuses before EnabledGestures was ever assigned.
+        if (!haveGesturesBeenEnabled) throw System::InvalidOperationException(kGesturesNotEnabled);
         return !gestures_.empty();
     }
 
@@ -272,9 +284,14 @@ namespace Microsoft::Xna::Framework::Input::Touch
 
     GestureSample TouchPanel::ReadGesture()
     {
+        // ReadGesture IL_0000-0011 refuses before EnabledGestures was assigned; IL_0012-001c names
+        // an empty queue (FrameworkResources.GesturesNotEnabled / GesturesNotAvailable).
+        if (!haveGesturesBeenEnabled) throw System::InvalidOperationException(kGesturesNotEnabled);
         if (gestures_.empty())
         {
-            throw System::InvalidOperationException();
+            throw System::InvalidOperationException(
+                "No gestures are available at this time.  TouchPanel.ReadGesture should only be "
+                "called when TouchPanel.IsGestureAvailable is true.");
         }
 
         GestureSample result = gestures_.front();
@@ -438,6 +455,7 @@ namespace Microsoft::Xna::Framework::Input::Touch
         }
         touchDeviceExists_  = false;
         enabledGestures_    = GestureType::None;
+        haveGesturesBeenEnabled = false;
         // Also reset the display metrics + window handle. INTERNAL_onTouchEvent scales touch
         // coordinates by displayWidth_/displayHeight_ and early-returns when either is <= 0, so a
         // leaked display size from a prior test silently corrupts another test's touch/gesture

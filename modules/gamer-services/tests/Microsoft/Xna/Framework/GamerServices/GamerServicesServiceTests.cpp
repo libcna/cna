@@ -649,6 +649,8 @@ TEST(GuideTest, AVisibleMessageBoxWithholdsTouchInputFromTheGame) {
     using Microsoft::Xna::Framework::Input::Touch::TouchPanel;
 
     MessageBoxGuard guard;
+    // XNA refuses gesture reads until EnabledGestures has been assigned (RV-INPUT-4).
+    TouchPanel::setEnabledGesturesProperty(TouchPanel::getEnabledGesturesProperty());
     TouchPanel::setInputSuppressedEXT(false);
     ASSERT_FALSE(TouchPanel::getInputSuppressedEXT());
 
@@ -685,6 +687,8 @@ TEST(GuideTest, ARaisedOverlayDiscardsGesturesAlreadyQueued) {
     using Microsoft::Xna::Framework::Input::Touch::TouchPanel;
 
     MessageBoxGuard guard;
+    // XNA refuses gesture reads until EnabledGestures has been assigned (RV-INPUT-4).
+    TouchPanel::setEnabledGesturesProperty(TouchPanel::getEnabledGesturesProperty());
     TouchPanel::setInputSuppressedEXT(false);
     TouchPanel::EnqueueGesture(GestureSample(
         GestureType::Tap, System::TimeSpan::Zero,
@@ -1060,6 +1064,8 @@ TEST(GuideTest, TheClickThatAnswersAMessageBoxDoesNotAlsoReachTheGame) {
     using Microsoft::Xna::Framework::Input::Touch::TouchPanel;
 
     MessageBoxGuard guard;
+    // XNA refuses gesture reads until EnabledGestures has been assigned (RV-INPUT-4).
+    TouchPanel::setEnabledGesturesProperty(TouchPanel::getEnabledGesturesProperty());
     GraphicsDevice device;
     SpriteBatch spriteBatch(device);
     auto font = MakeSimpleTestFont(device);

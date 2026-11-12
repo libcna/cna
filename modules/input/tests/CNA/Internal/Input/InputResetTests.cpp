@@ -69,11 +69,14 @@ TEST(InputResetAllForTests, ClearsTouchPanelDisplayMetricsAndTouches)
 TEST(InputResetAllForTests, ClearsQueuedGesturesOnReset)
 {
     InputManager::ResetAllForTests();
+    // XNA refuses gesture reads until EnabledGestures has been assigned (RV-INPUT-4).
+    TouchPanel::setEnabledGesturesProperty(GestureType::None);
     TouchPanel::EnqueueGesture(GestureSample(GestureType::Tap, System::TimeSpan::FromMilliseconds(1.0),
                                              Vector2(1.0f, 2.0f), Vector2::Zero, Vector2::Zero, Vector2::Zero));
     ASSERT_TRUE(TouchPanel::getIsGestureAvailableProperty());
 
     InputManager::ResetAllForTests();
+    TouchPanel::setEnabledGesturesProperty(GestureType::None);
 
     EXPECT_FALSE(TouchPanel::getIsGestureAvailableProperty())
         << "ResetAllForTests must empty the gesture queue";
