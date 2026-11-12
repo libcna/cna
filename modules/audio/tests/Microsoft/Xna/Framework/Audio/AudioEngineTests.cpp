@@ -699,6 +699,41 @@ TEST(AudioEngineTest, ACueDestroyedByASiblingsDisposingHandlerIsNotDisposedAgain
     EXPECT_TRUE(first->getIsDisposedProperty());
 }
 
+// A cue's Disposing handler that destroys the bank being disposed and throws: the cascade stops
+// without touching the destroyed bank and the exception reaches the caller.
+TEST(AudioEngineTest, ACueHandlerThatDestroysItsBankAndThrowsEndsTheCascade)
+{
+    AudioEngine engine(XgsFixturePath());
+    WaveBank wave(&engine, WriteFixture("destroyed_parent.xwb", BuildXA8XwbFixtureBytes()));
+    auto bank = std::make_unique<SoundBank>(&engine, WriteFixture("destroyed_parent.xsb", BuildXA8XsbFixtureBytes()));
+    std::unique_ptr<Cue> cue(bank->GetCue("XA8Cue"));
+    cue->Disposing += [&](System::Object*, const System::EventArgs&) {
+        bank.reset();
+        throw std::runtime_error("bank destroyed");
+    };
+    SoundBank* const disposing = bank.get();
+    EXPECT_THROW(disposing->Dispose(), std::runtime_error);
+    EXPECT_EQ(bank, nullptr);
+    EXPECT_TRUE(cue->getIsDisposedProperty());
+}
+
+// A Disposing handler that throws while its cue is being destroyed (here by a sibling's handler)
+// cannot leave the destructor; the bank's teardown goes on instead of the process terminating.
+TEST(AudioEngineTest, AHandlerThrowingInsideACueDestructorDoesNotTerminate)
+{
+    AudioEngine engine(XgsFixturePath());
+    WaveBank wave(&engine, WriteFixture("throwing_destructor.xwb", BuildXA8XwbFixtureBytes()));
+    SoundBank bank(&engine, WriteFixture("throwing_destructor.xsb", BuildXA8XsbFixtureBytes()));
+    std::unique_ptr<Cue> first(bank.GetCue("XA8Cue"));
+    std::unique_ptr<Cue> second(bank.GetCue("XA8Cue"));
+    second->Disposing += [](System::Object*, const System::EventArgs&) { throw std::runtime_error("second"); };
+    first->Disposing += [&](System::Object*, const System::EventArgs&) { second.reset(); };
+    EXPECT_NO_THROW(bank.Dispose());
+    EXPECT_EQ(second, nullptr);
+    EXPECT_TRUE(first->getIsDisposedProperty());
+    EXPECT_TRUE(bank.getIsDisposedProperty());
+}
+
 // During its bank's teardown a cue's Disposing handler meets a released bank: GetCue refuses as
 // native GetCue IL_013c-014c does (managed GetCue IL_0035-005d formats CueNotFound) and PlayCue
 // with InvalidOperationException, so no cue outlives the bank it points at.

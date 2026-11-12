@@ -174,7 +174,15 @@ TEST(XactInstanceCount, PublicLookupRetainsVariableDomainAndDisposalValidation)
     // A built-in name the project authors as a private cue variable is refused too; only a
     // project that does not author it at all falls back to the built-in default.
     {
-        ScheduledBanks b({{PlayAt(0,0,255)}},0,false,CountRpcXgs(6,"Distance"));auto cue=b.Play();
+        ScheduledBanks b({{PlayAt(0,0,255)}},0,false,CountRpcXgs(6,"Distance"));
+        // XACT3DApply writes Distance through the same SetVariable and checks it
+        // (Xact IL_0060-0063): Apply3D refuses too, before it positions the cue.
+        std::unique_ptr<Cue> prepared(b.sound->GetCue("Sequence"));
+        EXPECT_THROW(prepared->Apply3D(AudioListener{},AudioEmitter{}),System::IndexOutOfRangeException);
+        prepared->Play();
+        EXPECT_THROW(prepared->Apply3D(AudioListener{},AudioEmitter{}),System::InvalidOperationException)
+            << "the refused Apply3D positioned the cue";
+        auto cue=b.Play();
         EXPECT_THROW((void)cue->GetVariable("Distance"),System::IndexOutOfRangeException);
         EXPECT_THROW(cue->SetVariable("Distance",9.0f),System::IndexOutOfRangeException);
     }

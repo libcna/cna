@@ -84,7 +84,10 @@ namespace Microsoft::Xna::Framework::Audio
 
     SoundBank::~SoundBank()
     {
-        Dispose();
+        // A destructor cannot let a Disposing handler's exception out (it is noexcept, and the
+        // throw would terminate the process inside an enclosing cascade); it is dropped here.
+        try { Dispose(); }
+        catch (...) {}
     }
 
     // ── Properties ────────────────────────────────────────────────────────────
@@ -276,12 +279,19 @@ namespace Microsoft::Xna::Framework::Audio
             std::vector<std::pair<Cue*, std::weak_ptr<char>>> cues;
             for (auto* cue : activeCues_)
                 if (cue) cues.emplace_back(cue, cue->lifetime_);
+            // A handler may also destroy this bank: then nothing of it may be touched again.
+            const std::weak_ptr<char> self = lifetime_;
             std::exception_ptr failure;
             for (auto& [cue, alive] : cues)
             {
                 if (alive.expired()) continue;
                 try { cue->Dispose(); } // idempotent; safe even if the caller already disposed it
                 catch (...) { if (!failure) failure = std::current_exception(); }
+                if (self.expired())
+                {
+                    if (failure) std::rethrow_exception(failure);
+                    return;
+                }
             }
             activeCues_.clear();
 

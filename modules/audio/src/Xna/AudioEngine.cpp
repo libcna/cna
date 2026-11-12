@@ -104,7 +104,10 @@ namespace Microsoft::Xna::Framework::Audio
 
     AudioEngine::~AudioEngine()
     {
-        Dispose();
+        // A destructor cannot let a Disposing handler's exception out (it is noexcept, and the
+        // throw would terminate the process inside an enclosing cascade); it is dropped here.
+        try { Dispose(); }
+        catch (...) {}
     }
 
     void AudioEngine::Init(const std::string& settingsFile)
@@ -396,19 +399,26 @@ namespace Microsoft::Xna::Framework::Audio
             // A throwing handler does not leave the rest attached to a released engine: every
             // dependent is disposed, then the first exception propagates (as from XNA's loop),
             // before this engine's own Disposing.
+            // A handler may also destroy this engine: then nothing of it may be touched again,
+            // and the banks not yet disposed keep a pointer to it (KNOWN_ISSUES.md).
+            const std::weak_ptr<char> self = lifetime_;
             std::exception_ptr failure;
-            const auto disposeEach = [&failure](auto& entries)
+            const auto disposeEach = [&failure, &self](auto& entries)
             {
                 for (auto& [object, alive] : entries)
                 {
                     if (alive.expired()) continue;
                     try { object->Dispose(); }
                     catch (...) { if (!failure) failure = std::current_exception(); }
+                    if (self.expired()) return false;
                 }
+                return true;
             };
-            disposeEach(cues);
-            disposeEach(soundBanks);
-            disposeEach(waveBanks);
+            if (!disposeEach(cues) || !disposeEach(soundBanks) || !disposeEach(waveBanks))
+            {
+                if (failure) std::rethrow_exception(failure);
+                return;
+            }
             if (failure) std::rethrow_exception(failure);
 
             if (disposing)

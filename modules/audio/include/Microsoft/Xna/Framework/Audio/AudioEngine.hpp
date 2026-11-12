@@ -170,6 +170,8 @@ namespace Microsoft::Xna::Framework::Audio
         std::unique_ptr<XactEngineImpl> xactImpl_;
 
         bool isDisposed_ = false;
+        // Expires with this engine, so its disposal cascade stops if a handler destroys it.
+        std::shared_ptr<char> lifetime_ = std::make_shared<char>();
         std::vector<RendererDetail> rendererDetails_;
 
         void Init(const std::string& settingsFile);

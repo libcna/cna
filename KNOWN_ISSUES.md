@@ -78,6 +78,10 @@ page under `docs/` (index: `docs/README.md`), deliberate divergences from FNA an
 
 ### Divergences from XNA, not fixed (state of 2026-11-11)
 
+- XACT teardown (review rv-cue3, 2026-11-12): an AudioEngine destroyed by a Disposing handler
+  during its own disposal cascade stops the cascade, and the banks it had not yet disposed keep a
+  pointer to it; a later use of such a bank reads freed memory. XNA's managed references cannot
+  dangle this way. A handler that destroys the bank or wave bank being disposed is handled.
 - XACT (HND-XACT-06, evidence `../cnaplan/evidence/rev002/hnd-xact-06-loop-extensions/`): with only an
   effect NEW_ON_LOOP (families 4/6), XACT holds one wave and varies its pitch per pass; CNA plays n+1
   complete waves of the first candidate with a new effect draw each (count and candidate match).

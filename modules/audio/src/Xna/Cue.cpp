@@ -236,7 +236,10 @@ namespace Microsoft::Xna::Framework::Audio
 
     Cue::~Cue()
     {
-        Dispose();
+        // A destructor cannot let a Disposing handler's exception out (it is noexcept, and the
+        // throw would terminate the process inside an enclosing cascade); it is dropped here.
+        try { Dispose(); }
+        catch (...) {}
     }
 
     // ── State properties ──────────────────────────────────────────────────────
@@ -714,6 +717,13 @@ namespace Microsoft::Xna::Framework::Audio
             // XNA 4.0 Refresh: Cue.Apply3D IL_002c-0036 / Apply3DBeforePlaying.
             throw System::InvalidOperationException(
                 "You must call Apply3D on a Cue before calling Play to be able to call Apply3D after calling Play.");
+        // XACT3DApply checks each of its three SetVariable writes (Xact IL_0060-0063, 008c-008f,
+        // 00c4-00c6) and Cue.Apply3D sets applied3D only after success (IL_0086-0088): a project
+        // that authors one of them outside the public cue scope refuses before anything changes.
+        if (AudioEngine* eng = bank_ ? bank_->engine_ : nullptr)
+            for (const char* name : {"Distance", "DopplerPitchScalar", "OrientationAngle"})
+                if (eng->FindVariable(name) && !eng->GetCueVariableInfo(name).valid)
+                    throw System::IndexOutOfRangeException(kInvalidVariableIndex);
 
         // SDL3_mixer has no per-cue 3D audio graph (FAudio's FACT3DApply); approximate by
         // applying the same pan/distance-attenuation/Doppler SoundEffectInstance::Apply3D already
