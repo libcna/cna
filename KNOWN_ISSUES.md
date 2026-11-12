@@ -37,7 +37,14 @@ page under `docs/` (index: `docs/README.md`), deliberate divergences from FNA an
 
 - **Genuine-XNA native teardown fault (TQ-SWEEP14-02), unattributed.** The harness ownership gap is
   repaired (2026-11-08); the one-off Wine fault of sweep 14 did not reproduce with the old or the
-  new harness. If it recurs, capture `+loaddll,+seh` and a WineDbg stack; never suppress the nonzero result.
+  new harness. It recurred once in sweep 19 (2026-11-12, acaf9ac9b, `cmake-build-multi`,
+  `XnaPipelineGenuineRuntimeBuiltFamilies`): all three fixtures passed and every object was disposed
+  in order, then Wine reported "Unhandled page fault on execute access" at process teardown (exit
+  code 5); sweep 18 passed it. Not traced. If it recurs, capture `+loaddll,+seh` and a WineDbg
+  stack; never suppress the nonzero result.
+- **`scripts/check_cnaext_matrix.py` fails and runs nowhere.** It looks for a heading
+  (`### Every renderer identity`) that `docs/cnaext-engine-layer.md` no longer has since 4f346aada;
+  no CI workflow or CMake test calls it, so nothing noticed. Either repair its anchor or delete it.
 - **FNA3D-3 and FNA3D-8 are open in the FNA3D fork** (`docs/fna3d-dependency-defects.md`). FNA3D-3:
   the SDL GPU driver applies no MultiSampleMask (see External and driver limitations). FNA3D-8: CNA
   forwards a source rectangle and a whole-client destination on FNA3D's OpenGL and SDL GPU drivers
