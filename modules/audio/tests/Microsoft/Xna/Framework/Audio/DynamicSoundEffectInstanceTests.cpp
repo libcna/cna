@@ -5,6 +5,7 @@
 #include <chrono>
 #include <cstdlib>
 #include <memory>
+#include <new>
 #include <semaphore>
 #include <stdexcept>
 #include <thread>
@@ -1590,6 +1591,100 @@ TEST(DynamicSoundEffectInstanceTest, AHandlerMayDestroyAnotherStreamDuringTheDis
     EXPECT_EQ(b, nullptr);
     EXPECT_EQ(bCalls, 0);
     a->Stop(true);
+}
+
+// Review rv-fix9 #1: a handler that destroys its own instance during a direct Update must not leave
+// Update reading it afterwards. Meaningful under AddressSanitizer.
+TEST(DynamicSoundEffectInstanceTest, AHandlerMayDestroyItsOwnInstanceDuringADirectUpdate)
+{
+    auto d = std::make_unique<DynamicSoundEffectInstance>(8000, AudioChannels::Stereo);
+    if (!PlayOnDummy(*d)) GTEST_SKIP() << "no audio device (dummy driver unavailable)";
+    int calls = 0;
+    d->BufferNeeded += [&](System::Object*, const System::EventArgs&) { ++calls; d.reset(); };
+    DynamicSoundEffectInstance* raw = d.get();
+    EXPECT_NO_THROW(raw->Update());
+    EXPECT_EQ(calls, 1);
+    EXPECT_EQ(d, nullptr);
+}
+
+// Review rv-fix9 #2: a batch has one owner. The dispatcher reserves B's notification before A's
+// handler runs, so a nested B.Update() there delivers nothing, and B hears its one post once.
+TEST(DynamicSoundEffectInstanceTest, ANestedUpdateDoesNotDeliverABatchTwice)
+{
+    DynamicSoundEffectInstance a(8000, AudioChannels::Stereo);
+    DynamicSoundEffectInstance b(8000, AudioChannels::Stereo);
+    if (!PlayOnDummy(a) || !PlayOnDummy(b)) GTEST_SKIP() << "no audio device (dummy driver unavailable)";
+    int aCalls = 0, bCalls = 0;
+    b.BufferNeeded += [&](System::Object*, const System::EventArgs&) { ++bCalls; };
+    a.BufferNeeded += [&](System::Object*, const System::EventArgs&) {
+        ++aCalls;
+        b.Update();
+        a.Update(); // the same instance's own batch is already taken
+    };
+    Microsoft::Xna::Framework::FrameworkDispatcher::Update();
+    EXPECT_EQ(aCalls, 1);
+    EXPECT_EQ(bCalls, 1);
+    Microsoft::Xna::Framework::FrameworkDispatcher::Update();
+    EXPECT_EQ(aCalls, 1);
+    EXPECT_EQ(bCalls, 1);
+    a.Stop(true);
+    b.Stop(true);
+}
+
+// Review rv-fix9 #3: a stream built in the storage of one a handler destroyed is a new object; it
+// must not receive the destroyed stream's batch. Its own start notification waits for the next
+// update.
+TEST(DynamicSoundEffectInstanceTest, ARecycledAddressDoesNotInheritTheDestroyedStreamsBatch)
+{
+    DynamicSoundEffectInstance a(8000, AudioChannels::Stereo);
+    alignas(DynamicSoundEffectInstance) unsigned char storage[sizeof(DynamicSoundEffectInstance)];
+    auto* b = new (storage) DynamicSoundEffectInstance(8000, AudioChannels::Stereo);
+    bool alive = true;
+    if (!PlayOnDummy(a) || !PlayOnDummy(*b))
+    {
+        b->~DynamicSoundEffectInstance();
+        GTEST_SKIP() << "no audio device (dummy driver unavailable)";
+    }
+    int cCalls = 0;
+    a.BufferNeeded += [&](System::Object*, const System::EventArgs&) {
+        if (!alive) return;
+        b->~DynamicSoundEffectInstance();
+        b = new (storage) DynamicSoundEffectInstance(8000, AudioChannels::Stereo);
+        b->BufferNeeded += [&](System::Object*, const System::EventArgs&) { ++cCalls; };
+        b->Play();
+        alive = false;
+    };
+    Microsoft::Xna::Framework::FrameworkDispatcher::Update();
+    EXPECT_EQ(cCalls, 0) << "the destroyed stream's batch is not the new one's";
+    Microsoft::Xna::Framework::FrameworkDispatcher::Update();
+    EXPECT_EQ(cCalls, 1) << "its own start notification arrives with the next update";
+    a.Stop(true);
+    b->~DynamicSoundEffectInstance();
+}
+
+// Review rv-fix9 #5: when any handler of a dispatcher step throws, XNA retries the whole copied
+// list (FrameworkDispatcher.Update IL_0112-0117), including notifications already delivered.
+TEST(DynamicSoundEffectInstanceTest, AThrowingHandlerLeavesEveryStreamsBatchForTheNextUpdate)
+{
+    DynamicSoundEffectInstance a(8000, AudioChannels::Stereo);
+    DynamicSoundEffectInstance b(8000, AudioChannels::Stereo);
+    if (!PlayOnDummy(a) || !PlayOnDummy(b)) GTEST_SKIP() << "no audio device (dummy driver unavailable)";
+    int aCalls = 0, bCalls = 0;
+    a.BufferNeeded += [&](System::Object*, const System::EventArgs&) { ++aCalls; };
+    b.BufferNeeded += [&](System::Object*, const System::EventArgs&) {
+        if (bCalls++ == 0) throw std::runtime_error("first handler call fails");
+    };
+    EXPECT_THROW(Microsoft::Xna::Framework::FrameworkDispatcher::Update(), std::runtime_error);
+    EXPECT_EQ(aCalls, 1);
+    EXPECT_EQ(bCalls, 1);
+    Microsoft::Xna::Framework::FrameworkDispatcher::Update();
+    EXPECT_EQ(aCalls, 2) << "the delivered half of the failed batch comes again";
+    EXPECT_EQ(bCalls, 2);
+    Microsoft::Xna::Framework::FrameworkDispatcher::Update();
+    EXPECT_EQ(aCalls, 2);
+    EXPECT_EQ(bCalls, 2);
+    a.Stop(true);
+    b.Stop(true);
 }
 
 // Review rv-fix8 #5: XNA tests the pending count when each buffer completes (OnBufferEnd

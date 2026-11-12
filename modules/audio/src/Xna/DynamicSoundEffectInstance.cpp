@@ -6,6 +6,7 @@
 
 #include <utility>
 #include <algorithm>
+#include <atomic>
 
 #include "Microsoft/Xna/Framework/FrameworkDispatcher.hpp"
 #include "Microsoft/Xna/Framework/Audio/NoAudioHardwareException.hpp"
@@ -25,6 +26,8 @@ namespace Microsoft::Xna::Framework::Audio
 
     struct DynamicSoundEffectDispatch
     {
+        using Batch = DynamicSoundEffectInstance::NotificationBatch;
+
         static bool Registered(DynamicSoundEffectInstance* instance)
         {
             using Microsoft::Xna::Framework::FrameworkDispatcher;
@@ -33,25 +36,46 @@ namespace Microsoft::Xna::Framework::Audio
             return std::find(streams.begin(), streams.end(), instance) != streams.end();
         }
 
-        // Delivers one instance's batch. Every step re-checks that the instance is still registered
-        // before touching it: a handler may stop it, or dispose or destroy it (directly or through
-        // the C API), and Dispose and Stop take it out of Streams. Returns normally only once the
-        // whole batch was delivered, or the instance left; an exception from a handler propagates
-        // with the batch kept.
-        static void Deliver(DynamicSoundEffectInstance* instance,
-                            const DynamicSoundEffectInstance::NotificationBatch& batch,
-                            bool requireRegistration)
+        // Whether the batch may still be delivered to (or handed back to) this instance. Membership
+        // in Streams is checked before anything else is read: a handler may stop the instance, or
+        // dispose or destroy it (directly or through the C API), and Stop and Dispose take it out
+        // of Streams. A registered address may hold a newer instance built in the same storage,
+        // which the serial tells apart; a Stop since the batch was taken changed the epoch.
+        static bool Current(DynamicSoundEffectInstance* instance, const Batch& batch)
+        {
+            return Registered(instance) && instance->notificationSerial_ == batch.serial &&
+                   !instance->getIsDisposedProperty() && instance->notificationEpoch_ == batch.epoch;
+        }
+
+        static void Deliver(DynamicSoundEffectInstance* instance, const Batch& batch)
         {
             for (SharpRuntime::intcs k = 0; k < batch.count; ++k)
             {
-                if (requireRegistration && !Registered(instance)) return;
-                if (instance->getIsDisposedProperty() || instance->notificationEpoch_ != batch.epoch) return;
+                if (!Current(instance, batch)) return;
                 instance->BufferNeeded.Raise(instance, System::EventArgs::Empty);
             }
-            if (requireRegistration && !Registered(instance)) return;
-            if (!instance->getIsDisposedProperty())
+        }
+
+        // Delivers the reserved batches in order. If a handler throws, every batch of this
+        // dispatcher step -- delivered or not -- is handed back to its still-current instance and
+        // the exception propagates, so the next update delivers the whole copy again, as XNA's
+        // pendingCallsCopy is retried in full.
+        static void DeliverAll(const std::vector<std::pair<DynamicSoundEffectInstance*, Batch>>& batches)
+        {
+            try
             {
-                instance->FinishNotificationBatch(batch);
+                for (const auto& [instance, batch] : batches)
+                {
+                    if (batch.count > 0) Deliver(instance, batch);
+                }
+            }
+            catch (...)
+            {
+                for (const auto& [instance, batch] : batches)
+                {
+                    if (batch.count > 0 && Current(instance, batch)) instance->RestoreNotificationBatch(batch);
+                }
+                throw;
             }
         }
 
@@ -68,22 +92,16 @@ namespace Microsoft::Xna::Framework::Audio
                 std::lock_guard<std::mutex> lock(FrameworkDispatcher::StreamsMutex);
                 snapshot = FrameworkDispatcher::Streams;
             }
-            std::vector<std::pair<DynamicSoundEffectInstance*, DynamicSoundEffectInstance::NotificationBatch>> batches;
+            std::vector<std::pair<DynamicSoundEffectInstance*, Batch>> batches;
             batches.reserve(snapshot.size());
             for (DynamicSoundEffectInstance* instance : snapshot)
             {
                 if (instance != nullptr && !instance->getIsDisposedProperty())
                 {
-                    batches.emplace_back(instance, instance->PrepareNotificationBatch());
+                    batches.emplace_back(instance, instance->TakeNotificationBatch());
                 }
             }
-            for (const auto& [instance, batch] : batches)
-            {
-                if (batch.count > 0)
-                {
-                    Deliver(instance, batch, true);
-                }
-            }
+            DeliverAll(batches);
 
             {
                 std::lock_guard<std::mutex> lock(FrameworkDispatcher::StreamsMutex);
@@ -137,12 +155,22 @@ namespace Microsoft::Xna::Framework::Audio
     }
 #endif
 
+    namespace
+    {
+        std::uint64_t NextNotificationSerial() noexcept
+        {
+            static std::atomic<std::uint64_t> serials{0};
+            return serials.fetch_add(1, std::memory_order_relaxed) + 1;
+        }
+    }
+
     DynamicSoundEffectInstance::DynamicSoundEffectInstance(
         SharpRuntime::intcs sampleRate,
         AudioChannels channels)
         : SoundEffectInstance(),
           sampleRate_(sampleRate),
-          channels_(channels)
+          channels_(channels),
+          notificationSerial_(NextNotificationSerial())
     {
         // XNA's constructor refuses what its SoundEffect refuses (cna-killer KF-12).
         if (sampleRate < 8000 || sampleRate > 48000)
@@ -681,15 +709,16 @@ namespace Microsoft::Xna::Framework::Audio
             return;
         }
         // XNA delivers each posted notification once (DynamicSoundEffectInstance.OnBufferNeeded
-        // IL_0000-0012), with no lock held, so a handler may submit, stop or dispose.
-        const NotificationBatch batch = PrepareNotificationBatch();
+        // IL_0000-0012), with no lock held, so a handler may submit, stop, dispose or destroy.
+        // After a callback nothing of this instance is read unless it is still registered.
+        const NotificationBatch batch = TakeNotificationBatch();
         if (batch.count > 0)
         {
-            DynamicSoundEffectDispatch::Deliver(this, batch, false);
+            DynamicSoundEffectDispatch::DeliverAll({{this, batch}});
         }
     }
 
-    DynamicSoundEffectInstance::NotificationBatch DynamicSoundEffectInstance::PrepareNotificationBatch()
+    DynamicSoundEffectInstance::NotificationBatch DynamicSoundEffectInstance::TakeNotificationBatch()
     {
         std::lock_guard<std::mutex> lock(queueMutex_);
         // Submit any freshly queued buffers.
@@ -698,15 +727,15 @@ namespace Microsoft::Xna::Framework::Audio
             SubmitQueuedToStreamLocked();
         }
         RetireConsumedChunksLocked();
-        return {pendingNotifications_, notificationEpoch_};
+        return {std::exchange(pendingNotifications_, 0), notificationEpoch_, notificationSerial_};
     }
 
-    void DynamicSoundEffectInstance::FinishNotificationBatch(const NotificationBatch& batch)
+    void DynamicSoundEffectInstance::RestoreNotificationBatch(const NotificationBatch& batch)
     {
         std::lock_guard<std::mutex> lock(queueMutex_);
         if (notificationEpoch_ == batch.epoch)
         {
-            pendingNotifications_ = std::max<SharpRuntime::intcs>(0, pendingNotifications_ - batch.count);
+            pendingNotifications_ += batch.count;
         }
     }
 
