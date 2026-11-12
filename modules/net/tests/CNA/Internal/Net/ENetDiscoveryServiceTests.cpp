@@ -691,4 +691,84 @@ TEST(ENetDiscoveryServiceTest, SixtyFiveInterleavedTrainsLeaveSixtyFourMeasured)
     for (const int sock : socks) close(sock);
     EXPECT_EQ(reports, kSources - 1) << "trains whose first probes were evicted never completed";
 }
+
+namespace {
+    // Loopback sockets that each send probes of their own train to one responder.
+    struct ProbeSources {
+        std::vector<int> socks;
+        sockaddr_in responder{};
+        uint16_t connectPort = 0;
+        ProbeSources(const UpstreamQuerier& querier, int count) {
+            sockaddr_in loopback{};
+            loopback.sin_family = AF_INET;
+            inet_pton(AF_INET, "127.0.0.1", &loopback.sin_addr);
+            for (int i = 0; i < count; ++i) {
+                const int sock = socket(AF_INET, SOCK_DGRAM, 0);
+                if (sock >= 0 && bind(sock, reinterpret_cast<const sockaddr*>(&loopback), sizeof(loopback)) == 0)
+                    socks.push_back(sock);
+            }
+            responder = loopback;
+            responder.sin_port = htons(querier.invite.ResponderPort);
+            connectPort = querier.invite.ConnectPort;
+        }
+        ~ProbeSources() { for (const int sock : socks) close(sock); }
+        void Send(int source, uint8_t index, uint32_t trainId) const {
+            DiscoveryQosProbeMessage probe;
+            probe.ConnectPort = connectPort;
+            probe.Index = index;
+            probe.TrainId = trainId;
+            const auto bytes = NetDiscoveryProtocol::EncodeUpstreamProbe(probe);
+            (void)sendto(socks[static_cast<std::size_t>(source)], bytes.data(), bytes.size(), 0,
+                         reinterpret_cast<const sockaddr*>(&responder), sizeof(responder));
+        }
+        bool Reported(int source, std::chrono::milliseconds within) const {
+            const auto deadline = std::chrono::steady_clock::now() + within;
+            while (std::chrono::steady_clock::now() < deadline) {
+                std::array<SharpRuntime::bytecs, 1500> buffer{};
+                const auto received = recv(socks[static_cast<std::size_t>(source)], buffer.data(), buffer.size(), MSG_DONTWAIT);
+                if (received > 0 && buffer[0] == static_cast<SharpRuntime::bytecs>(DiscoveryMessageTag::UpstreamReport))
+                    return true;
+                std::this_thread::sleep_for(std::chrono::milliseconds(1));
+            }
+            return false;
+        }
+    };
+}
+
+// RV-NET-15 review N21: every slot holds a young lone probe, so a new identified train is refused.
+// Its remainder, arriving once the lone probes may give up their slots, must not be timed alone --
+// from a later first arrival it would over-measure the path -- so it is not reported at all.
+TEST(ENetDiscoveryServiceTest, ARefusedTrainIsNotMeasuredFromItsRemainder) {
+    SystemLinkSessionFixture host("HostPlayer");
+    UpstreamQuerier querier(*host.session);
+    ASSERT_NE(querier.invite.ResponderPort, 0);
+    ProbeSources sources(querier, 65);
+    ASSERT_EQ(sources.socks.size(), 65u);
+    for (int source = 0; source < 64; ++source) sources.Send(source, 0, 0xD000u + static_cast<uint32_t>(source));
+    std::this_thread::sleep_for(std::chrono::milliseconds(2));
+    for (uint8_t index = 0; index < 4; ++index) sources.Send(64, index, 0xD100u);
+    std::this_thread::sleep_for(std::chrono::milliseconds(30));
+    for (uint8_t index = 4; index < kQosProbeCount; ++index) sources.Send(64, index, 0xD100u);
+    EXPECT_FALSE(sources.Reported(64, std::chrono::milliseconds(300)))
+        << "the refused train's remainder was measured as the train";
+}
+
+// RV-NET-15 review N22: an older querier repeating its index 0 replaces its lone record each time;
+// that must not renew the record's claim to its slot. Once the lone probes have made no progress
+// for 20 ms, a new complete train takes a slot and is measured.
+TEST(ENetDiscoveryServiceTest, RepeatedLegacyLoneProbesDoNotKeepNewTrainsOut) {
+    SystemLinkSessionFixture host("HostPlayer");
+    UpstreamQuerier querier(*host.session);
+    ASSERT_NE(querier.invite.ResponderPort, 0);
+    ProbeSources sources(querier, 65);
+    ASSERT_EQ(sources.socks.size(), 65u);
+    for (int round = 0; round < 3; ++round) {
+        for (int source = 0; source < 64; ++source) sources.Send(source, 0, 0);
+        std::this_thread::sleep_for(std::chrono::milliseconds(10));
+    }
+    std::this_thread::sleep_for(std::chrono::milliseconds(2));
+    for (uint8_t index = 0; index < kQosProbeCount; ++index) sources.Send(64, index, 0xD200u);
+    EXPECT_TRUE(sources.Reported(64, std::chrono::milliseconds(300)))
+        << "repeated legacy lone probes kept every slot";
+}
 #endif

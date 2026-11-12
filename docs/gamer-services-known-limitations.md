@@ -437,14 +437,18 @@ Same-machine host-identity replacement is separate from machine migration. **CNA
   copies of a query (broadcast and unicast) sends two trains the receiver measures apart, and each
   rate counts the probes that arrived, first to last arrival; a train from an older CNA has no
   identifier and is told apart by its probe indices, which a lost first probe can still blur. The
-  host's responder reports a train once all of it arrived or 20 ms after its last probe, and never
-  reports one with fewer than two probes: a lone first probe waits up to the 150 ms search window
-  for the rest of its train, unless all 64 train slots are taken and it has been idle for 20 ms,
-  when it gives its slot to a new train. A reported identified train is remembered for a second (at
-  most 1024 of them, the oldest evicted first), so two or more of its stragglers in that time send
-  no second report; after a second, or after 1024 other identified reports within it, they can. A
-  train from an older CNA has no identifier and is not remembered: two of its probe indices
-  arriving again after its report are reported as a train of their own. PlayerMatch/Ranked listings from a service advertising
+  host's responder reports a train once all of it arrived, or 20 ms after its last probe (nominally:
+  its wait is rounded up to a millisecond, before scheduling); an older CNA's train is also reported
+  when one of its probe indices arrives again, which starts its next train. It never reports one with
+  fewer than two probes: a lone first probe waits up to the 150 ms search window for the rest of its
+  train. It times at most 64 trains at once. With every slot taken, a lone first probe that has made
+  no progress for 20 ms gives its slot to a new train; otherwise the new train is refused. An
+  identified train refused or evicted this way is not measured at all for 150 ms, since its
+  remainder alone would over-measure the path. A reported identified train is remembered for a
+  second (at most 1024 remembered trains, the oldest evicted first), so its stragglers in that time
+  send no second report. A train from an older CNA has no identifier and is not remembered: two of
+  its indices arriving again after its report can be reported as a train of their own when they
+  are timed in one record. PlayerMatch/Ranked listings from a service advertising
   `qos-prejoin-v1` start bounded asynchronous probes over a separate verified WSS
   channel through that service to the current host and back, before joining.
   Poll the listing's `QualityOfService` again until `IsAvailable` becomes true;

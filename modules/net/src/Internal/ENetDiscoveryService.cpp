@@ -233,6 +233,9 @@ namespace CNA::Internal::Net
                 std::uint32_t Seen = 0;
                 int Received = 0, Count = 0;
                 std::chrono::steady_clock::time_point First, Last;
+                // Since when this querier's slot has held a lone probe without progress: an older
+                // querier's index seen again replaces a lone record without renewing it.
+                std::chrono::steady_clock::time_point LoneSince;
             };
             static constexpr std::size_t MaxTrains = 64;
             // A train is reported once every probe arrived, or this long after its last arrival
@@ -245,21 +248,33 @@ namespace CNA::Internal::Net
             // progress, and keeps its slot as before.
             static constexpr auto LoneProbeIdle = std::chrono::milliseconds(kSearchWindowMs);
 
-            // Identified trains already reported: a straggler or duplicate of one must not open a
-            // new record whose report would replace the measurement. A report matters only within
-            // the querier's search, so one is remembered for a second; the bound evicts the oldest
-            // only past 1024 reports in that second. An older querier's train (identifier 0) is
-            // told apart by its probe indices alone and is not remembered.
-            struct ReportedTrain
+            // Identified trains whose later probes are dropped. One already reported: a straggler
+            // or duplicate must not open a new record whose report would replace the measurement;
+            // a report matters only within the querier's search, so it is remembered for a second.
+            // One refused, or evicted, for want of a slot: its remainder alone would be timed from
+            // a later first arrival and over-measure the path, so it is not measured at all for the
+            // rest of a search. The bound evicts the oldest only past 1024 entries. An older
+            // querier's train (identifier 0) is told apart by its probe indices alone and is not
+            // remembered.
+            struct SettledTrain
             {
                 enet_uint32 Host = 0;
                 enet_uint16 Port = 0;
                 std::uint32_t TrainId = 0;
-                std::chrono::steady_clock::time_point At;
+                std::chrono::steady_clock::time_point Until;
             };
-            static constexpr std::size_t MaxReported = 1024;
+            static constexpr std::size_t MaxSettled = 1024;
             static constexpr auto ReportedMemory = std::chrono::seconds(1);
-            std::deque<ReportedTrain> reported_;
+            std::deque<SettledTrain> settled_;
+
+            void Settle(const ENetAddress& from, std::uint32_t trainId,
+                        std::chrono::steady_clock::time_point now, std::chrono::steady_clock::duration memory)
+            {
+                if (trainId == 0) return;
+                while (!settled_.empty() && (settled_.size() >= MaxSettled || settled_.front().Until <= now))
+                    settled_.pop_front();
+                settled_.push_back(SettledTrain{from.host, from.port, trainId, now + memory});
+            }
 
             static std::chrono::steady_clock::duration IdleFor(const Train& train)
             {
@@ -272,13 +287,7 @@ namespace CNA::Internal::Net
                 // One probe measures nothing; reporting 0 would only overwrite a real result, and
                 // remembering it would drop the rest of its train should that still arrive.
                 if (train.Received < 2) return;
-                if (train.TrainId != 0)
-                {
-                    while (!reported_.empty()
-                           && (reported_.size() >= MaxReported || now - reported_.front().At >= ReportedMemory))
-                        reported_.pop_front();
-                    reported_.push_back(ReportedTrain{train.From.host, train.From.port, train.TrainId, now});
-                }
+                Settle(train.From, train.TrainId, now, ReportedMemory);
                 DiscoveryUpstreamReportMessage report;
                 report.ConnectPort = connectPort_;
                 report.BytesPerSecond = TrainRate(0, train.Received - 1, train.First, train.Last);
@@ -335,11 +344,11 @@ namespace CNA::Internal::Net
             void Record(std::vector<Train>& trains, const ENetAddress& from, const DiscoveryQosProbeMessage& probe, std::chrono::steady_clock::time_point at)
             {
                 if (probe.Index >= 32) return;
-                if (probe.TrainId != 0 && std::any_of(reported_.begin(), reported_.end(),
-                        [&](const ReportedTrain& done)
+                if (probe.TrainId != 0 && std::any_of(settled_.begin(), settled_.end(),
+                        [&](const SettledTrain& done)
                         {
                             return done.Host == from.host && done.Port == from.port && done.TrainId == probe.TrainId
-                                && at - done.At < ReportedMemory;
+                                && at < done.Until;
                         }))
                     return;
                 auto train = std::find_if(trains.begin(), trains.end(),
@@ -349,11 +358,13 @@ namespace CNA::Internal::Net
                             && known.TrainId == probe.TrainId;
                     });
                 const std::uint32_t bit = 1u << probe.Index;
+                auto loneSince = at;
                 if (train != trains.end() && (train->Seen & bit) != 0)
                 {
                     // An identified train's duplicate is ignored. An older querier's index seen
                     // again is its next train: report this one, then time the new one.
                     if (probe.TrainId != 0) return;
+                    if (train->Received < 2) loneSince = train->LoneSince;
                     Report(*train, at);
                     trains.erase(train);
                     train = trains.end();
@@ -362,13 +373,20 @@ namespace CNA::Internal::Net
                 {
                     if (trains.size() >= MaxTrains)
                     {
-                        // Every slot taken: the oldest lone probe idle past a train's report wait,
-                        // which measures nothing, makes room. A train already measuring, or a lone
-                        // probe whose train may still be arriving, keeps its slot.
+                        // Every slot taken: the oldest lone probe without progress for a train's
+                        // report wait, which measures nothing, makes room. A train already
+                        // measuring, or a lone probe whose train may still be arriving, keeps its
+                        // slot, and the new train is refused. Neither the refused nor the evicted
+                        // train is measured from its remainder (see settled_).
                         const auto lone = std::min_element(trains.begin(), trains.end(),
                             [](const Train& a, const Train& b)
-                            { return (a.Received < 2) != (b.Received < 2) ? a.Received < 2 : a.Last < b.Last; });
-                        if (lone->Received >= 2 || at - lone->Last < TrainIdle) return;
+                            { return (a.Received < 2) != (b.Received < 2) ? a.Received < 2 : a.LoneSince < b.LoneSince; });
+                        if (lone->Received >= 2 || at - lone->LoneSince < TrainIdle)
+                        {
+                            Settle(from, probe.TrainId, at, LoneProbeIdle);
+                            return;
+                        }
+                        Settle(lone->From, lone->TrainId, at, LoneProbeIdle);
                         trains.erase(lone);
                     }
                     Train fresh;
@@ -376,6 +394,7 @@ namespace CNA::Internal::Net
                     fresh.TrainId = probe.TrainId;
                     fresh.Count = probe.Count;
                     fresh.First = at;
+                    fresh.LoneSince = loneSince;
                     trains.push_back(fresh);
                     train = std::prev(trains.end());
                 }
