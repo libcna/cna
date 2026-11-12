@@ -573,4 +573,29 @@ TEST(ENetDiscoveryServiceTest, AReorderedUpstreamTrainIsReportedOnce) {
     EXPECT_TRUE(querier.Receive(DiscoveryMessageTag::UpstreamReport, std::chrono::milliseconds(500)).empty())
         << "the swapped probe started a second train";
 }
+// A train's report is final: a duplicate of its last probe, or a straggler that arrives after the
+// report, does not open a new record whose report (of nothing measured) would replace it.
+TEST(ENetDiscoveryServiceTest, AReportedTrainsStragglersSendNoSecondReport) {
+    SystemLinkSessionFixture host("HostPlayer");
+    UpstreamQuerier querier(*host.session);
+    ASSERT_NE(querier.invite.ResponderPort, 0);
+    for (uint8_t index = 0; index < kQosProbeCount; ++index) {
+        std::this_thread::sleep_for(std::chrono::milliseconds(1));
+        querier.SendProbe(index, 0x7170u);
+    }
+    ASSERT_FALSE(querier.Receive(DiscoveryMessageTag::UpstreamReport, std::chrono::milliseconds(500)).empty());
+    querier.SendProbe(kQosProbeCount - 1, 0x7170u);
+    EXPECT_TRUE(querier.Receive(DiscoveryMessageTag::UpstreamReport, std::chrono::milliseconds(300)).empty())
+        << "a duplicate probe was reported as a train of its own";
+
+    // The tail delayed past the idle report.
+    for (uint8_t index = 0; index + 1 < kQosProbeCount; ++index) {
+        std::this_thread::sleep_for(std::chrono::milliseconds(1));
+        querier.SendProbe(index, 0x8180u);
+    }
+    ASSERT_FALSE(querier.Receive(DiscoveryMessageTag::UpstreamReport, std::chrono::milliseconds(500)).empty());
+    querier.SendProbe(kQosProbeCount - 1, 0x8180u);
+    EXPECT_TRUE(querier.Receive(DiscoveryMessageTag::UpstreamReport, std::chrono::milliseconds(300)).empty())
+        << "the late probe replaced the report";
+}
 #endif

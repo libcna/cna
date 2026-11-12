@@ -235,11 +235,28 @@ namespace CNA::Internal::Net
             };
             static constexpr std::size_t MaxTrains = 64;
             // A train is reported once every probe arrived, or this long after its last arrival
-            // (its tail was lost), well inside the querier's 150 ms search.
-            static constexpr auto TrainIdle = std::chrono::milliseconds(30);
+            // (its tail was lost); the receive wait shortens to the next such moment.
+            static constexpr auto TrainIdle = std::chrono::milliseconds(20);
+
+            // Identified trains already reported: a straggler or duplicate of one must not open a
+            // new record whose report would replace the measurement.
+            struct ReportedTrain
+            {
+                enet_uint32 Host = 0;
+                enet_uint16 Port = 0;
+                std::uint32_t TrainId = 0;
+            };
+            std::vector<ReportedTrain> reported_;
 
             void Report(const Train& train)
             {
+                if (train.TrainId != 0)
+                {
+                    if (reported_.size() >= MaxTrains) reported_.erase(reported_.begin());
+                    reported_.push_back(ReportedTrain{train.From.host, train.From.port, train.TrainId});
+                }
+                // One probe measures nothing; reporting 0 would only overwrite a real result.
+                if (train.Received < 2) return;
                 DiscoveryUpstreamReportMessage report;
                 report.ConnectPort = connectPort_;
                 report.BytesPerSecond = TrainRate(0, train.Received - 1, train.First, train.Last);
@@ -252,7 +269,15 @@ namespace CNA::Internal::Net
                 while (!stop_)
                 {
                     enet_uint32 condition = ENET_SOCKET_WAIT_RECEIVE;
-                    if (enet_socket_wait(socket_, &condition, 20) == 0 && (condition & ENET_SOCKET_WAIT_RECEIVE))
+                    enet_uint32 waitMs = 20;
+                    const auto before = std::chrono::steady_clock::now();
+                    for (const Train& train : trains)
+                    {
+                        const auto due = std::chrono::duration_cast<std::chrono::milliseconds>(
+                            train.Last + TrainIdle - before).count() + 1;
+                        waitMs = std::min<enet_uint32>(waitMs, static_cast<enet_uint32>(std::max<long long>(due, 1)));
+                    }
+                    if (enet_socket_wait(socket_, &condition, waitMs) == 0 && (condition & ENET_SOCKET_WAIT_RECEIVE))
                     {
                         ENetAddress from{};
                         std::array<SharpRuntime::bytecs, 1500> buffer{};
@@ -288,6 +313,10 @@ namespace CNA::Internal::Net
             void Record(std::vector<Train>& trains, const ENetAddress& from, const DiscoveryQosProbeMessage& probe, std::chrono::steady_clock::time_point at)
             {
                 if (probe.Index >= 32) return;
+                if (probe.TrainId != 0 && std::any_of(reported_.begin(), reported_.end(),
+                        [&](const ReportedTrain& done)
+                        { return done.Host == from.host && done.Port == from.port && done.TrainId == probe.TrainId; }))
+                    return;
                 auto train = std::find_if(trains.begin(), trains.end(),
                     [&](const Train& known)
                     {
