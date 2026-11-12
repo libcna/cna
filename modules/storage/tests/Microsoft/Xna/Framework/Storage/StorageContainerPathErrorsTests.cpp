@@ -63,6 +63,35 @@ protected:
 };
 }
 
+// RV-STORAGE review #7: Framework 4's Path.CheckInvalidPathChars, reached before any filesystem
+// call (ValidateArguments -> GetFullPath; a search's Path.InternalCombine), refuses a control
+// character or " < > | with ArgumentException("Illegal characters in path."). An embedded NUL used
+// to reach the native call, which acted on the prefix: DeleteDirectory deleted "child".
+TEST_F(StorageContainerPathErrorsTest, IllegalPathCharactersRefuseBeforeTheFilesystemIsTouched)
+{
+    const std::string nul("child\0ignored", 13);
+    ASSERT_EQ(nul.size(), 13u);
+    const auto illegal = [](auto action)
+    {
+        try { action(); ADD_FAILURE() << "an illegal path character was accepted"; }
+        catch (const System::ArgumentException& e)
+        {
+            EXPECT_TRUE(typeid(e) == typeid(System::ArgumentException));
+            EXPECT_EQ(std::string(e.what()).rfind("Illegal characters in path.", 0), 0u) << e.what();
+        }
+    };
+    illegal([&] { container->DeleteDirectory(nul); });
+    EXPECT_TRUE(fs::is_directory(root / "child")) << "the NUL-truncated path deleted another directory";
+    illegal([&] { (void)container->DirectoryExists(nul); });
+    illegal([&] { (void)container->FileExists(std::string("seed.txt\0x", 10)); });
+    illegal([&] { (void)container->CreateFile("save|1.dat"); });
+    EXPECT_FALSE(fs::exists(root / "save|1.dat"));
+    illegal([&] { container->CreateDirectory("a<b"); });
+    illegal([&] { (void)container->OpenFile("q\"uote.dat", System::IO::FileMode::OpenOrCreate); });
+    illegal([&] { (void)container->GetFileNames("*|.txt"); });
+    illegal([&] { (void)container->GetDirectoryNames("child/\x01*"); });
+}
+
 TEST_F(StorageContainerPathErrorsTest, EmptyDirectoryArgumentsPreserveExactExceptionAndParameter)
 {
     Exact<System::ArgumentNullException>([&] { container->CreateDirectory(""); }, "directory");

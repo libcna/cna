@@ -186,10 +186,24 @@ namespace Microsoft::Xna::Framework::Storage
                             "The storage path must be relative and remain within the container.", parameter);
     }
 
+    // mscorlib Path.CheckInvalidPathChars (Framework 4) refuses a control character or one of
+    // " < > | with ArgumentException("Illegal characters in path."), no parameter name. XNA reaches it
+    // before any containment check or filesystem call: through ValidateArguments -> GetFullPath ->
+    // Path.GetFullPath (fullCheck), and through a search's Path.InternalCombine. Without it an
+    // embedded NUL let the native call act on the prefix -- DeleteDirectory("victim\0x") deleted
+    // victim.
+    void StorageContainer::RequireValidPathChars(const std::string& path)
+    {
+        for (const unsigned char value : path)
+            if (value < 0x20 || value == '"' || value == '<' || value == '>' || value == '|')
+                throw System::ArgumentException("Illegal characters in path.");
+    }
+
     std::filesystem::path StorageContainer::ResolveBelow(const std::filesystem::path& root,
                                                          const std::string& relative,
                                                          const char* escapeMessage, const char* parameter)
     {
+        RequireValidPathChars(relative);
         // XNA StorageContainer.ValidateArguments IL_002b-0036 preserves the caller's
         // parameter name on containment rejection (FNA has no containment check).
         const auto contained = CNA::Internal::ResolveContainedUtf8Path(root, relative);
@@ -296,6 +310,7 @@ namespace Microsoft::Xna::Framework::Storage
         VerifyNotDisposed(*this);
         if (searchPattern.empty())
             return {};
+        RequireValidPathChars(searchPattern);
         // XNA GetDirectoryNames(string) IL_0017-0023 searches the pattern's directory;
         // IL_0063-007d removes only the container root, retaining relative subdirectories.
         std::string normalized = searchPattern;
@@ -366,6 +381,7 @@ namespace Microsoft::Xna::Framework::Storage
         VerifyNotDisposed(*this);
         if (searchPattern.empty())
             return {};
+        RequireValidPathChars(searchPattern);
         // XNA GetFileNames(string) IL_0017-0023 searches the pattern's directory;
         // IL_0063-007d removes only the container root, retaining relative subdirectories.
         std::string normalized = searchPattern;

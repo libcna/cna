@@ -218,6 +218,8 @@ namespace Microsoft::Xna::Framework::Storage
         [[nodiscard]] std::filesystem::path ResolveNativePath(const std::string& relative, const char* parameter) const;
 
         // Joins UTF-8 relative onto root. An escape throws System::ArgumentException(escapeMessage).
+        // Refuses the characters Framework 4's Path.CheckInvalidPathChars refuses.
+        static void RequireValidPathChars(const std::string& path);
         [[nodiscard]] static std::filesystem::path ResolveBelow(const std::filesystem::path& root,
                                                                 const std::string& relative,
                                                                 const char* escapeMessage,
