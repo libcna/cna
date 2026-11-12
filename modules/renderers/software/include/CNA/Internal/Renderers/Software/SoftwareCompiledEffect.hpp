@@ -318,6 +318,24 @@ namespace CNA::Internal::Renderers::Software
      * D3D9 programs selected by each pass. The vertex and pixel interpreters added
      * by SOFTWARE-163/164 consume the exposed program IR.
      */
+    class SoftwareCompiledEffect;
+
+    /**
+     * @brief The compiled-effect runtimes whose passes last assigned each shader stage on one
+     * Software device.
+     *
+     * XNA's `EffectPass.Apply` neither saves nor clears device shaders; a pass changes only the
+     * stages it assigns. A pass without a vertex (or pixel) shader therefore draws with the one,
+     * and the constants, that the last assigning pass of any effect left on the device.
+     */
+    struct SoftwareCompiledStageOwners
+    {
+        /** @brief Runtime whose applied pass last assigned a vertex shader, or null. */
+        SoftwareCompiledEffect* vertex = nullptr;
+        /** @brief Runtime whose applied pass last assigned a pixel shader, or null. */
+        SoftwareCompiledEffect* pixel = nullptr;
+    };
+
     class SoftwareCompiledEffect final : public ICompiledEffectRuntime
     {
     public:
@@ -327,11 +345,14 @@ namespace CNA::Internal::Renderers::Software
          * @param effectCode Compiled effect bytes.
          * @param effectCodeLength Number of bytes at @p effectCode.
          * @param legacyBumpMapEnvs Renderer-wide persistent texture-stage bump state.
+         * @param stageOwners Renderer-wide owners of the device's shader stages; null gives the
+         *        runtime a private record.
          */
         SoftwareCompiledEffect(
             const std::uint8_t* effectCode, std::size_t effectCodeLength,
             std::shared_ptr<std::array<CompiledEffectLegacyBumpMapEnvState, 16>>
-                legacyBumpMapEnvs = {});
+                legacyBumpMapEnvs = {},
+            std::shared_ptr<SoftwareCompiledStageOwners> stageOwners = {});
 
         /** @brief Releases the parsed Effect graph and its retained shader programs.
          */
@@ -388,20 +409,25 @@ namespace CNA::Internal::Renderers::Software
                        CompiledEffectPassStateChanges& changes) override;
 
         /**
-         * @brief Returns the vertex program selected by the most recently applied
-         * pass.
-         * @return The retained program, or null when the pass selected no vertex
-         * shader.
+         * @brief Returns the vertex program the most recent pass of this runtime that assigned
+         * one selected.
+         * @return The retained program, or null when no applied pass assigned a vertex shader.
          */
         CNAEXT [[nodiscard]] const SoftwareShaderProgramEXT* GetVertexProgramEXT() const noexcept;
 
         /**
-         * @brief Returns the pixel program selected by the most recently applied
-         * pass.
-         * @return The retained program, or null when the pass selected no pixel
-         * shader.
+         * @brief Returns the pixel program the most recent pass of this runtime that assigned
+         * one selected.
+         * @return The retained program, or null when no applied pass assigned a pixel shader.
          */
         CNAEXT [[nodiscard]] const SoftwareShaderProgramEXT* GetPixelProgramEXT() const noexcept;
+
+        /**
+         * @brief Returns the runtime that owns one shader stage on this runtime's device.
+         * @param vertexStage True for the vertex stage, false for the pixel stage.
+         * @return The runtime whose applied pass last assigned that stage, or null.
+         */
+        CNAEXT [[nodiscard]] SoftwareCompiledEffect* GetStageOwnerEXT(bool vertexStage) const noexcept;
 
         /**
          * @brief Returns the float4 constant-register file populated for a shader
@@ -496,6 +522,7 @@ namespace CNA::Internal::Renderers::Software
         std::unordered_map<std::string, std::uint32_t> samplerTextureParameters_;
         std::shared_ptr<std::array<CompiledEffectLegacyBumpMapEnvState, 16>>
             legacyBumpMapEnvs_;
+        std::shared_ptr<SoftwareCompiledStageOwners> stageOwners_;
         CompiledEffectDescription description_;
         MOJOSHADER_effectStateChanges stateChanges_{};
         std::uint32_t techniqueIndex_ = 0;

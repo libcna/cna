@@ -4580,6 +4580,7 @@ namespace CNA::Internal::Renderers::Software
             ICompiledEffectRuntime* selected = vertexStage
                 ? params.compiledVertexEffectRuntime
                 : params.compiledPixelEffectRuntime;
+            const bool namedStage = selected != nullptr;
             if (selected == nullptr)
                 selected = params.compiledEffectRuntime;
             auto* runtime = dynamic_cast<SoftwareCompiledEffect*>(selected);
@@ -4590,9 +4591,13 @@ namespace CNA::Internal::Renderers::Software
                         ? "Software compiled-effect draw received a vertex runtime from another renderer."
                         : "Software compiled-effect draw received a pixel runtime from another renderer.");
             }
-            const SoftwareShaderProgramEXT* program = vertexStage
-                ? runtime->GetVertexProgramEXT()
-                : runtime->GetPixelProgramEXT();
+            // The stage belongs to the last applied pass, of this or another effect, that
+            // assigned it: a pass without that shader keeps the device's.
+            if (!namedStage)
+                runtime = runtime->GetStageOwnerEXT(vertexStage);
+            const SoftwareShaderProgramEXT* program = runtime == nullptr ? nullptr
+                : vertexStage ? runtime->GetVertexProgramEXT()
+                              : runtime->GetPixelProgramEXT();
             if (program == nullptr)
             {
                 throw System::InvalidOperationException(
@@ -6927,8 +6932,10 @@ namespace CNA::Internal::Renderers::Software
         const std::uint8_t* effectCode, std::size_t effectCodeBytes)
     {
 #if defined(CNA_SOFTWARE_COMPILED_EFFECTS)
+        if (compiledStageOwners_ == nullptr)
+            compiledStageOwners_ = std::make_shared<SoftwareCompiledStageOwners>();
         return std::make_unique<SoftwareCompiledEffect>(
-            effectCode, effectCodeBytes, compiledLegacyBumpMapEnvs_);
+            effectCode, effectCodeBytes, compiledLegacyBumpMapEnvs_, compiledStageOwners_);
 #else
         static_cast<void>(effectCode);
         static_cast<void>(effectCodeBytes);

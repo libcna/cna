@@ -605,12 +605,15 @@ namespace CNA::Internal::Renderers::Software
 
     SoftwareCompiledEffect::SoftwareCompiledEffect(
         const std::uint8_t* effectCode, std::size_t effectCodeLength,
-        std::shared_ptr<std::array<CompiledEffectLegacyBumpMapEnvState, 16>> legacyBumpMapEnvs)
+        std::shared_ptr<std::array<CompiledEffectLegacyBumpMapEnvState, 16>> legacyBumpMapEnvs,
+        std::shared_ptr<SoftwareCompiledStageOwners> stageOwners)
         : parserContext_(std::make_unique<ParserContext>()),
           legacyBumpMapEnvs_(legacyBumpMapEnvs != nullptr
               ? std::move(legacyBumpMapEnvs)
               : std::make_shared<
-                    std::array<CompiledEffectLegacyBumpMapEnvState, 16>>())
+                    std::array<CompiledEffectLegacyBumpMapEnvState, 16>>()),
+          stageOwners_(stageOwners != nullptr ? std::move(stageOwners)
+                                              : std::make_shared<SoftwareCompiledStageOwners>())
     {
         if (effectCode == nullptr || effectCodeLength == 0u ||
             effectCodeLength > std::numeric_limits<std::uint32_t>::max())
@@ -629,6 +632,7 @@ namespace CNA::Internal::Renderers::Software
         : parserContext_(std::make_unique<ParserContext>()), effectCode_(cloneSource.effectCode_),
           parameterValues_(cloneSource.parameterValues_), textures_(cloneSource.textures_),
           legacyBumpMapEnvs_(cloneSource.legacyBumpMapEnvs_),
+          stageOwners_(cloneSource.stageOwners_),
           techniqueIndex_(cloneSource.techniqueIndex_)
     {
         CreateEffect();
@@ -646,6 +650,10 @@ namespace CNA::Internal::Renderers::Software
 
     SoftwareCompiledEffect::~SoftwareCompiledEffect()
     {
+        if (stageOwners_->vertex == this)
+            stageOwners_->vertex = nullptr;
+        if (stageOwners_->pixel == this)
+            stageOwners_->pixel = nullptr;
         CloseActivePass();
         if (MojoShaderEffect::CanSafelyDeleteNativeEffect(effectData_))
             MOJOSHADER_deleteEffect(effectData_);
@@ -750,6 +758,12 @@ namespace CNA::Internal::Renderers::Software
             throw std::out_of_range("Software compiled effect: pass index is out of range.");
 
         CloseActivePass();
+        // MojoShader binds only the stages a pass assigns and keeps what getBoundShaders hands
+        // it for the others. Starting from none shows which stages this pass assigned; the
+        // others keep this runtime's previous shader, and the device keeps their owner (XNA
+        // EffectPass.Apply IL_006d-009f begins the pass without saving or clearing shaders).
+        Shader* const previousVertex = parserContext_->boundVertex;
+        Shader* const previousPixel = parserContext_->boundPixel;
         parserContext_->boundVertex = nullptr;
         parserContext_->boundPixel = nullptr;
         std::memset(&stateChanges_, 0, sizeof(stateChanges_));
@@ -759,6 +773,14 @@ namespace CNA::Internal::Renderers::Software
         MOJOSHADER_effectBegin(effectData_, &passCount, 0, &stateChanges_);
         MOJOSHADER_effectBeginPass(effectData_, passIndex);
         passActive_ = true;
+        if (parserContext_->boundVertex != nullptr)
+            stageOwners_->vertex = this;
+        else
+            parserContext_->boundVertex = previousVertex;
+        if (parserContext_->boundPixel != nullptr)
+            stageOwners_->pixel = this;
+        else
+            parserContext_->boundPixel = previousPixel;
 
         if (stateChanges_.render_state_change_count > kMaximumReflectedItems ||
             (stateChanges_.render_state_change_count > 0u &&
@@ -810,6 +832,11 @@ namespace CNA::Internal::Renderers::Software
     {
         return parserContext_->boundPixel != nullptr ? &parserContext_->boundPixel->program
                                                      : nullptr;
+    }
+
+    SoftwareCompiledEffect* SoftwareCompiledEffect::GetStageOwnerEXT(bool vertexStage) const noexcept
+    {
+        return vertexStage ? stageOwners_->vertex : stageOwners_->pixel;
     }
 
     std::span<const float>

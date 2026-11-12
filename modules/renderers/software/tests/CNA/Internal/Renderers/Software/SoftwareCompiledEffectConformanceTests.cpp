@@ -126,6 +126,7 @@ TEST(SoftwareCompiledEffectConformanceTest, RunsEverySharedCompiledEffectContrac
     RunOnFreshSoftwareDevice("targets/state isolation", [](GraphicsDevice& device)
     {
         RunCompiledEffectPassSelectionContract(device);
+        RunCompiledEffectInheritedVertexStageContract(device);
         RunCompiledEffectRenderTargetSourceContract(device);
         RunCompiledEffectStockDrawIsolationContract(device);
     });

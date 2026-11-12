@@ -18,6 +18,7 @@
 namespace CNA::Internal::Renderers::Software
 {
     class SoftwareRenderer;
+    struct SoftwareCompiledStageOwners;
 
     /**
      * @brief Real CPU-owned RGBA8 colour, depth and optional resolved 4x MSAA storage.
@@ -1924,6 +1925,9 @@ namespace CNA::Internal::Renderers::Software
         std::shared_ptr<std::array<CompiledEffectLegacyBumpMapEnvState, kMaxSamplerSlots>>
             compiledLegacyBumpMapEnvs_ = std::make_shared<
                 std::array<CompiledEffectLegacyBumpMapEnvState, kMaxSamplerSlots>>();
+        /// The compiled-effect runtimes that own the device's vertex and pixel shader stages,
+        /// made with the first compiled effect.
+        std::shared_ptr<SoftwareCompiledStageOwners> compiledStageOwners_;
 #endif
 
         /// The active viewport as raster parameters for the 3D draw path --

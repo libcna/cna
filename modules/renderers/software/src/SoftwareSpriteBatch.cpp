@@ -182,10 +182,10 @@ namespace CNA::Internal::Renderers::Software
             if (customRuntime == nullptr)
                 throw System::InvalidOperationException(
                     "Software SpriteBatch received a compiled Effect from another renderer.");
-            effectParams.compiledVertexEffectRuntime =
-                customRuntime->GetVertexProgramEXT() != nullptr ? customRuntime : spriteRuntime;
-            effectParams.compiledPixelEffectRuntime =
-                customRuntime->GetPixelProgramEXT() != nullptr ? customRuntime : spriteRuntime;
+            // The SpriteEffect applied first owns every stage this pass, or an earlier one of
+            // this batch, did not assign.
+            effectParams.compiledVertexEffectRuntime = customRuntime->GetStageOwnerEXT(true);
+            effectParams.compiledPixelEffectRuntime = customRuntime->GetStageOwnerEXT(false);
             for (const PendingCompiledSprite& sprite : pendingCompiledSprites_)
             {
                 owner_.RasterizeCompiledSpriteQuad(

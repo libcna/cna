@@ -103,9 +103,7 @@ page under `docs/` (index: `docs/README.md`), deliberate divergences from FNA an
   EnvironmentMap and Skinned also rebuild light values and lighting transforms from fields (the
   renderers take World/View/Projection and material fields, not WVP, so a fix crosses every renderer
   interface; base-Effect and EffectMaterial clones already read raw storage, so a source and its clone
-  can render differently); (2) the Software renderer clears both shader stages before each compiled
-  pass, so a pass that assigns only a pixel shader throws "no applied vertex shader" where XNA keeps
-  the previous pass's vertex shader (`SoftwareCompiledEffect.cpp:725-726`); (3) SpriteEffect (CNAEXT,
+  can render differently); (2) SpriteEffect (CNAEXT,
   FNA's) reflects no `Texture` parameter, so a clone cannot carry or bind FNA's texture at Apply and
   draws device slot 0 (SpriteBatch rebinds slot 0 and hides this).
 - C API: content tags of meshes/parts have no C route; HND-TQ-22 C route (ObjectValue handles, ABI 0.61)

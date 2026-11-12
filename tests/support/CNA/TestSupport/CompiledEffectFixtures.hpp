@@ -2047,6 +2047,9 @@ namespace CNA::TestSupport
         /// Repeats the pixel program on every pass without adding a vertex shader. This models
         /// SpriteBatch post-process effects whose complete technique is pixel-only.
         bool repeatPixelProgramOnAllPasses = false;
+        /// With @ref includeDrawableProgram, SecondTechnique's P1 assigns only the pixel shader,
+        /// so a draw after it runs the vertex shader an earlier pass left on the device.
+        bool secondTechniquePassAssignsOnlyPixelShader = false;
         /// FX-084: the vertex shader additionally consumes TEXCOORD0, scaled by a new
         /// `StreamMix` float4 parameter that defaults to zero -- `oPos = mul(TEXCOORD0 * StreamMix
         /// + POSITION0, Transform)`. That is what makes a genuine multi-stream compiled-effect
@@ -9574,8 +9577,8 @@ namespace CNA::TestSupport
 
         // FX-084: a drawable fixture binds the same program in every pass, so any pass a
         // contract applies -- including the one SpriteBatch picks for itself -- has a shader pair.
-        const auto appendProgramStates = [&](int passOrdinal) {
-            if (includeVertexShader)
+        const auto appendProgramStates = [&](int passOrdinal, bool withVertexShader = true) {
+            if (includeVertexShader && withVertexShader)
             {
                 AppendUInt32(bytes, EffectFormat::RsVertexShader);
                 AppendUInt32(bytes, 0); // ignored legacy field
@@ -9621,10 +9624,12 @@ namespace CNA::TestSupport
         AppendUInt32(bytes, secondTechnique);
         AppendUInt32(bytes, 0); // annotations
         AppendUInt32(bytes, 1); // passes
+        const bool secondPassPixelOnly = options.secondTechniquePassAssignsOnlyPixelShader &&
+                                         includeVertexShader && otherPassStateCount > 0;
         AppendUInt32(bytes, secondPass);
         AppendUInt32(bytes, 0); // annotations
-        AppendUInt32(bytes, otherPassStateCount);
-        if (otherPassStateCount > 0) appendProgramStates(2);
+        AppendUInt32(bytes, otherPassStateCount - (secondPassPixelOnly ? 1u : 0u));
+        if (otherPassStateCount > 0) appendProgramStates(2, !secondPassPixelOnly);
 
         // A string object carries its characters inline in the small-object table, exactly like the
         // sampler's mapped-texture name below: index, byte length, bytes, padded to a dword.
@@ -9973,6 +9978,22 @@ namespace CNA::TestSupport
         SyntheticEffectOptions options;
         options.includeDrawableProgram = true;
         options.vertexShaderReadsSecondStream = readsSecondStream;
+        return BuildSyntheticEffect(options);
+    }
+
+    /**
+     * @brief The drawable fixture whose SecondTechnique pass P1 assigns only its pixel shader.
+     *
+     * Technique 0 is unchanged (both of its passes assign `oPos = mul(POSITION0, Transform)`);
+     * P1 writes `Tint` and keeps whatever vertex shader the device already holds.
+     *
+     * @return The complete effect bytecode.
+     */
+    inline std::vector<std::uint8_t> BuildSyntheticDrawableEffectWithPixelOnlyPass()
+    {
+        SyntheticEffectOptions options;
+        options.includeDrawableProgram = true;
+        options.secondTechniquePassAssignsOnlyPixelShader = true;
         return BuildSyntheticEffect(options);
     }
 

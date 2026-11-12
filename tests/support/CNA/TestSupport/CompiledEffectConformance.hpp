@@ -6612,6 +6612,94 @@ namespace CNA::TestSupport
     }
 
     /**
+     * @brief Contract: a pass that assigns no vertex shader draws with the one on the device.
+     *
+     * XNA `EffectPass.Apply` (IL_006d-009f) ends the previous pass and begins the new one with
+     * D3DXFX_DONOTSAVESTATE, and neither step clears a shader: only the stages a pass assigns
+     * change. A pass with only a pixel shader therefore keeps the vertex shader, and the vertex
+     * constants, of the last applied pass that assigned one -- in the same effect after a
+     * technique switch, or in another effect. The fixture's vertex shader is
+     * `mul(POSITION0, Transform)`, so the two effects' Transforms (identity, a half-size scale)
+     * show by the covered corner whose vertex stage drew.
+     *
+     * @param device Device whose renderer claims CompiledEffects.
+     */
+    inline void RunCompiledEffectInheritedVertexStageContract(GraphicsDevice& device)
+    {
+        constexpr int kSize = 8;
+        Effect full(device, BuildSyntheticDrawableEffectWithPixelOnlyPass());
+        Effect half(device, BuildSyntheticDrawableEffectWithPixelOnlyPass());
+        full.getParametersProperty()["Transform"]->SetValue(Matrix::getIdentityProperty());
+        half.getParametersProperty()["Transform"]->SetValue(Matrix::CreateScale(0.5f));
+        full.getParametersProperty()["Tint"]->SetValue(Vector4(0.25f, 0.5f, 0.75f, 1.0f));
+        half.getParametersProperty()["Tint"]->SetValue(Vector4(0.75f, 0.5f, 0.25f, 1.0f));
+        const Color fullTint(64, 128, 191, 255);
+        const Color halfTint(191, 128, 64, 255);
+        const Color background(9, 19, 29, 255);
+
+        struct ClipVertex { float x, y, z; };
+        const VertexDeclaration declaration(static_cast<int>(sizeof(ClipVertex)), {
+            VertexElement(0, VertexElementFormat::Vector3, VertexElementUsage::Position, 0),
+        });
+        const ClipVertex quad[6] = {
+            {-1.0f,  1.0f, 0.0f}, {-1.0f, -1.0f, 0.0f}, { 1.0f, -1.0f, 0.0f},
+            {-1.0f,  1.0f, 0.0f}, { 1.0f, -1.0f, 0.0f}, { 1.0f,  1.0f, 0.0f},
+        };
+        // StatePass of FirstTechnique assigns both shaders; P1 of SecondTechnique only the pixel one.
+        struct Step { Effect* effect; bool pixelOnly; };
+        const auto fullPass = [](Effect& effect) { return Step{&effect, false}; };
+        const auto pixelOnlyPass = [](Effect& effect) { return Step{&effect, true}; };
+        // Applies the passes in order and draws once after the last; returns centre and corner.
+        const auto drawAfter = [&](std::initializer_list<Step> steps) {
+            RenderTarget2D target(device, kSize, kSize);
+            device.SetRenderTarget(&target);
+            device.Clear(background);
+            device.setRasterizerStateProperty(RasterizerState::CullNone);
+            device.setDepthStencilStateProperty(DepthStencilState::None);
+            device.setBlendStateProperty(BlendState::Opaque);
+            for (const Step& step : steps)
+            {
+                auto* technique = step.effect->getTechniquesProperty()[step.pixelOnly ? 1 : 0];
+                step.effect->setCurrentTechniqueProperty(technique);
+                technique->getPassesProperty()[step.pixelOnly ? 0 : 1]->Apply();
+            }
+            device.DrawUserPrimitives(PrimitiveType::TriangleList,
+                                      static_cast<const void*>(quad), 0, 2, declaration);
+            device.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
+            std::array<Color, 2> pixels{};
+            const Rectangle centre(kSize / 2, kSize / 2, 1, 1);
+            const Rectangle corner(0, 0, 1, 1);
+            target.GetData(0, &centre, &pixels[0], 0, 1);
+            target.GetData(0, &corner, &pixels[1], 0, 1);
+            return pixels;
+        };
+        const auto expectColor = [](const Color& actual, const Color& expected) {
+            EXPECT_NEAR(actual.getRProperty(), expected.getRProperty(), 3);
+            EXPECT_NEAR(actual.getGProperty(), expected.getGProperty(), 3);
+            EXPECT_NEAR(actual.getBProperty(), expected.getBProperty(), 3);
+        };
+
+        {
+            SCOPED_TRACE("the same effect after a technique switch keeps its own vertex shader");
+            const auto pixels = drawAfter({fullPass(full), pixelOnlyPass(full)});
+            expectColor(pixels[0], fullTint);
+            expectColor(pixels[1], fullTint);
+        }
+        {
+            SCOPED_TRACE("another effect's vertex shader and Transform stay on the device");
+            const auto pixels = drawAfter({fullPass(half), pixelOnlyPass(full)});
+            expectColor(pixels[0], fullTint);
+            expectColor(pixels[1], background);
+        }
+        {
+            SCOPED_TRACE("the last assigning pass wins over the effect's own earlier vertex shader");
+            const auto pixels = drawAfter({fullPass(half), fullPass(full), pixelOnlyPass(half)});
+            expectColor(pixels[0], halfTint);
+            expectColor(pixels[1], halfTint);
+        }
+    }
+
+    /**
      * @brief Contract for a renderer that does NOT claim CompiledEffects: it refuses explicitly.
      *
      * Never a silent stock-shader fallback: the refusal is what makes a porting bug visible.
