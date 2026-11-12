@@ -24,6 +24,22 @@ namespace Microsoft::Xna::Framework::Audio
      */
     struct AudioCategory : public System::IEquatable<AudioCategory>
     {
+        /**
+         * @brief Copies a category. XNA's AudioCategory is a value type, which has no destructive
+         *        move: moving one copies it, so the source keeps its identity and hash.
+         *
+         * @param other Category to copy.
+         */
+        AudioCategory(const AudioCategory& other) = default;
+
+        /**
+         * @brief Copies a category over this one (moving copies too, see the copy constructor).
+         *
+         * @param other Category to copy.
+         * @return This category.
+         */
+        AudioCategory& operator=(const AudioCategory& other) = default;
+
         /** @brief Gets the name of this category. */
         [[nodiscard]] const std::string& getNameProperty() const;
 

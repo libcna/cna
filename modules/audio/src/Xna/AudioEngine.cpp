@@ -378,6 +378,16 @@ namespace Microsoft::Xna::Framework::Audio
             // Each entry keeps its object's lifetime token: a Disposing handler may destroy a
             // later one, which is then skipped (NotifyDestroyedEngine IL_0012-0041 resolves
             // WeakReferences the same way).
+            // A bank that outlives this engine (a caller still holds it, it is in the middle of its
+            // own teardown, or a handler below destroys this engine before reaching it) must not
+            // reach the engine again; every engine use in a bank and its cues is guarded by a null
+            // engine. Detached first, from the registries themselves, so that nothing below -- an
+            // allocation failing, a handler -- can leave one pointing at a freed engine.
+            if (xactImpl_)
+            {
+                for (auto* sb : xactImpl_->soundBanks) if (sb) sb->engine_ = nullptr;
+                for (auto* wb : xactImpl_->waveBanks) if (wb) wb->engine_ = nullptr;
+            }
             std::vector<std::pair<WaveBank*, std::weak_ptr<char>>> waveBanks;
             std::vector<std::pair<SoundBank*, std::weak_ptr<char>>> soundBanks;
             std::vector<std::pair<Cue*, std::weak_ptr<char>>> cues;
@@ -399,8 +409,8 @@ namespace Microsoft::Xna::Framework::Audio
             // A throwing handler does not leave the rest attached to a released engine: every
             // dependent is disposed, then the first exception propagates (as from XNA's loop),
             // before this engine's own Disposing.
-            // A handler may also destroy this engine: then nothing of it may be touched again,
-            // and the banks not yet disposed keep a pointer to it (KNOWN_ISSUES.md).
+            // A handler may also destroy this engine: then nothing of it may be touched again, and
+            // the banks not yet disposed stay undisposed, detached above (KNOWN_ISSUES.md).
             const std::weak_ptr<char> self = lifetime_;
             std::exception_ptr failure;
             const auto disposeEach = [&failure, &self](auto& entries)
@@ -415,13 +425,6 @@ namespace Microsoft::Xna::Framework::Audio
                 return true;
             };
             const bool completed = disposeEach(cues) && disposeEach(soundBanks) && disposeEach(waveBanks);
-            // A bank that outlives this engine (a caller still holds it, or it is in the middle of
-            // its own teardown) must not reach the engine again; every engine use in a bank and its
-            // cues is guarded by a null engine.
-            for (auto& [bank, alive] : soundBanks)
-                if (!alive.expired()) bank->engine_ = nullptr;
-            for (auto& [bank, alive] : waveBanks)
-                if (!alive.expired()) bank->engine_ = nullptr;
             if (!completed)
             {
                 if (failure) std::rethrow_exception(failure);

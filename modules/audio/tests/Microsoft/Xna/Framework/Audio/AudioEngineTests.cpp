@@ -736,6 +736,26 @@ TEST(AudioEngineTest, ACategoryOfADestroyedEngineIsNotEqualToOneOfItsSuccessorAt
     second->~AudioEngine();
 }
 
+// XNA's AudioCategory is a value type: a "moved" category is a copy, so the source keeps its engine
+// identity -- two moved-from categories of different engines stay unequal, and equal ones hash
+// alike (RV-CUE-7 review: moving emptied the identity but kept the hash).
+TEST(AudioEngineTest, AMovedFromCategoryKeepsItsIdentityAndHash)
+{
+    AudioEngine first(XgsFixturePath());
+    AudioEngine second(XgsFixturePath());
+    AudioCategory a = first.GetCategory("Default");
+    AudioCategory b = second.GetCategory("Default");
+    const AudioCategory movedA = std::move(a);
+    const AudioCategory movedB = std::move(b);
+    EXPECT_FALSE(a.Equals(b)) << "moved-from categories of two engines compare equal";
+    EXPECT_TRUE(a.Equals(movedA));
+    EXPECT_EQ(a.GetHashCode(), movedA.GetHashCode());
+    AudioCategory assigned = second.GetCategory("Default");
+    assigned = std::move(a);
+    EXPECT_TRUE(a.Equals(assigned));
+    EXPECT_FALSE(a.Equals(movedB));
+}
+
 // During a bank's teardown in its destructor (a handler destroyed it), another handler destroys the
 // engine; a cue disposed after that must not reach the freed engine through the bank.
 TEST(AudioEngineTest, AnEngineDestroyedDuringABanksTeardownIsNotReachedAfterwards)
