@@ -10,6 +10,7 @@
 #include "Microsoft/Xna/Framework/Graphics/RenderTargetUsage.hpp"
 #include "Microsoft/Xna/Framework/Graphics/TextureCube.hpp"
 #include "CNA/CNAHelper.hpp"
+#include <atomic>
 #include <memory>
 
 namespace CNA::Internal::Renderers { class IRenderTargetCubeRenderer; }
@@ -88,7 +89,8 @@ namespace Microsoft::Xna::Framework::Graphics
         /** @brief Marks the content lost and raises ContentLost. */
         CNAEXT void NotifyContentLostEXT() override
         {
-            contentLost_ = true;
+            // Through an atomic reference, as the latching getter reads and writes it.
+            std::atomic_ref<bool>(contentLost_).store(true, std::memory_order_relaxed);
             ContentLost.Raise(this, System::EventArgs::Empty);
         }
 
@@ -96,7 +98,10 @@ namespace Microsoft::Xna::Framework::Graphics
          * @brief Clears the lost flag; called by a draw or completed Clear while this target is
          *        bound, and by a completed SetData.
          */
-        CNAEXT void ClearContentLostEXT() noexcept override { contentLost_ = false; }
+        CNAEXT void ClearContentLostEXT() noexcept override
+        {
+            std::atomic_ref<bool>(contentLost_).store(false, std::memory_order_relaxed);
+        }
 
         /**
          * @brief Raised when this render target's content is lost to a device reset.

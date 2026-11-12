@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MS-PL
 #pragma once
 
+#include <atomic>
 #include <string>
 #include <type_traits>
 
@@ -80,12 +81,16 @@ namespace Microsoft::Xna::Framework::Graphics
         /** @brief Marks the content lost and raises ContentLost. */
         CNAEXT void NotifyContentLostEXT() override
         {
-            contentLost_ = true;
+            // Through an atomic reference, as the latching getter reads and writes it.
+            std::atomic_ref<bool>(contentLost_).store(true, std::memory_order_relaxed);
             ContentLost.Raise(this, System::EventArgs::Empty);
         }
 
         /** @brief Clears the lost flag; called when the buffer is written with SetData. */
-        CNAEXT void ClearContentLostEXT() noexcept override { contentLost_ = false; }
+        CNAEXT void ClearContentLostEXT() noexcept override
+        {
+            std::atomic_ref<bool>(contentLost_).store(false, std::memory_order_relaxed);
+        }
 
         /**
          * @brief Raised when this vertex buffer's content is lost to a device reset.
