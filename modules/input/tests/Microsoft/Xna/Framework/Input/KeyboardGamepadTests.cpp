@@ -194,7 +194,8 @@ TEST_F(KeyboardGamepadTest, MergesPhysicalButtonsAndUsesKeyboardOnlyForNonzeroAx
     EXPECT_EQ(state.getThumbSticksProperty().getLeftProperty(), Vector2(9830.0f / 32767.0f, 1));
     EXPECT_EQ(state.getThumbSticksProperty().getRightProperty(), Vector2(-1, 6553.0f / 32767.0f));
     EXPECT_FLOAT_EQ(state.getTriggersProperty().getLeftProperty(), 1);
-    EXPECT_FLOAT_EQ(state.getTriggersProperty().getRightProperty(), 0.7f);
+    // XNA ApplyTriggerDeadZone None: byte/255; 0.7 is byte trunc(178.5) = 178.
+    EXPECT_EQ(state.getTriggersProperty().getRightProperty(), 178.0f / 255.0f);
     Press({});
     state = Read();
     EXPECT_TRUE(state.IsButtonDown(Buttons::B));

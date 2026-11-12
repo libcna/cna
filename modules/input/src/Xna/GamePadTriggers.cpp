@@ -9,10 +9,27 @@
 #include "Microsoft/Xna/Framework/Input/GamePad.hpp"
 #include "Microsoft/Xna/Framework/MathHelper.hpp"
 
+#include <algorithm>
 #include <cmath>
 
 namespace Microsoft::Xna::Framework::Input
 {
+    namespace
+    {
+        // XNA builds a polled trigger from its XInput byte (GamePadState..ctor IL_01cf-0202):
+        // ApplyTriggerDeadZone IL_0000-0026 -> ApplyLinearDeadZone(byte, 255, None ? 0 : 30), i.e.
+        // (byte - deadZone) / (255 - deadZone) in Single arithmetic, zero at or below the dead zone.
+        // The byte is the sample the button query reads, trunc(value * 255), which recovers every
+        // byte b exactly from a platform value of b / 255.
+        float PolledTrigger(float value, GamePadDeadZone deadZoneMode)
+        {
+            const float sample = std::isnan(value) ? 0.0f : std::trunc(std::clamp(value, 0.0f, 1.0f) * 255.0f);
+            const float deadZone = deadZoneMode == GamePadDeadZone::None ? 0.0f : 30.0f;
+            if (!(sample > deadZone)) return 0.0f;
+            return MathHelper::Clamp((sample - deadZone) / (255.0f - deadZone), -1.0f, 1.0f);
+        }
+    }
+
     GamePadTriggers::GamePadTriggers()
         : left_(0.0f), right_(0.0f)
     {
@@ -28,21 +45,9 @@ namespace Microsoft::Xna::Framework::Input
 
     GamePadTriggers::GamePadTriggers(float leftTrigger, float rightTrigger,
                                      GamePadDeadZone deadZoneMode)
+        : left_(PolledTrigger(leftTrigger, deadZoneMode)),
+          right_(PolledTrigger(rightTrigger, deadZoneMode))
     {
-        if (deadZoneMode == GamePadDeadZone::None)
-        {
-            left_  = MathHelper::Clamp(leftTrigger,  0.0f, 1.0f);
-            right_ = MathHelper::Clamp(rightTrigger, 0.0f, 1.0f);
-        }
-        else
-        {
-            left_  = MathHelper::Clamp(
-                GamePad::ExcludeAxisDeadZone(leftTrigger,  GamePad::TriggerThreshold),
-                0.0f, 1.0f);
-            right_ = MathHelper::Clamp(
-                GamePad::ExcludeAxisDeadZone(rightTrigger, GamePad::TriggerThreshold),
-                0.0f, 1.0f);
-        }
     }
 
     float GamePadTriggers::getLeftProperty()  const { return left_; }

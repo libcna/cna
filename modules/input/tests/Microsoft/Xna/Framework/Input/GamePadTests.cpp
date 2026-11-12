@@ -131,7 +131,8 @@ TEST_F(GamePadPlatformTest, StateReadsOneImmutableWholePlatformSnapshot)
     // XNA ApplyStickDeadZone None IL_009d-00c8: trunc(axis*32767)/32767.
     EXPECT_FLOAT_EQ(state.getThumbSticksProperty().getLeftProperty().X, 16383.0f / 32767.0f);
     EXPECT_FLOAT_EQ(state.getThumbSticksProperty().getLeftProperty().Y, -8191.0f / 32767.0f);
-    EXPECT_FLOAT_EQ(state.getTriggersProperty().getLeftProperty(), 0.75f);
+    // XNA ApplyTriggerDeadZone None IL_0003-0014: byte/255; 0.75 is byte trunc(191.25) = 191.
+    EXPECT_EQ(state.getTriggersProperty().getLeftProperty(), 191.0f / 255.0f);
     EXPECT_EQ(state.getPacketNumberProperty(), 17);
 }
 

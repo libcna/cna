@@ -76,6 +76,17 @@ TEST_F(GamePadTriggersTest, Tq027GetHashCodeXorsStoredFloatWords)
 
 // --- Dead-zone mode: only reachable via GamePad::GetState's private 3-arg ctor ---
 
+namespace
+{
+    // XNA's polled trigger with a dead zone: the byte the platform value stands for,
+    // (byte - 30) / 225, zero at or below 30 (ApplyTriggerDeadZone IL_0015-0026).
+    float ExpectedDeadZoneTrigger(float raw)
+    {
+        const float sample = std::trunc(raw * 255.0f);
+        return sample > 30.0f ? (sample - 30.0f) / 225.0f : 0.0f;
+    }
+}
+
 TEST_F(GamePadTriggersTest, NonNoneDeadZoneModeExcludesTriggerThresholdThenClamps)
 {
     input.Reset();
@@ -86,9 +97,7 @@ TEST_F(GamePadTriggersTest, NonNoneDeadZoneModeExcludesTriggerThresholdThenClamp
 
     const auto state = GamePad::GetState(PlayerIndex::One, GamePadDeadZone::IndependentAxes);
 
-    const float expected = MathHelper::Clamp(
-        GamePad::ExcludeAxisDeadZone(rawValue, GamePad::TriggerThreshold), 0.0f, 1.0f);
-    EXPECT_NEAR(state.getTriggersProperty().getLeftProperty(), expected, 1e-5f);
+    EXPECT_EQ(state.getTriggersProperty().getLeftProperty(), ExpectedDeadZoneTrigger(rawValue));
 
     input.Reset();
 }
@@ -116,8 +125,8 @@ TEST_F(GamePadTriggersTest, NoneDeadZoneModePassesValueThroughClampedOnly)
 
     const auto state = GamePad::GetState(PlayerIndex::One, GamePadDeadZone::None);
 
-    // Unlike IndependentAxes/Circular, None applies no dead-zone exclusion at all.
-    EXPECT_FLOAT_EQ(state.getTriggersProperty().getLeftProperty(), GamePad::TriggerThreshold * 0.5f);
+    // Unlike IndependentAxes/Circular, None applies no dead-zone exclusion: byte 15 is 15/255.
+    EXPECT_EQ(state.getTriggersProperty().getLeftProperty(), 15.0f / 255.0f);
 
     input.Reset();
 }
@@ -138,18 +147,43 @@ TEST_F(GamePadTriggersTest, NonNoneDeadZoneModeAppliesIndependentlyToBothTrigger
 
     const auto state = GamePad::GetState(PlayerIndex::One, GamePadDeadZone::IndependentAxes);
 
-    const float expectedLeft = MathHelper::Clamp(
-        GamePad::ExcludeAxisDeadZone(rawLeft, GamePad::TriggerThreshold), 0.0f, 1.0f);
-    const float expectedRight = MathHelper::Clamp(
-        GamePad::ExcludeAxisDeadZone(rawRight, GamePad::TriggerThreshold), 0.0f, 1.0f);
+    const float expectedLeft = ExpectedDeadZoneTrigger(rawLeft);
+    const float expectedRight = ExpectedDeadZoneTrigger(rawRight);
     ASSERT_NE(expectedLeft, expectedRight);
 
-    EXPECT_NEAR(state.getTriggersProperty().getLeftProperty(), expectedLeft, 1e-5f);
-    EXPECT_NEAR(state.getTriggersProperty().getRightProperty(), expectedRight, 1e-5f);
+    EXPECT_EQ(state.getTriggersProperty().getLeftProperty(), expectedLeft);
+    EXPECT_EQ(state.getTriggersProperty().getRightProperty(), expectedRight);
 
     input.Reset();
 }
 
+
+// RV-INPUT review #2: XNA computes a polled trigger from its byte, (byte - 30) / 225 in Single
+// (ApplyTriggerDeadZone IL_0015-0026 -> ApplyLinearDeadZone IL_001d-0021). Subtracting 30/255 from
+// the normalized float and dividing by 1 - 30/255 differs in the last bits for 97 of the 256 bytes
+// (byte 128: 0x3edf0125 instead of 0x3edf0123); an exact comparison over every byte catches it.
+TEST_F(GamePadTriggersTest, APolledTriggerIsComputedFromItsByteExactlyAsXnaDoes)
+{
+    input.Reset();
+    input.SetGamePadConnection(PlayerIndex::One, true);
+    int mismatches = 0;
+    for (int sample = 0; sample <= 255; ++sample)
+    {
+        input.SetGamePadAxisValue(PlayerIndex::One, CNA::Platform::GamepadAxis::LeftTrigger,
+                                  static_cast<float>(sample) / 255.0f);
+        const float independent = GamePad::GetState(PlayerIndex::One, GamePadDeadZone::IndependentAxes)
+                                      .getTriggersProperty().getLeftProperty();
+        const float circular = GamePad::GetState(PlayerIndex::One, GamePadDeadZone::Circular)
+                                   .getTriggersProperty().getLeftProperty();
+        const float none = GamePad::GetState(PlayerIndex::One, GamePadDeadZone::None)
+                               .getTriggersProperty().getLeftProperty();
+        const float expected = sample > 30 ? (static_cast<float>(sample) - 30.0f) / 225.0f : 0.0f;
+        const float expectedNone = static_cast<float>(sample) / 255.0f;
+        mismatches += (independent != expected) + (circular != expected) + (none != expectedNone);
+    }
+    EXPECT_EQ(mismatches, 0);
+    input.Reset();
+}
 
 TEST_F(GamePadTriggersTest, Tq025EveryModeUsesIndependentTriggerArithmetic)
 {
