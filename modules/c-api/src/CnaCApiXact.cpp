@@ -134,6 +134,24 @@ void WriteEngineGlobalVariable(AudioEngine& engine, const std::string& name, con
     }
 }
 
+// The same mapping for a cue-scoped variable (Refresh native Cue.GetVariable/SetVariable forward
+// the invalid index's result to the same Helpers translation).
+[[nodiscard]] float ReadCueVariable(Cue& cue, const std::string& name)
+{
+    try { return cue.GetVariable(name); }
+    catch (const System::IndexOutOfRangeException& error) {
+        throw std::out_of_range(error.what());
+    }
+}
+
+void WriteCueVariable(Cue& cue, const std::string& name, const float value)
+{
+    try { cue.SetVariable(name, value); }
+    catch (const System::IndexOutOfRangeException& error) {
+        throw std::out_of_range(error.what());
+    }
+}
+
 [[nodiscard]] CNA_Result GetCategory(
     const CNA_Handle handle,
     std::shared_ptr<CategoryResource>* const outCategory)

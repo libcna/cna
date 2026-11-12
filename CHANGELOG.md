@@ -20,6 +20,13 @@ The experimental C ABI goes from `0.50.0` to `0.52.0`.
 
 ### Changed
 
+- **XACT `Cue` follows XNA in four places.** An unknown or inaccessible cue variable throws
+  `IndexOutOfRangeException` ("The specified variable index is invalid.") instead of
+  `InvalidOperationException` (the C routes `cna_cue_get_variable`/`cna_cue_set_variable` now give
+  the documented `CNA_RESULT_INVALID_ARGUMENT`); the built-in cue variables a project authors
+  (`DopplerPitchScalar`, `AttackTime`, ...) start at their authored value and keep its range and
+  read-only flag; a disposed cue's `IsStopped` is `false`, like every other state; and
+  `Stop(AsAuthored)` neither revives a stopped cue nor restarts a release already under way.
 - **A cue started with `SoundBank.PlayCue` plays until it ends.** A still-playing, paused or
   stopping fire-and-forget cue was destroyed five minutes after it started, so music played with
   `PlayCue` stopped after five minutes. XNA's `PlayCue` sets no expiry; only a finished cue is

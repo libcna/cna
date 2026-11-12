@@ -21,6 +21,7 @@
 #include "System/Environment.hpp"
 #include "System/EventArgs.hpp"
 #include "System/InvalidOperationException.hpp"
+#include "System/IndexOutOfRangeException.hpp"
 #include "System/Object.hpp"
 #include "System/ObjectDisposedException.hpp"
 
@@ -54,6 +55,12 @@ using Microsoft::Xna::Framework::Audio::WaveBank;
 
 namespace
 {
+    // Every playback test here runs on the dummy driver: nothing reaches a real audio device.
+    void UseDummyAudioDriver()
+    {
+        System::Environment::SetEnvironmentVariable("SDL_AUDIODRIVER", "dummy");
+    }
+
     struct AuthoredDefaultGainScope
     {
         AudioEngine& engine;
@@ -2691,7 +2698,7 @@ TEST(CueTest, IsStoppingIsFalseAfterImmediateStopWithNoTailToRelease)
 // explicit Stop() call, and the finished instance must be dropped from Cue::active_.
 TEST(CueTest, PlayingCueNaturallyTransitionsToStoppedAfterPlaybackFinishes)
 {
-    System::Environment::SetEnvironmentVariable("SDL_AUDIODRIVER", "dummy");
+    UseDummyAudioDriver();
 
     try
     {
@@ -2724,7 +2731,7 @@ TEST(CueTest, PlayingCueNaturallyTransitionsToStoppedAfterPlaybackFinishes)
 // Pause() call (mirrors FACTCue_Pause rejecting STOPPING/STOPPED cues in FACT.c).
 TEST(CueTest, PauseAfterNaturalCompletionIsANoOp)
 {
-    System::Environment::SetEnvironmentVariable("SDL_AUDIODRIVER", "dummy");
+    UseDummyAudioDriver();
 
     try
     {
@@ -2760,7 +2767,7 @@ TEST(CueTest, PauseAfterNaturalCompletionIsANoOp)
 // SoundEffectInstance for the same wave reference.
 TEST(CueTest, PlayCalledTwiceWhileAlreadyPlayingIsANoOpAndDoesNotDuplicateInstances)
 {
-    System::Environment::SetEnvironmentVariable("SDL_AUDIODRIVER", "dummy");
+    UseDummyAudioDriver();
 
     try
     {
@@ -2869,7 +2876,7 @@ TEST(CueTest, Apply3DAfterDisposeThrowsObjectDisposed)
 // not just "didn't throw".
 TEST(CueTest, Apply3DAttenuatesActiveInstanceTrackGainWithDistance)
 {
-    System::Environment::SetEnvironmentVariable("SDL_AUDIODRIVER", "dummy");
+    UseDummyAudioDriver();
 
     // CABI-32: only the fixture acquisition may skip. This whole test used to sit inside one
     // try/catch that turned *any* exception into "no audio device (dummy driver unavailable)",
@@ -2928,7 +2935,7 @@ TEST(CueTest, Apply3DAttenuatesActiveInstanceTrackGainWithDistance)
 // Apply3D() call.
 TEST(CueTest, Apply3DBeforePlaySeedsSpatialStateOntoNewlyCreatedInstance)
 {
-    System::Environment::SetEnvironmentVariable("SDL_AUDIODRIVER", "dummy");
+    UseDummyAudioDriver();
 
     try
     {
@@ -3015,7 +3022,7 @@ TEST(CueTest, CategoryVolumeUpdateAfterApply3DPreservesDistanceAttenuation)
 // StopAsAuthoredOnCueWithNoAuthoredFadeIsImmediate for the no-fade-authored case.
 TEST(CueTest, StopAsAuthoredLeavesTrackPlayingButStopImmediateHardStopsRightAway)
 {
-    System::Environment::SetEnvironmentVariable("SDL_AUDIODRIVER", "dummy");
+    UseDummyAudioDriver();
 
     try
     {
@@ -3081,7 +3088,7 @@ TEST(CueTest, StopAsAuthoredLeavesTrackPlayingButStopImmediateHardStopsRightAway
 // StopAsAuthoredOnCueWithNoAuthoredFadeIsImmediate below).
 TEST(CueTest, StopAsAuthoredTransitionsFromStoppingToStoppedOnceFadeTimerElapses)
 {
-    System::Environment::SetEnvironmentVariable("SDL_AUDIODRIVER", "dummy");
+    UseDummyAudioDriver();
 
     try
     {
@@ -3116,13 +3123,55 @@ TEST(CueTest, StopAsAuthoredTransitionsFromStoppingToStoppedOnceFadeTimerElapses
     }
 }
 
+// FACTCue_Stop (FAudio FACT.c:2385-2403): Stop on a stopped cue changes nothing, and an authored
+// stop leaves a release already under way to its own deadline. Stop(Immediate) then
+// Stop(AsAuthored) used to put the voiceless cue back into Stopping (the schedulerStarted_ tail
+// condition of 3100d88ff), and a second AsAuthored restarted the fade, so repeating it postponed
+// the end of a release indefinitely.
+TEST(CueTest, StopAsAuthoredNeitherRevivesAStoppedCueNorRestartsARelease)
+{
+    UseDummyAudioDriver();
+
+    try
+    {
+        std::unique_ptr<Cue> stopped(SharedLongBank().GetCue("LongCue"));
+        stopped->Play();
+        if (!CueTestAccess::ActiveInstance(*stopped, 0))
+        {
+            GTEST_SKIP() << "no audio device (dummy driver unavailable); "
+                            "could not create a real SoundEffectInstance";
+        }
+        stopped->Stop(AudioStopOptions::Immediate);
+        ASSERT_TRUE(stopped->getIsStoppedProperty());
+        stopped->Stop(AudioStopOptions::AsAuthored);
+        EXPECT_TRUE(stopped->getIsStoppedProperty());
+        EXPECT_FALSE(stopped->getIsStoppingProperty());
+
+        std::unique_ptr<Cue> fading(SharedLongBank().GetCue("LongCue"));
+        fading->Play();
+        fading->Stop(AudioStopOptions::AsAuthored);
+        ASSERT_TRUE(fading->getIsStoppingProperty());
+        // Two thirds into the 300 ms fade, a second authored stop; the check comes 60 ms after
+        // the original deadline and 140 ms before a restarted one.
+        std::this_thread::sleep_for(std::chrono::milliseconds(kLongCueFadeOutMS * 2 / 3));
+        fading->Stop(AudioStopOptions::AsAuthored);
+        std::this_thread::sleep_for(std::chrono::milliseconds(kLongCueFadeOutMS / 3 + 60));
+        EXPECT_TRUE(fading->getIsStoppedProperty()) << "the second authored stop restarted the release";
+    }
+    catch (const std::exception& error)
+    {
+        GTEST_SKIP() << "could not exercise real playback (expected: no audio device): "
+                     << error.what();
+    }
+}
+
 // P9-STOP-010: real FACT (FACTCue_Stop, FACT.c) treats Stop(AsAuthored) as immediate when the cue
 // has no authored fadeOutMS (and no RPC-release timing, which CNA doesn't resolve at all) -- a
 // "simple" cue like Apply3DCue can never carry a fadeOutMS at all (the format has no such field
 // for it), so AsAuthored must behave exactly like Stop(Immediate) for one.
 TEST(CueTest, StopAsAuthoredOnCueWithNoAuthoredFadeIsImmediate)
 {
-    System::Environment::SetEnvironmentVariable("SDL_AUDIODRIVER", "dummy");
+    UseDummyAudioDriver();
 
     try
     {
@@ -3155,7 +3204,7 @@ TEST(CueTest, StopAsAuthoredOnCueWithNoAuthoredFadeIsImmediate)
 // Injected time pins exactly80% elapsed without a sleep or a unity clamp assumption.
 TEST(CueTest, StopAsAuthoredRampsVolumeDownOverAuthoredFadeDuration)
 {
-    System::Environment::SetEnvironmentVariable("SDL_AUDIODRIVER", "dummy");
+    UseDummyAudioDriver();
 
     try
     {
@@ -3233,10 +3282,37 @@ TEST(CueTest, GetVariableEmptyNameThrowsArgumentNull)
     EXPECT_THROW((void)cue->GetVariable(""), System::ArgumentNullException);
 }
 
-TEST(CueTest, GetVariableNameOutsideKnownSetThrowsInvalidOperation)
+// Refresh native Cue.GetVariable IL_005b-006a/008c-00a0 forwards XACTENGINE_E_INVALIDVARIABLEINDEX,
+// which Framework Helpers.GetExceptionFromResult IL_0189-0193 makes IndexOutOfRangeException.
+TEST(CueTest, GetVariableNameOutsideKnownSetThrowsIndexOutOfRange)
 {
     auto cue = MakeCue();
-    EXPECT_THROW((void)cue->GetVariable("NoSuchVariable"), System::InvalidOperationException);
+    try
+    {
+        (void)cue->GetVariable("NoSuchVariable");
+        FAIL() << "an unknown cue variable must be refused";
+    }
+    catch (const System::IndexOutOfRangeException& error)
+    {
+        EXPECT_STREQ(error.what(), "The specified variable index is invalid.");
+    }
+}
+
+// Refresh Cue.get_IsStopped IL_0000-0014 (like every state getter) reads the native state, and
+// GetStatus IL_0048-004e gives 0 for a released handle: a disposed cue reports no state, IsStopped
+// included.
+TEST(CueTest, ADisposedCueReportsNoState)
+{
+    auto cue = MakeCue();
+    cue->Dispose();
+    EXPECT_TRUE(cue->getIsDisposedProperty());
+    EXPECT_FALSE(cue->getIsStoppedProperty());
+    EXPECT_FALSE(cue->getIsStoppingProperty());
+    EXPECT_FALSE(cue->getIsPlayingProperty());
+    EXPECT_FALSE(cue->getIsPausedProperty());
+    EXPECT_FALSE(cue->getIsPreparedProperty());
+    EXPECT_FALSE(cue->getIsPreparingProperty());
+    EXPECT_FALSE(cue->getIsCreatedProperty());
 }
 
 // P9-LIFECYCLE-015: GetVariable() had no disposed guard at all, unlike Play()/Apply3D() in this
@@ -3271,10 +3347,10 @@ TEST(CueTest, SetVariableEmptyNameThrowsArgumentNull)
     EXPECT_THROW(cue->SetVariable("", 1.0f), System::ArgumentNullException);
 }
 
-TEST(CueTest, SetVariableNameOutsideKnownSetThrowsInvalidOperation)
+TEST(CueTest, SetVariableNameOutsideKnownSetThrowsIndexOutOfRange)
 {
     auto cue = MakeCue();
-    EXPECT_THROW(cue->SetVariable("NoSuchVariable", 1.0f), System::InvalidOperationException);
+    EXPECT_THROW(cue->SetVariable("NoSuchVariable", 1.0f), System::IndexOutOfRangeException);
 }
 
 // P9-LIFECYCLE-015: see GetVariableAfterDisposeThrowsObjectDisposed above -- same rationale.
@@ -4807,7 +4883,7 @@ TEST(CueTest, PlayWithOutOfRangeWaveIndexSpawnsNoInstance)
 // FACTCue_Stop(cue, IMMEDIATE) on the *new* cue when maxInstanceBehavior is FAIL.
 TEST(CueTest, CueInstanceLimitFailRejectsSecondInstanceOfSameCueDefinition)
 {
-    System::Environment::SetEnvironmentVariable("SDL_AUDIODRIVER", "dummy");
+    UseDummyAudioDriver();
 
     try
     {
@@ -4847,7 +4923,7 @@ TEST(CueTest, CueInstanceLimitFailRejectsSecondInstanceOfSameCueDefinition)
 // definition. Category limits have their separate category-wide search.
 TEST(CueTest, CueInstanceLimitReplaceOldestRetainsOlderDifferentDefinition)
 {
-    System::Environment::SetEnvironmentVariable("SDL_AUDIODRIVER", "dummy");
+    UseDummyAudioDriver();
     auto& engine=SharedEngine();
     AuthoredDefaultGainScope gainScope{engine}; // explicit authored gain, independent of test order
     constexpr float gain=3.9909474752791922f; // sound255*category255 =a(255)^2

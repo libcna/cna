@@ -216,3 +216,18 @@ TEST(HndXactPreparation, NeverPlayedInteractiveAndStreamingHandlesRetainDifferen
         EXPECT_EQ(b->wave->getIsInUseProperty(),retains);b->sound->Dispose();EXPECT_FALSE(b->wave->getIsInUseProperty());
     }
 }
+
+TEST(HndXactPreparation, AuthoredBuiltInCueVariablesKeepTheirInitialValueRangeAndReadOnlyFlag)
+{
+    // The XACT tool authors DopplerPitchScalar (initial 1, range [0,4]) and a read-only AttackTime
+    // into every project's .xgs, this genuine one included. The cue API reads and writes that
+    // authored variable (FAudio FACT.c:2559-2616, the policy CNA already applies to every other
+    // authored cue variable); a hand-made project that lacks the name keeps the built-in 0.
+    auto b=PreparationShapeBanks("resident");
+    auto cue=CountCue(*b->sound,"ShapeCue");
+    EXPECT_FLOAT_EQ(cue->GetVariable("DopplerPitchScalar"),1.0f);
+    cue->SetVariable("DopplerPitchScalar",99.0f);
+    EXPECT_FLOAT_EQ(cue->GetVariable("DopplerPitchScalar"),4.0f);
+    cue->SetVariable("AttackTime",5.0f);
+    EXPECT_FLOAT_EQ(cue->GetVariable("AttackTime"),0.0f);
+}

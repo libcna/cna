@@ -73,8 +73,8 @@ CNA_CueInfo{
     ToCBool(object->value->getIsStoppedProperty()),
     ToCBool(object->value->getIsStoppingProperty())
 }''' }
-cna_cue_get_variable = { get = "object->value->GetVariable(name)" }
-cna_cue_set_variable = { call = "object->value->SetVariable(name, value)", invalid_if = "!std::isfinite(value)" }
+cna_cue_get_variable = { get = "ReadCueVariable(*object->value, name)" }
+cna_cue_set_variable = { call = "WriteCueVariable(*object->value, name, value)", invalid_if = "!std::isfinite(value)" }
 
 [calls]
 [calls.routes]

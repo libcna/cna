@@ -35,11 +35,11 @@
     },
     "modules/audio/tests/Microsoft/Xna/Framework/Audio/CueTests.cpp": {
       "category": "audio-native-integration",
-      "max_references": 18
+      "max_references": 8
     },
     "modules/audio/tests/Microsoft/Xna/Framework/Audio/DynamicSoundEffectInstanceTests.cpp": {
       "category": "audio-native-integration",
-      "max_references": 30
+      "max_references": 24
     },
     "modules/audio/tests/Microsoft/Xna/Framework/Audio/MicrophoneTests.cpp": {
       "category": "audio-native-integration",
@@ -67,7 +67,7 @@
     },
     "modules/audio/tests/Microsoft/Xna/Framework/Audio/SoundEffectTests.cpp": {
       "category": "audio-native-integration",
-      "max_references": 34
+      "max_references": 32
     },
     "modules/audio/tests/Microsoft/Xna/Framework/Audio/WaveBankTests.cpp": {
       "category": "audio-native-integration",

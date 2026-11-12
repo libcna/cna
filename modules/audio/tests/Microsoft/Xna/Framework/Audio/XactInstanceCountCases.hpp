@@ -135,7 +135,7 @@ TEST(XactInstanceCount, RpcAndInteractiveReadersUseThePublishedCache)
         auto first=b.Play();
         ASSERT_NE(CueTestAccess::ActiveInstance(*first,0),nullptr);
         if(access&1)EXPECT_FLOAT_EQ(NumInstances(*first),1);
-        else EXPECT_THROW((void)NumInstances(*first),System::InvalidOperationException);
+        else EXPECT_THROW((void)NumInstances(*first),System::IndexOutOfRangeException);
         EXPECT_FLOAT_EQ(CueTestAccess::ActiveInstance(*first,0)->getPitchProperty(),0);
         auto second=b.Play();b.Tick(1);
         if(access&1)EXPECT_FLOAT_EQ(NumInstances(*first),2);
@@ -153,7 +153,7 @@ TEST(XactInstanceCount, RpcAndInteractiveReadersUseThePublishedCache)
         auto prepared=CountCue(*b.sound,"Sequence");auto first=CountCue(*b.sound,"Sequence");
         first->Play();auto second=CountCue(*b.sound,"Sequence");second->Play();
         if(access&1)EXPECT_FLOAT_EQ(NumInstances(*prepared),2);
-        else EXPECT_THROW((void)NumInstances(*prepared),System::InvalidOperationException);
+        else EXPECT_THROW((void)NumInstances(*prepared),System::IndexOutOfRangeException);
         prepared->Play();
         ASSERT_NE(CueTestAccess::ActiveInstance(*prepared,0),nullptr);
         // Selection sees cached2 before this Play publishes3, so sound214's +300 cents wins.
@@ -164,13 +164,15 @@ TEST(XactInstanceCount, RpcAndInteractiveReadersUseThePublishedCache)
 
 TEST(XactInstanceCount, PublicLookupRetainsVariableDomainAndDisposalValidation)
 {
+    // An inaccessible name is an invalid index: Framework Helpers.GetExceptionFromResult
+    // IL_0189-0193 (XACTENGINE_E_INVALIDVARIABLEINDEX) gives IndexOutOfRangeException.
     for(const std::uint8_t access:{6u,3u}) // private cue; public global
     {
         ScheduledBanks b({{PlayAt(0,0,255)}},0,false,CountRpcXgs(access));auto cue=b.Play();
-        EXPECT_THROW((void)NumInstances(*cue),System::InvalidOperationException);
+        EXPECT_THROW((void)NumInstances(*cue),System::IndexOutOfRangeException);
     }
     ScheduledBanks absent({{PlayAt(0,0,255)}},0,false,CountRpcXgs(7,"OtherVariable"));
-    auto cue=absent.Play();EXPECT_THROW((void)NumInstances(*cue),System::InvalidOperationException);
+    auto cue=absent.Play();EXPECT_THROW((void)NumInstances(*cue),System::IndexOutOfRangeException);
     auto valid=InstanceCountBanks();auto disposed=CountCue(*valid->sound);disposed->Play();disposed->Dispose();
     EXPECT_THROW((void)NumInstances(*disposed),System::ObjectDisposedException);
     valid->sound->Dispose();

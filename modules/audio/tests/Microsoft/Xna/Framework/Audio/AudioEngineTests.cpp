@@ -1073,7 +1073,7 @@ TEST(AudioEngineTest, CueGetVariableRejectsEngineGlobalOnlyVariable)
     SoundBank sb(&engine, WriteFixture("var_reject.xsb", BuildXA8XsbFixtureBytes()));
     std::unique_ptr<Cue> cue(sb.GetCue("XA8Cue"));
 
-    EXPECT_THROW((void)cue->GetVariable("Volume"), System::InvalidOperationException);
+    EXPECT_THROW((void)cue->GetVariable("Volume"), System::IndexOutOfRangeException);
 }
 
 TEST(AudioEngineTest, CueSetVariableRejectsEngineGlobalOnlyVariable)
@@ -1083,7 +1083,7 @@ TEST(AudioEngineTest, CueSetVariableRejectsEngineGlobalOnlyVariable)
     SoundBank sb(&engine, WriteFixture("var_reject2.xsb", BuildXA8XsbFixtureBytes()));
     std::unique_ptr<Cue> cue(sb.GetCue("XA8Cue"));
 
-    EXPECT_THROW(cue->SetVariable("Volume", 1.0f), System::InvalidOperationException);
+    EXPECT_THROW(cue->SetVariable("Volume", 1.0f), System::IndexOutOfRangeException);
 }
 
 // "CueVar" in VarAccessibilityFixturePath()'s fixture IS PUBLIC|CUE -- unlike "Volume" above,
@@ -1118,7 +1118,7 @@ TEST(AudioEngineTest, CueGetVariableRejectsPrivateVariable)
     SoundBank sb(&engine, WriteFixture("var_private.xsb", BuildXA8XsbFixtureBytes()));
     std::unique_ptr<Cue> cue(sb.GetCue("XA8Cue"));
 
-    EXPECT_THROW((void)cue->GetVariable("PrivateVar"), System::InvalidOperationException);
+    EXPECT_THROW((void)cue->GetVariable("PrivateVar"), System::IndexOutOfRangeException);
 }
 
 // ===================== Update =====================

@@ -288,7 +288,9 @@ TEST_P(Gap05EncodedPlayback, BankDisposalStopsOutputOnceAndDoesNotRetainDecoder)
         banks.wave->Disposing += [&](System::Object*,const System::EventArgs&) { ++events; };
         banks.wave->Dispose(); banks.wave->Dispose();
         EXPECT_EQ(events,1); EXPECT_TRUE(banks.wave->getIsDisposedProperty());
-        EXPECT_TRUE(cue->getIsStoppedProperty()); ExpectSilence(manualDevice->Render(1024));
+        // CNA's wave-bank teardown disposes the cues still using it (as XactLoopVariationCases
+        // asserts too), and a disposed cue reports no state (Cue.get_IsStopped IL_0000-0014).
+        EXPECT_TRUE(cue->getIsDisposedProperty()); ExpectSilence(manualDevice->Render(1024));
     }
 }
 

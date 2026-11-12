@@ -12,6 +12,7 @@
 #include "CNA/Internal/Audio/XactTypes.hpp"
 #include "Microsoft/Xna/Framework/Audio/InstancePlayLimitException.hpp"
 #include "System/ArgumentNullException.hpp"
+#include "System/IndexOutOfRangeException.hpp"
 #include "System/InvalidOperationException.hpp"
 #include "System/ObjectDisposedException.hpp"
 
@@ -107,6 +108,9 @@ namespace Microsoft::Xna::Framework::Audio
         // Y outside the curve's domain, otherwise piecewise-interpolates between the bracketing
         // points using the left point's interpolation type (linear/fast/slow/sin-cos).
         using CNA::Internal::Audio::EvaluateRpcCurve;
+
+        // FrameworkResources.InvalidVariableIndex.
+        constexpr const char* kInvalidVariableIndex = "The specified variable index is invalid.";
 
         // Standard per-cue 3D variables that XACT projects always define (used by
         // FACT3DApply); always valid even if the parsed .xgs/.xsb data doesn't declare
@@ -245,7 +249,9 @@ namespace Microsoft::Xna::Framework::Audio
     bool Cue::getIsPlayingProperty()   const { ReconcileState(); return !isDisposed_ && state_ == State::Playing;   }
     bool Cue::getIsPreparedProperty()  const { return !isDisposed_ && state_ == State::Prepared;  }
     bool Cue::getIsPreparingProperty() const { return !isDisposed_ && state_ == State::Preparing; }
-    bool Cue::getIsStoppedProperty()   const { ReconcileState(); return isDisposed_  || state_ == State::Stopped;   }
+    // Refresh Cue.get_IsStopped IL_0000-0014 reads the native state, which is 0 once the handle is
+    // released (GetStatus IL_0048-004e), so a disposed cue reports no state at all.
+    bool Cue::getIsStoppedProperty()   const { ReconcileState(); return !isDisposed_ && state_ == State::Stopped;   }
     bool Cue::getIsStoppingProperty()  const { ReconcileState(); return !isDisposed_ && state_ == State::Stopping;  }
     const std::string& Cue::getNameProperty() const { return name_; }
 
@@ -582,7 +588,7 @@ namespace Microsoft::Xna::Framework::Audio
     {
         // XNA GetVariable IL_0000-IL_0017 validates the name before native handle access.
         if (name.empty())
-            throw System::ArgumentNullException("name");
+            throw System::ArgumentNullException("name", "This method does not accept null for this parameter.");
         // P9-LIFECYCLE-015: matches Play()/Apply3D()'s own disposed guard in this class. Real
         // FACT has no equivalent guard at all -- FACTCue_GetVariableIndex dereferences
         // pCue->parentBank BEFORE its `pCue == NULL` check (FACT.c), so calling this on a
@@ -597,15 +603,12 @@ namespace Microsoft::Xna::Framework::Audio
         {
             auto* engine = bank_ ? bank_->engine_ : nullptr;
             if (engine && engine->GetCueVariableInfo(name).valid) return numCueInstances_;
-            throw System::InvalidOperationException("Invalid variable name!");
+            throw System::IndexOutOfRangeException(kInvalidVariableIndex);
         }
 
         auto it = variables_.find(name);
         if (it != variables_.end())
             return it->second;
-
-        if (IsBuiltInCueVariable(name))
-            return 0.0f;
 
         // P12-VAR-001: matches FACTCue_GetVariableIndex exactly (FACT.c) -- only a variable with
         // BOTH the PUBLIC and CUE accessibility bits set is reachable through the cue-level API
@@ -619,24 +622,21 @@ namespace Microsoft::Xna::Framework::Audio
             if (info.valid)
                 return info.initialValue; // never explicitly SetVariable()-d on this cue yet
         }
+        // An XACT project always authors these; only a hand-made project may lack them.
+        if (IsBuiltInCueVariable(name))
+            return 0.0f;
 
-        throw System::InvalidOperationException("Invalid variable name!");
+        throw System::IndexOutOfRangeException(kInvalidVariableIndex);
     }
 
     void Cue::SetVariable(const std::string& name, float value)
     {
         // XNA SetVariable IL_0000-IL_0017 validates the name before native handle access.
         if (name.empty())
-            throw System::ArgumentNullException("name");
+            throw System::ArgumentNullException("name", "This method does not accept null for this parameter.");
         // P9-LIFECYCLE-015: see GetVariable()'s comment above -- same rationale.
         if (isDisposed_)
             throw System::ObjectDisposedException("Cue");
-
-        if (IsBuiltInCueVariable(name))
-        {
-            variables_[name] = value;
-            return;
-        }
 
         // P12-VAR-001: matches FACTCue_SetVariable exactly (FACT.c) -- same PUBLIC+CUE gate as
         // GetVariable above, plus a READONLY rejection and authored [minValue,maxValue] clamp
@@ -655,11 +655,16 @@ namespace Microsoft::Xna::Framework::Audio
                 return;
             }
         }
+        if (IsBuiltInCueVariable(name))
+        {
+            variables_[name] = value;
+            return;
+        }
 
-        // Preserves this class's own established precedent (P9-LIFECYCLE-015 etc.) of throwing
-        // rather than silently no-op-ing for a name that was never valid at all, matching the
-        // FACTVARIABLEINDEX_INVALID case FNA's C# SetVariable() itself does check and throw for.
-        throw System::InvalidOperationException("Invalid variable name!");
+        // Refresh native Cue.SetVariable IL_0054-006a/0085-0094 forwards the invalid index's
+        // XACTENGINE_E_INVALIDVARIABLEINDEX, which Framework Helpers.GetExceptionFromResult
+        // IL_0189-0193 turns into IndexOutOfRangeException(InvalidVariableIndex).
+        throw System::IndexOutOfRangeException(kInvalidVariableIndex);
     }
 
     float Cue::GetVariableForRpc(const std::string& name) const
@@ -675,15 +680,14 @@ namespace Microsoft::Xna::Framework::Audio
         if (it != variables_.end())
             return it->second;
 
-        if (IsBuiltInCueVariable(name))
-            return 0.0f;
-
         AudioEngine* eng = bank_ ? bank_->engine_ : nullptr;
         if (eng)
         {
             auto cueInfo = eng->GetCueVariableInfo(name);
             if (cueInfo.valid)
                 return cueInfo.initialValue;
+            if (IsBuiltInCueVariable(name))
+                return 0.0f;
 
             float globalValue = 0.0f;
             if (eng->TryGetGlobalVariableValue(name, globalValue))
@@ -1499,8 +1503,11 @@ namespace Microsoft::Xna::Framework::Audio
     void Cue::StopPlayback(bool immediate)
     {
         if (isDisposed_) return;
+        // FACTCue_Stop (FACT.c:2385-2403): an authored stop leaves a release already under way to
+        // its own deadline, and a stopped cue stays stopped (nothing is left to release).
+        if (state_ == State::Stopping && !immediate) return;
         // FACTCue_Stop:2407-2414: a paused cue cannot render a release.
-        immediate = immediate || paused_ || state_ == State::Prepared;
+        immediate = immediate || paused_ || state_ == State::Prepared || state_ == State::Stopped;
         // Stop exits pending event-level loops too; release may still dispatch
         // other future authored events until its deadline (GAP-01b).
         for (auto& track : scheduledTracks_)

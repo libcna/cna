@@ -594,7 +594,7 @@ CNA_Result cna_cue_get_variable(
             routeResult != CNA_RESULT_SUCCESS) {
             return routeResult;
         }
-        *out_value = static_cast<float>(object->value->GetVariable(name));
+        *out_value = static_cast<float>(ReadCueVariable(*object->value, name));
         return CNA_RESULT_SUCCESS;
     });
 }
@@ -618,7 +618,7 @@ CNA_Result cna_cue_set_variable(
             routeResult != CNA_RESULT_SUCCESS) {
             return routeResult;
         }
-        object->value->SetVariable(name, value);
+        WriteCueVariable(*object->value, name, value);
         return CNA_RESULT_SUCCESS;
     });
 }

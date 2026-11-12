@@ -616,7 +616,7 @@ static int validate_cue(const CNA_Handle sound_bank)
         cna_cue_set_variable(cue, view("CueVar"), 20.0F) == CNA_RESULT_SUCCESS &&
         cna_cue_get_variable(cue, view("CueVar"), &value) == CNA_RESULT_SUCCESS &&
         value == 10.0F &&
-        cna_cue_get_variable(cue, view("GlobalVar"), &value) == CNA_RESULT_INVALID_STATE &&
+        cna_cue_get_variable(cue, view("GlobalVar"), &value) == CNA_RESULT_INVALID_ARGUMENT &&
         cna_cue_get_variable(cue, view(""), &value) == CNA_RESULT_INVALID_ARGUMENT &&
         cna_cue_get_variable(cue, view("CueVar"), 0) == CNA_RESULT_INVALID_ARGUMENT;
 
