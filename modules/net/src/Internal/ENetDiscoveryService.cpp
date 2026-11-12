@@ -240,13 +240,16 @@ namespace CNA::Internal::Net
             static constexpr auto TrainIdle = std::chrono::milliseconds(20);
             // A lone first probe measures nothing, so nothing is gained by giving up on it early:
             // it waits a whole search for the rest of its train (a delivery stall after the first
-            // datagram), and gives its slot to a new train only when every slot is taken.
+            // datagram). Once it has been idle as long as a train's report would wait, it gives its
+            // slot to a new train when every slot is taken; a younger one may still be a train in
+            // progress, and keeps its slot as before.
             static constexpr auto LoneProbeIdle = std::chrono::milliseconds(kSearchWindowMs);
 
             // Identified trains already reported: a straggler or duplicate of one must not open a
             // new record whose report would replace the measurement. A report matters only within
             // the querier's search, so one is remembered for a second; the bound evicts the oldest
-            // only past 1024 reports in that second.
+            // only past 1024 reports in that second. An older querier's train (identifier 0) is
+            // told apart by its probe indices alone and is not remembered.
             struct ReportedTrain
             {
                 enet_uint32 Host = 0;
@@ -334,7 +337,10 @@ namespace CNA::Internal::Net
                 if (probe.Index >= 32) return;
                 if (probe.TrainId != 0 && std::any_of(reported_.begin(), reported_.end(),
                         [&](const ReportedTrain& done)
-                        { return done.Host == from.host && done.Port == from.port && done.TrainId == probe.TrainId; }))
+                        {
+                            return done.Host == from.host && done.Port == from.port && done.TrainId == probe.TrainId
+                                && at - done.At < ReportedMemory;
+                        }))
                     return;
                 auto train = std::find_if(trains.begin(), trains.end(),
                     [&](const Train& known)
@@ -356,12 +362,13 @@ namespace CNA::Internal::Net
                 {
                     if (trains.size() >= MaxTrains)
                     {
-                        // Every slot taken: the oldest lone probe, which measures nothing yet,
-                        // makes room; a train already measuring keeps its slot.
+                        // Every slot taken: the oldest lone probe idle past a train's report wait,
+                        // which measures nothing, makes room. A train already measuring, or a lone
+                        // probe whose train may still be arriving, keeps its slot.
                         const auto lone = std::min_element(trains.begin(), trains.end(),
                             [](const Train& a, const Train& b)
                             { return (a.Received < 2) != (b.Received < 2) ? a.Received < 2 : a.Last < b.Last; });
-                        if (lone->Received >= 2) return;
+                        if (lone->Received >= 2 || at - lone->Last < TrainIdle) return;
                         trains.erase(lone);
                     }
                     Train fresh;

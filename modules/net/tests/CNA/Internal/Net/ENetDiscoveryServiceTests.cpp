@@ -639,4 +639,56 @@ TEST(ENetDiscoveryServiceTest, AReportedTrainStaysReportedPastSixtyFourOtherRepo
     EXPECT_TRUE(querier.Receive(DiscoveryMessageTag::UpstreamReport, std::chrono::milliseconds(300)).empty())
         << "the first train's stragglers were reported as a train of their own";
 }
+
+// RV-NET-14 review N19: 65 queriers' trains interleaved, every slot taken, all of them arriving well
+// inside the 20 ms idle time. A lone first probe still arriving keeps its slot, so the 65th train is
+// refused and the other 64 complete -- not a cycle in which each new train evicts another's first
+// probe and none ever reaches a second.
+TEST(ENetDiscoveryServiceTest, SixtyFiveInterleavedTrainsLeaveSixtyFourMeasured) {
+    SystemLinkSessionFixture host("HostPlayer");
+    UpstreamQuerier querier(*host.session);
+    ASSERT_NE(querier.invite.ResponderPort, 0);
+    constexpr int kSources = 65;
+    std::array<int, kSources> socks{};
+    sockaddr_in loopback{};
+    loopback.sin_family = AF_INET;
+    ASSERT_EQ(inet_pton(AF_INET, "127.0.0.1", &loopback.sin_addr), 1);
+    for (int& sock : socks) {
+        sock = socket(AF_INET, SOCK_DGRAM, 0);
+        ASSERT_GE(sock, 0);
+        ASSERT_EQ(bind(sock, reinterpret_cast<const sockaddr*>(&loopback), sizeof(loopback)), 0);
+    }
+    sockaddr_in responder = loopback;
+    responder.sin_port = htons(querier.invite.ResponderPort);
+    for (uint8_t index = 0; index < kQosProbeCount; ++index) {
+        for (int source = 0; source < kSources; ++source) {
+            DiscoveryQosProbeMessage probe;
+            probe.ConnectPort = querier.invite.ConnectPort;
+            probe.Index = index;
+            probe.TrainId = 0xC000u + static_cast<uint32_t>(source);
+            const auto bytes = NetDiscoveryProtocol::EncodeUpstreamProbe(probe);
+            (void)sendto(socks[source], bytes.data(), bytes.size(), 0,
+                         reinterpret_cast<const sockaddr*>(&responder), sizeof(responder));
+        }
+        // A round is 78 KB: the responder drains it before the next, well inside the idle time.
+        std::this_thread::sleep_for(std::chrono::milliseconds(1));
+    }
+    int reports = 0;
+    const auto deadline = std::chrono::steady_clock::now() + std::chrono::milliseconds(500);
+    std::array<bool, kSources> reported{};
+    while (std::chrono::steady_clock::now() < deadline && reports < kSources) {
+        for (int source = 0; source < kSources; ++source) {
+            if (reported[source]) continue;
+            std::array<SharpRuntime::bytecs, 1500> buffer{};
+            const auto received = recv(socks[source], buffer.data(), buffer.size(), MSG_DONTWAIT);
+            if (received > 0 && buffer[0] == static_cast<SharpRuntime::bytecs>(DiscoveryMessageTag::UpstreamReport)) {
+                reported[source] = true;
+                ++reports;
+            }
+        }
+        std::this_thread::sleep_for(std::chrono::milliseconds(1));
+    }
+    for (const int sock : socks) close(sock);
+    EXPECT_EQ(reports, kSources - 1) << "trains whose first probes were evicted never completed";
+}
 #endif

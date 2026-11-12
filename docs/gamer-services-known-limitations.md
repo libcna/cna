@@ -439,9 +439,12 @@ Same-machine host-identity replacement is separate from machine migration. **CNA
   identifier and is told apart by its probe indices, which a lost first probe can still blur. The
   host's responder reports a train once all of it arrived or 20 ms after its last probe, and never
   reports one with fewer than two probes: a lone first probe waits up to the 150 ms search window
-  for the rest of its train. A reported train is remembered for a second (at most 1024 of them, the
-  oldest evicted first), so its stragglers in that time send no second report; a straggler after a
-  second, or after 1024 other reports within it, can report again. PlayerMatch/Ranked listings from a service advertising
+  for the rest of its train, unless all 64 train slots are taken and it has been idle for 20 ms,
+  when it gives its slot to a new train. A reported identified train is remembered for a second (at
+  most 1024 of them, the oldest evicted first), so two or more of its stragglers in that time send
+  no second report; after a second, or after 1024 other identified reports within it, they can. A
+  train from an older CNA has no identifier and is not remembered: two of its probe indices
+  arriving again after its report are reported as a train of their own. PlayerMatch/Ranked listings from a service advertising
   `qos-prejoin-v1` start bounded asynchronous probes over a separate verified WSS
   channel through that service to the current host and back, before joining.
   Poll the listing's `QualityOfService` again until `IsAvailable` becomes true;
