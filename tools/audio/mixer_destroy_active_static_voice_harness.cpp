@@ -23,6 +23,7 @@
 #include "Microsoft/Xna/Framework/Audio/SoundEffect.hpp"
 #include "Microsoft/Xna/Framework/Audio/SoundEffectInstance.hpp"
 #include "Microsoft/Xna/Framework/Audio/SoundState.hpp"
+#include "Microsoft/Xna/Framework/FrameworkDispatcher.hpp"
 #include "System/Environment.hpp"
 
 #include <cstdio>
@@ -46,6 +47,9 @@ int main()
         std::vector<unsigned char> pcm(4 * 441000, 0);
         SoundEffect effect(pcm, 44100, AudioChannels::Stereo);
         SoundEffectInstance instance = effect.CreateInstance();
+        // A fire-and-forget Play below needs one FrameworkDispatcher.Update first (XNA Play
+        // IL_0000-0021); a Game's constructor would have run it.
+        Microsoft::Xna::Framework::FrameworkDispatcher::Update();
 
         instance.Play();
         if (instance.getStateProperty() != SoundState::Playing)

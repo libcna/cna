@@ -2,6 +2,7 @@
 // The CNA system sounds: short, quiet tones synthesized here (no sound files), played through the
 // standard SoundEffect path when the Guide is driven by a player. CNA_GAMER_SERVICES_SOUNDS=0 turns
 // them off; without an audio device they are silently absent.
+#include "CNA/Internal/Audio/FrameworkUpdates.hpp"
 #include "GuideScreen.hpp"
 #include "Microsoft/Xna/Framework/Audio/SoundEffect.hpp"
 #include <algorithm>
@@ -84,6 +85,9 @@ void play(Sound sound)
 {
     auto& sounds=bank();
     if(!soundsWanted()||sounds.failed)return;
+    // SoundEffect.Play refuses before the first FrameworkDispatcher.Update (XNA Play IL_0000-0021);
+    // the Guide then stays quiet for this sound rather than giving up on sound for good.
+    if(!CNA::Internal::FrameworkUpdates::UpdateCalledAtLeastOnce())return;
     auto& effect=sounds.effects[static_cast<std::size_t>(sound)];
     try {
         if(!effect)effect=std::make_unique<Audio::SoundEffect>(soundData(sound),Rate,Audio::AudioChannels::Mono);

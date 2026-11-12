@@ -1,5 +1,8 @@
 // SPDX-License-Identifier: MS-PL
 #include <gtest/gtest.h>
+#include "System/InvalidOperationException.hpp"
+#include "CNA/Internal/Audio/FrameworkUpdates.hpp"
+#include "Microsoft/Xna/Framework/FrameworkDispatcher.hpp"
 
 #include <algorithm>
 #include <atomic>
@@ -1149,8 +1152,36 @@ TEST(SoundEffectTest, MoveAssignedEffectStillCreatesAWorkingInstance)
     EXPECT_EQ(inst.getStateProperty(), SoundState::Playing);
 }
 
+// Owner decision 2026-11-12: XNA's SoundEffect.Play refuses before anything else when
+// FrameworkDispatcher.Update never ran (Play IL_0000-0021, FrameworkResources.CallFrameworkDispatcherUpdate);
+// a Game's constructor runs it. The refusal precedes the disposal and argument checks.
+TEST(SoundEffectTest, PlayRefusesUntilFrameworkDispatcherUpdateHasRun)
+{
+    std::vector<SharpRuntime::bytecs> pcm(1600, 0);
+    SoundEffect effect(pcm, 8000, AudioChannels::Mono);
+    CNA::Internal::FrameworkUpdates::SetUpdateCalledAtLeastOnceForTests(false);
+    try
+    {
+        (void)effect.Play(5.0f, 0.0f, 0.0f);
+        ADD_FAILURE() << "Play ran before any FrameworkDispatcher.Update";
+    }
+    catch (const System::InvalidOperationException& e)
+    {
+        EXPECT_EQ(std::string(e.what()),
+                  "FrameworkDispatcher.Update has not been called. Regular FrameworkDispatcher.Update "
+                  "calls are necessary for fire and forget sound effects and framework events to "
+                  "function correctly. See http://go.microsoft.com/fwlink/?LinkId=193853 for details.");
+    }
+    Microsoft::Xna::Framework::FrameworkDispatcher::Update();
+    EXPECT_TRUE(CNA::Internal::FrameworkUpdates::UpdateCalledAtLeastOnce());
+    EXPECT_THROW((void)effect.Play(5.0f, 0.0f, 0.0f), System::ArgumentOutOfRangeException)
+        << "after an Update the argument checks run";
+}
+
 TEST(SoundEffectTest, PlayReturnsTrue)
 {
+    // A fire-and-forget Play needs one FrameworkDispatcher.Update first (XNA Play IL_0000-0021).
+    Microsoft::Xna::Framework::FrameworkDispatcher::Update();
     auto fx = makeEffect();
     if (!fx) GTEST_SKIP() << "no audio device";
     EXPECT_TRUE(fx->Play());
@@ -1170,6 +1201,8 @@ TEST(SoundEffectTest, PlayReturnsTrue)
 // stereo-forcing plumbing doesn't crash across the full pan range, including both hard extremes.
 TEST(SoundEffectTest, PlayWithHardPanDoesNotCrash)
 {
+    // A fire-and-forget Play needs one FrameworkDispatcher.Update first (XNA Play IL_0000-0021).
+    Microsoft::Xna::Framework::FrameworkDispatcher::Update();
     auto fx = makeEffect();
     if (!fx) GTEST_SKIP() << "no audio device";
     EXPECT_TRUE(fx->Play(1.0f, 0.0f, 1.0f));
@@ -1182,6 +1215,8 @@ TEST(SoundEffectTest, PlayWithHardPanDoesNotCrash)
 // TSan this used to report a delete/read race in PendingPanStateCleanup/FireAndForgetPanCallback.
 TEST(SoundEffectTest, RepeatedShortFireAndForgetPlaySafelyReclaimsPanState)
 {
+    // A fire-and-forget Play needs one FrameworkDispatcher.Update first (XNA Play IL_0000-0021).
+    Microsoft::Xna::Framework::FrameworkDispatcher::Update();
     auto fx = makeEffect(64); // 64 stereo S16 frames (~1.5 ms)
     if (!fx) GTEST_SKIP() << "no audio device (dummy driver unavailable)";
 
@@ -1198,6 +1233,8 @@ TEST(SoundEffectTest, RepeatedShortFireAndForgetPlaySafelyReclaimsPanState)
 
 TEST(SoundEffectTest, PlayThrowsOnPanOutOfRange)
 {
+    // A fire-and-forget Play needs one FrameworkDispatcher.Update first (XNA Play IL_0000-0021).
+    Microsoft::Xna::Framework::FrameworkDispatcher::Update();
     // Matches SoundEffectInstance::setPanProperty's validation (CP-2): Pan is range-checked,
     // not clamped.
     auto fx = makeEffect();
@@ -1213,6 +1250,8 @@ TEST(SoundEffectTest, PlayThrowsOnPanOutOfRange)
 // pinned FNA's old clamp.
 TEST(SoundEffectTest, PlayRefusesWhatTheInstanceSettersRefuse)
 {
+    // A fire-and-forget Play needs one FrameworkDispatcher.Update first (XNA Play IL_0000-0021).
+    Microsoft::Xna::Framework::FrameworkDispatcher::Update();
     auto fx = makeEffect();
     if (!fx) GTEST_SKIP() << "no audio device";
     const float nan = std::numeric_limits<float>::quiet_NaN();
@@ -1238,6 +1277,8 @@ TEST(SoundEffectTest, PlayRefusesWhatTheInstanceSettersRefuse)
 // idempotent (Dispose(bool) IL_0013-IL_0019 skips an already-disposed effect).
 TEST(SoundEffectTest, DisposeIsIdempotentAndPlayRefusesTheDisposedEffect)
 {
+    // A fire-and-forget Play needs one FrameworkDispatcher.Update first (XNA Play IL_0000-0021).
+    Microsoft::Xna::Framework::FrameworkDispatcher::Update();
     auto fx = makeEffect();
     if (!fx) GTEST_SKIP() << "no audio device";
     EXPECT_FALSE(fx->getIsDisposedProperty());

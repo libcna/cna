@@ -27,6 +27,7 @@
 #include "System/ObjectDisposedException.hpp"
 #include "System/NotSupportedException.hpp"
 #include "System/InvalidOperationException.hpp"
+#include "CNA/Internal/Audio/FrameworkUpdates.hpp"
 
 #ifdef SOUND_ENABLED
 #include "CNA/Internal/Audio/MixerEngine.hpp"
@@ -661,6 +662,16 @@ namespace Microsoft::Xna::Framework::Audio
 
     bool SoundEffect::Play(float volume, float pitch, float pan)
     {
+        // XNA SoundEffect.Play IL_0000-0021: before anything else, a fire-and-forget sound needs
+        // FrameworkDispatcher.Update to have run once (a Game's constructor runs it) -- owner
+        // decision 2026-11-12.
+        if (!CNA::Internal::FrameworkUpdates::UpdateCalledAtLeastOnce())
+        {
+            throw System::InvalidOperationException(
+                "FrameworkDispatcher.Update has not been called. Regular FrameworkDispatcher.Update "
+                "calls are necessary for fire and forget sound effects and framework events to "
+                "function correctly. See http://go.microsoft.com/fwlink/?LinkId=193853 for details.");
+        }
         // XNA refuses a disposed effect, then routes the three values through a fresh instance's
         // Volume, Pitch and Pan setters in that order, so each refuses what the setter refuses,
         // NaN included, as ArgumentOutOfRangeException("value"). FNA returned false when disposed

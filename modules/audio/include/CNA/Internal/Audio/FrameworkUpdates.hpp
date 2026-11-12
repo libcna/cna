@@ -32,4 +32,19 @@ namespace CNA::Internal::FrameworkUpdates
      * @param slot Which work. @param update The work.
      */
     void Install(Slot slot, void (*update)()) noexcept;
+
+    /**
+     * @brief Whether FrameworkDispatcher::Update() has run at least once in this process -- XNA's
+     *        FrameworkDispatcher.UpdateCalledAtLeastOnce, which SoundEffect.Play requires.
+     *
+     * @return True after the first Update().
+     */
+    [[nodiscard]] bool UpdateCalledAtLeastOnce() noexcept;
+
+    /**
+     * @brief Test seam: sets the flag Update() sets, so a test can stand where no Update has run.
+     *
+     * @param called The new value.
+     */
+    void SetUpdateCalledAtLeastOnceForTests(bool called) noexcept;
 }

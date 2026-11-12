@@ -26,6 +26,8 @@ namespace Microsoft::Xna::Framework
 
     void FrameworkDispatcher::Update()
     {
+        // XNA Update's first act (IL_0000-0001): from here on SoundEffect.Play may run.
+        CNA::Internal::FrameworkUpdates::SetUpdateCalledAtLeastOnceForTests(true);
         // In XNA's order: dynamic sound effect streams, microphones, the media player and its
         // events. Each subsystem installed its slot when it first had work (FrameworkUpdates.hpp).
         for (const auto& update : frameworkUpdates)
@@ -56,5 +58,20 @@ namespace CNA::Internal::FrameworkUpdates
     void Install(const Slot slot, void (*const update)()) noexcept
     {
         frameworkUpdates[static_cast<std::size_t>(slot)].store(update, std::memory_order_release);
+    }
+
+    namespace
+    {
+        std::atomic<bool> updateCalledAtLeastOnce{false};
+    }
+
+    bool UpdateCalledAtLeastOnce() noexcept
+    {
+        return updateCalledAtLeastOnce.load(std::memory_order_acquire);
+    }
+
+    void SetUpdateCalledAtLeastOnceForTests(const bool called) noexcept
+    {
+        updateCalledAtLeastOnce.store(called, std::memory_order_release);
     }
 }

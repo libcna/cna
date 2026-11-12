@@ -2,6 +2,7 @@
 #include "CNA/Internal/Audio/AudioMixer.hpp"
 #include "CNA/Internal/Audio/MixerEngine.hpp"
 #include "Microsoft/Xna/Framework/Audio/SoundEffect.hpp"
+#include "CNA/Internal/Audio/FrameworkUpdates.hpp"
 #include <atomic>
 #include <chrono>
 #include <cstdio>
@@ -56,6 +57,9 @@ int main(int argc, char** argv)
     // short sound and an active one. No test sleeps or replaces its callbacks.
     SoundEffect shortEffect(std::vector<unsigned char>(4 * 16), 44100, AudioChannels::Stereo);
     SoundEffect longEffect(std::vector<unsigned char>(44100 * 4 * 60), 44100, AudioChannels::Stereo);
+    // Fire-and-forget Play needs one FrameworkDispatcher.Update first (XNA Play IL_0000-0021);
+    // this audio-only program stands where one has run.
+    CNA::Internal::FrameworkUpdates::SetUpdateCalledAtLeastOnceForTests(true);
     if (!shortEffect.Play(1.0f, 0.0f, 0.5f) || !longEffect.Play(1.0f, 0.0f, -0.5f)) return 5;
     if (!firstAudio.try_acquire_for(std::chrono::seconds(5))) return 6;
     if (mode == "--explicit-close") DestroyMixer();
