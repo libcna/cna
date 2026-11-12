@@ -578,6 +578,9 @@ namespace Microsoft::Xna::Framework::Graphics
         [[nodiscard]] const void* GetRawValueInternal() const noexcept;
         [[nodiscard]] std::size_t GetRawValueSizeInternal() const noexcept;
         [[nodiscard]] Texture* GetTextureInternal() const noexcept;
+        // Stores a texture in a non-compiled parameter's one slot with every typed view, without
+        // SetValue's checks (a clone copies a reference that may no longer be assignable).
+        void StoreTextureInternal(Texture* texture) noexcept;
         [[nodiscard]] std::uint32_t GetRuntimeIndexInternal() const noexcept;
         [[nodiscard]] bool IsDirtyInternal() const noexcept;
         void MarkCleanInternal() noexcept;

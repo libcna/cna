@@ -20,6 +20,9 @@
 
 #include <memory>
 
+#include "CNA/GraphicsCapability.hpp"
+#include "CNA/TestSupport/CompiledEffectFixtures.hpp"
+
 #include "Microsoft/Xna/Framework/Matrix.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Effect.hpp"
 #include "Microsoft/Xna/Framework/Graphics/EffectParameter.hpp"
@@ -199,6 +202,39 @@ TEST_F(SpriteEffectMatrixTest, ApplyBindsATextureOfAnotherTypeSetThroughTheBaseO
         ApplyFirstPass(*effect);
         EXPECT_EQ(gd.getTexturesProperty()[0], &cube);
     }
+}
+
+namespace
+{
+    // The protected helpers SpriteEffect's clone and Apply use.
+    struct TextureCopyAccess : Effect
+    {
+        using Effect::CopyParameterTextureInternal;
+    };
+}
+
+// RV-MIX3 review #1: the clone helper copies the held reference whichever storage either side has --
+// a compiled parameter (its storage, marked for the next Apply) or a stock one (its typed views).
+TEST_F(SpriteEffectMatrixTest, TheTextureCopyHelperCrossesCompiledAndStockStorage)
+{
+    if (!gd.SupportsCapability(CNA::GraphicsCapability::CompiledEffects))
+        GTEST_SKIP() << "Configured renderer has no compiled effects";
+    Effect compiled(gd, CNA::TestSupport::BuildSyntheticSamplingEffect({}));
+    EffectParameter* const compiledTexture = compiled.getParametersProperty()["FxTexture"];
+    ASSERT_NE(compiledTexture, nullptr);
+    SpriteEffect sprite(gd);
+    EffectParameter* const stockTexture = sprite.getParametersProperty()["Texture"];
+    Texture2D a(gd, 1, 1);
+    Texture2D b(gd, 1, 1);
+
+    compiledTexture->SetValue(&b);
+    stockTexture->SetValue(&a);
+    TextureCopyAccess::CopyParameterTextureInternal(*compiledTexture, *stockTexture);
+    EXPECT_EQ(compiledTexture->GetValueTexture2D(), &a) << "stock into compiled";
+
+    stockTexture->SetValue(&b);
+    TextureCopyAccess::CopyParameterTextureInternal(*stockTexture, *compiledTexture);
+    EXPECT_EQ(stockTexture->GetValueTexture2D(), &a) << "compiled into stock";
 }
 
 TEST_F(SpriteEffectMatrixTest, ApplySetsTheViewportMatrixEveryTime)

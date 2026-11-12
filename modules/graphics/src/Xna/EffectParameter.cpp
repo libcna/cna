@@ -1123,6 +1123,10 @@ namespace Microsoft::Xna::Framework::Graphics
             compiledStorage_->dirty = true;
             return;
         }
+        StoreTextureInternal(v);
+    }
+    void EffectParameter::StoreTextureInternal(Texture* v) noexcept
+    {
         // One texture slot, as XNA's native parameter has (GetValueTexture2D IL_001e-0098 reads it
         // back and QueryInterfaces the type it asks for): whichever overload set it, the getter of
         // the texture's own type returns it, and another type's getter returns null.

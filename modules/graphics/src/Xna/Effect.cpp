@@ -1111,16 +1111,15 @@ namespace Microsoft::Xna::Framework::Graphics
     void Effect::CopyParameterTextureInternal(EffectParameter& target,
                                               const EffectParameter& source) noexcept
     {
-        if (target.compiledStorage_ && source.compiledStorage_)
+        // Either side may be compiled: the reference is read and stored by each one's own storage.
+        Texture* const texture = source.GetTextureInternal();
+        if (target.compiledStorage_)
         {
-            target.compiledStorage_->texture = source.compiledStorage_->texture;
+            target.compiledStorage_->texture = texture;
             target.compiledStorage_->dirty = true;
             return;
         }
-        target.textureData_ = source.textureData_;
-        target.texture2DData_ = source.texture2DData_;
-        target.texture3DData_ = source.texture3DData_;
-        target.textureCubeData_ = source.textureCubeData_;
+        target.StoreTextureInternal(texture);
     }
 
     Texture* Effect::SampledStockTextureInternal(int slot, Texture* own) const
