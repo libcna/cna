@@ -372,14 +372,17 @@ namespace Microsoft::Xna::Framework::Audio
             // Unregister{WaveBank,SoundBank,Cue}(), which would otherwise mutate these same
             // containers while we're iterating them; with xactImpl_ already null, those
             // reentrant calls become harmless no-ops (see their own null guards).
-            std::vector<WaveBank*> waveBanks;
-            std::vector<SoundBank*> soundBanks;
-            std::vector<Cue*> cues;
+            // Each entry keeps its object's lifetime token: a Disposing handler may destroy a
+            // later one, which is then skipped (NotifyDestroyedEngine IL_0012-0041 resolves
+            // WeakReferences the same way).
+            std::vector<std::pair<WaveBank*, std::weak_ptr<char>>> waveBanks;
+            std::vector<std::pair<SoundBank*, std::weak_ptr<char>>> soundBanks;
+            std::vector<std::pair<Cue*, std::weak_ptr<char>>> cues;
             if (xactImpl_)
             {
-                waveBanks = xactImpl_->waveBanks;
-                soundBanks = xactImpl_->soundBanks;
-                cues       = xactImpl_->activeCues;
+                for (auto* wb : xactImpl_->waveBanks) if (wb) waveBanks.emplace_back(wb, wb->lifetime_);
+                for (auto* sb : xactImpl_->soundBanks) if (sb) soundBanks.emplace_back(sb, sb->lifetime_);
+                for (auto* cue : xactImpl_->activeCues) if (cue) cues.emplace_back(cue, cue->lifetime_);
             }
 
             rendererDetails_.clear();
@@ -390,12 +393,23 @@ namespace Microsoft::Xna::Framework::Audio
 #endif
             xactImpl_.reset();
 
-            for (auto* cue : cues)
-                if (cue) cue->Dispose();
-            for (auto* sb : soundBanks)
-                if (sb) sb->Dispose();
-            for (auto* wb : waveBanks)
-                if (wb) wb->Dispose();
+            // A throwing handler does not leave the rest attached to a released engine: every
+            // dependent is disposed, then the first exception propagates (as from XNA's loop),
+            // before this engine's own Disposing.
+            std::exception_ptr failure;
+            const auto disposeEach = [&failure](auto& entries)
+            {
+                for (auto& [object, alive] : entries)
+                {
+                    if (alive.expired()) continue;
+                    try { object->Dispose(); }
+                    catch (...) { if (!failure) failure = std::current_exception(); }
+                }
+            };
+            disposeEach(cues);
+            disposeEach(soundBanks);
+            disposeEach(waveBanks);
+            if (failure) std::rethrow_exception(failure);
 
             if (disposing)
                 Disposing.Raise(this, System::EventArgs::Empty);

@@ -135,6 +135,7 @@ namespace Microsoft::Xna::Framework::Audio
     private:
         friend class SoundBank;
         friend class AudioEngine;
+        friend class WaveBank; // reads lifetime_ in its disposal cascade
         Cue(std::string name, SoundBank* bank, uint16_t cueIndex);
 
         enum class State { Created, Preparing, Prepared, Playing, Stopping, Stopped };
@@ -145,6 +146,9 @@ namespace Microsoft::Xna::Framework::Audio
         uint16_t    categoryIdx_= 0xFFFF;
         State       state_      = State::Created;
         bool        isDisposed_ = false;
+        // Expires with this object, so a disposal cascade's snapshot skips one that a Disposing
+        // handler destroyed meanwhile (XNA's NotifyDestroyedEngine resolves WeakReferences).
+        std::shared_ptr<char> lifetime_ = std::make_shared<char>();
         bool        interactive_ = false;
         bool        hasPreparedSound_ = false;
         // Consuming a prepared replacement candidate does not stop it or release its banks.

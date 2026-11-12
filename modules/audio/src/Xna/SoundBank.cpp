@@ -111,7 +111,8 @@ namespace Microsoft::Xna::Framework::Audio
             throw System::ArgumentNullException("name",
                 "This method does not accept null for this parameter.");
 
-        if (xactImpl_)
+        // A bank being disposed (a Disposing handler of one of its cues) is already released.
+        if (xactImpl_ && !isDisposed_)
         {
             auto it = xactImpl_->data.cueNameMap.find(name);
             if (it != xactImpl_->data.cueNameMap.end())
@@ -217,7 +218,7 @@ namespace Microsoft::Xna::Framework::Audio
 
         // XNA's PlayCue overloads use InvalidOperationException for missing names
         // (IL_0051 / IL_0081), unlike GetCue's ArgumentException.
-        if (!xactImpl_ || !xactImpl_->data.cueNameMap.contains(name))
+        if (!xactImpl_ || isDisposed_ || !xactImpl_->data.cueNameMap.contains(name))
             throw System::InvalidOperationException("An error occurred trying to play the cue named \"" + name + "\". Is the cue name correct?");
 
         std::unique_ptr<Cue> cue;
@@ -269,9 +270,19 @@ namespace Microsoft::Xna::Framework::Audio
             // FACTSoundBank_Destroy (FACT.c:1311-1327). Snapshot first: Cue::Dispose() below
             // calls back into UnregisterCue(), which would otherwise invalidate a live range-for
             // over activeCues_ mid-iteration (same hazard as AudioEngine::StopCategoryInternal).
-            std::vector<Cue*> cues = activeCues_;
-            for (auto* cue : cues)
-                if (cue) cue->Dispose(); // idempotent; safe even if the caller already disposed it
+            // A cue's Disposing handler may destroy another cue (skipped through its lifetime
+            // token) or throw; the cascade still detaches every cue, and the first exception is
+            // rethrown once this bank references nothing.
+            std::vector<std::pair<Cue*, std::weak_ptr<char>>> cues;
+            for (auto* cue : activeCues_)
+                if (cue) cues.emplace_back(cue, cue->lifetime_);
+            std::exception_ptr failure;
+            for (auto& [cue, alive] : cues)
+            {
+                if (alive.expired()) continue;
+                try { cue->Dispose(); } // idempotent; safe even if the caller already disposed it
+                catch (...) { if (!failure) failure = std::current_exception(); }
+            }
             activeCues_.clear();
 
             // Cue callbacks may have disposed banks already; snapshot only after
@@ -281,6 +292,7 @@ namespace Microsoft::Xna::Framework::Audio
             for (auto* bank : resolved) bank->UnregisterSoundBank(this);
 
             xactImpl_.reset();
+            if (failure) std::rethrow_exception(failure);
             if (disposing)
                 Disposing.Raise(this, System::EventArgs::Empty);
         }

@@ -500,9 +500,18 @@ namespace Microsoft::Xna::Framework::Audio
             // first: Cue::Dispose() below calls back into UnregisterCue() (for every wave bank
             // the cue uses, not just this one), which would otherwise invalidate a live
             // range-for over activeCues_ mid-iteration.
-            std::vector<Cue*> cues = activeCues_;
-            for (auto* cue : cues)
-                if (cue) cue->Dispose(); // idempotent; safe even if already disposed elsewhere
+            // As in SoundBank::Dispose: a handler may destroy a sibling or throw; every cue is
+            // still detached and the first exception is rethrown at the end.
+            std::vector<std::pair<Cue*, std::weak_ptr<char>>> cues;
+            for (auto* cue : activeCues_)
+                if (cue) cues.emplace_back(cue, cue->lifetime_);
+            std::exception_ptr failure;
+            for (auto& [cue, alive] : cues)
+            {
+                if (alive.expired()) continue;
+                try { cue->Dispose(); } // idempotent; safe even if already disposed elsewhere
+                catch (...) { if (!failure) failure = std::current_exception(); }
+            }
             activeCues_.clear();
 
             // Preserve CNA's existing forced-disposal cascade without leaving
@@ -519,6 +528,7 @@ namespace Microsoft::Xna::Framework::Audio
                 std::lock_guard<std::mutex> lock(xactImplMutex_);
                 xactImpl_.reset();
             }
+            if (failure) std::rethrow_exception(failure);
             if (disposing)
                 Disposing.Raise(this, System::EventArgs::Empty);
         }

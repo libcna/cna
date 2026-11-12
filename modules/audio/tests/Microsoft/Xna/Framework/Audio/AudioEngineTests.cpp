@@ -650,6 +650,79 @@ TEST(AudioEngineTest, Tq022ThrowingDisposingHandlerDoesNotUndoTeardown)
     EXPECT_EQ(events, 1);
 }
 
+// A cue's Disposing handler that throws does not stop its bank's teardown: the bank's other cue is
+// disposed too and the bank keeps no reference to either, then the exception reaches the caller.
+// The engine's cascade does the same for the banks behind such a cue.
+TEST(AudioEngineTest, AThrowingCueDisposingHandlerDoesNotStrandTheRestOfTheTeardown)
+{
+    {
+        AudioEngine engine(XgsFixturePath());
+        WaveBank wave(&engine, WriteFixture("throwing_cue.xwb", BuildXA8XwbFixtureBytes()));
+        SoundBank bank(&engine, WriteFixture("throwing_cue.xsb", BuildXA8XsbFixtureBytes()));
+        std::unique_ptr<Cue> first(bank.GetCue("XA8Cue"));
+        std::unique_ptr<Cue> second(bank.GetCue("XA8Cue"));
+        first->Disposing += [](System::Object*, const System::EventArgs&) {
+            throw std::runtime_error("first cue handler");
+        };
+        EXPECT_THROW(bank.Dispose(), std::runtime_error);
+        EXPECT_TRUE(bank.getIsDisposedProperty());
+        EXPECT_TRUE(first->getIsDisposedProperty());
+        EXPECT_TRUE(second->getIsDisposedProperty()) << "the throwing handler stranded a cue";
+    }
+    {
+        AudioEngine engine(XgsFixturePath());
+        WaveBank wave(&engine, WriteFixture("throwing_cue_engine.xwb", BuildXA8XwbFixtureBytes()));
+        SoundBank bank(&engine, WriteFixture("throwing_cue_engine.xsb", BuildXA8XsbFixtureBytes()));
+        std::unique_ptr<Cue> cue(bank.GetCue("XA8Cue"));
+        cue->Disposing += [](System::Object*, const System::EventArgs&) {
+            throw std::runtime_error("cue handler");
+        };
+        EXPECT_THROW(engine.Dispose(), std::runtime_error);
+        EXPECT_TRUE(engine.getIsDisposedProperty());
+        EXPECT_TRUE(bank.getIsDisposedProperty());
+        EXPECT_TRUE(wave.getIsDisposedProperty()) << "the throwing handler stranded the wave bank";
+    }
+}
+
+// A cue's Disposing handler that destroys a sibling cue: the bank's cascade skips the destroyed one
+// instead of calling it through its old address (a use after free under ASan or valgrind).
+TEST(AudioEngineTest, ACueDestroyedByASiblingsDisposingHandlerIsNotDisposedAgain)
+{
+    AudioEngine engine(XgsFixturePath());
+    WaveBank wave(&engine, WriteFixture("sibling_cue.xwb", BuildXA8XwbFixtureBytes()));
+    SoundBank bank(&engine, WriteFixture("sibling_cue.xsb", BuildXA8XsbFixtureBytes()));
+    std::unique_ptr<Cue> first(bank.GetCue("XA8Cue"));
+    std::unique_ptr<Cue> second(bank.GetCue("XA8Cue"));
+    first->Disposing += [&](System::Object*, const System::EventArgs&) { second.reset(); };
+    bank.Dispose();
+    EXPECT_EQ(second, nullptr);
+    EXPECT_TRUE(first->getIsDisposedProperty());
+}
+
+// During its bank's teardown a cue's Disposing handler meets a released bank: GetCue refuses as
+// native GetCue IL_013c-014c does (managed GetCue IL_0035-005d formats CueNotFound) and PlayCue
+// with InvalidOperationException, so no cue outlives the bank it points at.
+TEST(AudioEngineTest, ABankBeingDisposedRefusesNewCues)
+{
+    AudioEngine engine(XgsFixturePath());
+    WaveBank wave(&engine, WriteFixture("disposing_getcue.xwb", BuildXA8XwbFixtureBytes()));
+    SoundBank bank(&engine, WriteFixture("disposing_getcue.xsb", BuildXA8XsbFixtureBytes()));
+    std::unique_ptr<Cue> cue(bank.GetCue("XA8Cue"));
+    std::unique_ptr<Cue> escaped;
+    bool getCueRefused = false;
+    bool playCueRefused = false;
+    cue->Disposing += [&](System::Object*, const System::EventArgs&) {
+        try { escaped.reset(bank.GetCue("XA8Cue")); }
+        catch (const System::ArgumentException&) { getCueRefused = true; }
+        try { bank.PlayCue("XA8Cue"); }
+        catch (const System::InvalidOperationException&) { playCueRefused = true; }
+    };
+    bank.Dispose();
+    EXPECT_TRUE(getCueRefused);
+    EXPECT_TRUE(playCueRefused);
+    EXPECT_EQ(escaped, nullptr);
+}
+
 // ===================== Constructors =====================
 
 TEST(AudioEngineTest, SingleArgConstructorEmptyPathThrowsArgumentNull)
