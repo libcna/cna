@@ -160,7 +160,12 @@ namespace CNA::Internal::Renderers::Software
             throw System::InvalidOperationException(
                 "Software SpriteBatch compiled Effect has no current pass.");
 
-        if (!compiledSpriteEffectApplied_)
+        // Once per batch; again only when a stock draw in between (an Immediate batch) replaced
+        // the stages with shaders Software keeps no record of: SpriteEffect's vertex stage is then
+        // the nearest one a pixel-only pass can draw sprites with.
+        const auto* owners = dynamic_cast<SoftwareCompiledEffect*>(compiledSpriteEffect_.get());
+        if (!compiledSpriteEffectApplied_ || owners == nullptr ||
+            owners->GetStageOwnerEXT(true) == nullptr)
         {
             ApplyCompiledSpriteEffect();
             compiledSpriteEffectApplied_ = true;

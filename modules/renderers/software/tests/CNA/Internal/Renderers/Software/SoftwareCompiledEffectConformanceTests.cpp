@@ -200,4 +200,42 @@ TEST(SoftwareCompiledEffectStageTest, APassWithoutAVertexShaderAfterAStockDrawRe
     device.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
 }
 
+// An Immediate SpriteBatch with a pixel-only effect, interrupted by a stock draw between two
+// sprites: the second sprite still draws, with SpriteEffect's vertex stage applied again, instead of
+// refusing for want of a vertex shader (review rv-stage2 F1).
+TEST(SoftwareCompiledEffectStageTest, AnImmediatePixelOnlyBatchSurvivesAStockDrawBetweenSprites)
+{
+    using namespace CNA::TestSupport;
+    using namespace Microsoft::Xna::Framework;
+    using namespace Microsoft::Xna::Framework::Graphics;
+    GraphicsDevice device(GraphicsAdapter::getDefaultAdapterProperty(), GraphicsProfile::HiDef,
+                          PresentationParameters::CreateWindowedEXT(64, 64));
+    ASSERT_TRUE(device.SupportsCapability(CNA::GraphicsCapability::CompiledEffects));
+    Effect effect(device, BuildSyntheticPixelOnlySamplingEffect({}));
+    effect.getParametersProperty()["Tint"]->SetValue(Vector4::One);
+    Texture2D white(device, 1, 1);
+    const Color texel[1] = {Color::White};
+    white.SetData(texel, 1);
+    VertexPositionColor stockQuad[6];
+    const Vector3 corners[6] = {{-1, 1, 0}, {-1, -1, 0}, {1, -1, 0}, {-1, 1, 0}, {1, -1, 0}, {1, 1, 0}};
+    for (int i = 0; i < 6; ++i) stockQuad[i] = VertexPositionColor(corners[i], Color::Black);
+
+    RenderTarget2D target(device, 8, 8);
+    device.SetRenderTarget(&target);
+    SpriteBatch batch(device);
+    batch.Begin(SpriteSortMode::Immediate, BlendState::Opaque, nullptr, nullptr, nullptr, &effect);
+    batch.Draw(white, Rectangle(0, 0, 4, 4), Color::White);
+    BasicEffect stock(device);
+    stock.setVertexColorEnabledProperty(true);
+    stock.getCurrentTechniqueProperty()->getPassesProperty()[0]->Apply();
+    device.DrawUserPrimitives(PrimitiveType::TriangleList, stockQuad, 0, 2);
+    EXPECT_NO_THROW(batch.Draw(white, Rectangle(4, 4, 4, 4), Color::White));
+    batch.End();
+    device.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
+    Color pixel = Color::Transparent;
+    const Rectangle probe(6, 6, 1, 1);
+    target.GetData(0, &probe, &pixel, 0, 1);
+    EXPECT_EQ(pixel, Color::White) << "the second sprite did not draw";
+}
+
 #endif
