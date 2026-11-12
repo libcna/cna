@@ -717,6 +717,23 @@ TEST(AudioEngineTest, ACueHandlerThatDestroysItsBankAndThrowsEndsTheCascade)
     EXPECT_TRUE(cue->getIsDisposedProperty());
 }
 
+// A saved category outlives its engine's C++ object: it refuses like a category of a disposed engine
+// (Refresh native refusal E_INVALIDARG, Helpers.GetExceptionFromResult IL_0235-023a) and keeps
+// its hash, without reading the freed engine.
+TEST(AudioEngineTest, ACategoryOutlivingItsEngineRefusesWithoutTouchingIt)
+{
+    auto engine = std::make_unique<AudioEngine>(XgsFixturePath());
+    AudioCategory category = engine->GetCategory("Default");
+    const int hash = category.GetHashCode();
+    engine.reset();
+    EXPECT_THROW(category.Pause(), System::ArgumentException);
+    EXPECT_THROW(category.Resume(), System::ArgumentException);
+    EXPECT_THROW(category.Stop(AudioStopOptions::Immediate), System::ArgumentException);
+    EXPECT_THROW(category.SetVolume(0.5f), System::ArgumentException);
+    EXPECT_EQ(category.GetHashCode(), hash);
+    EXPECT_EQ(category.getNameProperty(), "Default");
+}
+
 // A bank destroyed by a cue's Disposing handler during its own teardown finishes that teardown in its
 // destructor: its other cue is disposed and its wave bank no longer counts it as an owner, so
 // neither keeps a pointer to the freed bank.

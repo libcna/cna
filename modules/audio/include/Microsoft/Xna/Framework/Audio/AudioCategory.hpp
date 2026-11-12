@@ -2,6 +2,7 @@
 #pragma once
 
 #include <any>
+#include <memory>
 #include <string>
 
 #include "System/IEquatable.hpp"
@@ -100,9 +101,16 @@ namespace Microsoft::Xna::Framework::Audio
 
     private:
         friend class AudioEngine;
-        AudioCategory(AudioEngine* engine, SharpRuntime::ushortcs index, std::string name);
+        AudioCategory(AudioEngine* engine, std::weak_ptr<char> engineLifetime,
+                      SharpRuntime::ushortcs index, std::string name);
+
+        // A saved category can outlive its engine's C++ object: it then refuses like one of a
+        // disposed engine, without touching the freed engine.
+        [[nodiscard]] bool ParentReleasedInternal() const;
 
         AudioEngine* parent_;
+        std::weak_ptr<char> parentLifetime_;
+        int parentHash_ = 0;
         SharpRuntime::ushortcs index_;
         std::string name_;
     };

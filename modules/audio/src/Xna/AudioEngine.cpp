@@ -253,7 +253,7 @@ namespace Microsoft::Xna::Framework::Audio
         {
             auto it = xactImpl_->xgs.categoryNameMap.find(name);
             if (it != xactImpl_->xgs.categoryNameMap.end())
-                return AudioCategory(this, it->second, name);
+                return AudioCategory(this, lifetime_, it->second, name);
         }
 
         throw System::InvalidOperationException("This resource could not be created.");

@@ -9,9 +9,16 @@
 
 namespace Microsoft::Xna::Framework::Audio
 {
-    AudioCategory::AudioCategory(AudioEngine* engine, SharpRuntime::ushortcs index, std::string name)
-        : parent_(engine), index_(index), name_(std::move(name))
+    AudioCategory::AudioCategory(AudioEngine* engine, std::weak_ptr<char> engineLifetime,
+                                 SharpRuntime::ushortcs index, std::string name)
+        : parent_(engine), parentLifetime_(std::move(engineLifetime)),
+          parentHash_(engine ? engine->GetHashCode() : 0), index_(index), name_(std::move(name))
     {
+    }
+
+    bool AudioCategory::ParentReleasedInternal() const
+    {
+        return parent_ && (parentLifetime_.expired() || parent_->getIsDisposedProperty());
     }
 
     const std::string& AudioCategory::getNameProperty() const { return name_; }
@@ -19,7 +26,7 @@ namespace Microsoft::Xna::Framework::Audio
     void AudioCategory::Pause()
     {
         // Refresh native Engine refusal is E_INVALIDARG; Helpers.GetExceptionFromResult IL_0235-023a.
-        if (parent_ && parent_->getIsDisposedProperty())
+        if (ParentReleasedInternal())
             throw System::ArgumentException();
         if (parent_)
             parent_->PauseCategoryInternal(index_);
@@ -28,7 +35,7 @@ namespace Microsoft::Xna::Framework::Audio
     void AudioCategory::Resume()
     {
         // Refresh native Engine refusal is E_INVALIDARG; Helpers.GetExceptionFromResult IL_0235-023a.
-        if (parent_ && parent_->getIsDisposedProperty())
+        if (ParentReleasedInternal())
             throw System::ArgumentException();
         if (parent_)
             parent_->ResumeCategoryInternal(index_);
@@ -41,7 +48,7 @@ namespace Microsoft::Xna::Framework::Audio
         if (volume < 0.0f)
             throw System::ArgumentException("Volume must be a positive float value.");
         // Refresh native Engine refusal is E_INVALIDARG; Helpers.GetExceptionFromResult IL_0235-023a.
-        if (parent_ && parent_->getIsDisposedProperty())
+        if (ParentReleasedInternal())
             throw System::ArgumentException();
         if (parent_)
             parent_->SetCategoryVolumeInternal(index_, volume);
@@ -50,7 +57,7 @@ namespace Microsoft::Xna::Framework::Audio
     void AudioCategory::Stop(AudioStopOptions options)
     {
         // Refresh native Engine refusal is E_INVALIDARG; Helpers.GetExceptionFromResult IL_0235-023a.
-        if (parent_ && parent_->getIsDisposedProperty())
+        if (ParentReleasedInternal())
             throw System::ArgumentException();
         if (parent_)
             parent_->StopCategoryInternal(index_, options == AudioStopOptions::Immediate);
@@ -76,7 +83,7 @@ namespace Microsoft::Xna::Framework::Audio
 
     int AudioCategory::GetHashCode() const
     {
-        return static_cast<int>(index_) ^ (parent_ ? parent_->GetHashCode() : 0);
+        return static_cast<int>(index_) ^ parentHash_;
     }
 
     bool AudioCategory::operator==(const AudioCategory& other) const { return Equals(other); }
