@@ -183,7 +183,8 @@ namespace Microsoft::Xna::Framework::Audio
         /** @brief Clears all pending buffers without stopping playback. */
         CNAEXT void ClearBuffers();
 
-        /** @brief Pumps stream data and raises BufferNeeded when more data is required. */
+        /** @brief The dispatcher's step: pumps stream data, retires played buffers and delivers the
+         * BufferNeeded notifications posted since the last update. */
         CNAEXT void Update();
 
         /**
@@ -226,14 +227,24 @@ namespace Microsoft::Xna::Framework::Audio
         mutable std::mutex queueMutex_;
         std::vector<std::vector<SharpRuntime::bytecs>> queuedBuffers_;
 
-        // Byte size of each chunk handed to the mixer stream, oldest first. A chunk is only
-        // popped once Update() observes that the stream no longer holds that many bytes -- once it has
-        // actually been consumed by playback, not merely submitted. Counted alongside
-        // queuedBuffers_ by getPendingBufferCountProperty() (matches FNA's PendingBufferCount,
-        // which only shrinks once the native voice reports a buffer as consumed).
-        std::deque<std::size_t> submittedChunkSizes_;
+        // Byte size of each chunk handed to the mixer stream, oldest first. A chunk is popped once
+        // the stream no longer holds that many bytes -- once playback has consumed it, not merely
+        // when it was submitted. Counted alongside queuedBuffers_ by getPendingBufferCountProperty(),
+        // which retires consumed chunks itself, so the count drops as buffers finish (XNA's
+        // completion-maintained native count) rather than only at the next Update().
+        mutable std::deque<std::size_t> submittedChunkSizes_;
 
-        static constexpr SharpRuntime::intcs MINIMUM_BUFFER_CHECK = 3;
+        // BufferNeeded notifications posted but not yet delivered, guarded by queueMutex_. XNA's
+        // kernel posts one when Play starts a Stopped voice with at most two buffers pending and
+        // one per completed buffer that leaves at most two (KernelDynamicSoundEffectInstance.Play
+        // IL_001a-0061, OnBufferEnd IL_004b-006a); FrameworkDispatcher.Update delivers them.
+        mutable SharpRuntime::intcs pendingNotifications_ = 0;
+
+        static constexpr std::size_t BUFFER_NEEDED_AT_OR_BELOW = 2;
+
+        // Pops every chunk playback has consumed, posting a notification for each that leaves at
+        // most BUFFER_NEEDED_AT_OR_BELOW pending. Caller must already hold queueMutex_.
+        void RetireConsumedChunksLocked() const;
 
         void EnsureStream();
         void DestroyStream();

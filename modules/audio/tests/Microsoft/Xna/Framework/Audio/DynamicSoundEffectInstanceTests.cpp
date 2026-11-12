@@ -6,6 +6,7 @@
 #include <cstdlib>
 #include <semaphore>
 #include <thread>
+#include "Microsoft/Xna/Framework/FrameworkDispatcher.hpp"
 #include <typeinfo>
 #include <vector>
 
@@ -680,37 +681,25 @@ TEST(DynamicSoundEffectInstanceTest, BufferNeededFiresWhenStarved)
     EXPECT_GT(fired, 0);
 }
 
-// P9-DYNAMIC-001/005: matches FNA's exact starvation loop (`for (i = MINIMUM_BUFFER_CHECK -
-// PendingBufferCount; i > 0 && BufferNeeded != null; i -= 1) BufferNeeded(...)`, DynamicSoundEffectInstance.cs)
-// -- Update() must raise BufferNeeded exactly (MINIMUM_BUFFER_CHECK - PendingBufferCount) times,
-// not merely "at least once". tryStartHeadless() submits exactly 1 buffer before Play(), so
-// immediately after (before any real consumption could have happened), PendingBufferCount == 1
-// and MINIMUM_BUFFER_CHECK(3) - 1 == 2 raises are expected.
-//
-// A chunk stops being pending once the device thread has played it whole, which it does in its
-// own time: even a one-second chunk is gone when the test thread is descheduled for a second
-// between Play() and Update() -- a full parallel run did that, and three raises were then correct
-// for a dry stream. So the expectation is taken from the count the raise loop itself used, which
-// the handler reads (only Update() and SubmitBuffer() change it, both on this thread); the
-// one-second chunk keeps that count at 1 on any ordinary run.
-TEST(DynamicSoundEffectInstanceTest, BufferNeededFiresExactlyTheStarvedCount)
+// Owner decision 2026-11-12: XNA's cadence, not FNA's refill loop. The kernel posts one
+// BufferNeeded when Play starts a Stopped voice with at most two buffers pending
+// (KernelDynamicSoundEffectInstance.Play IL_001a-0030, IL_0055-0061) and FrameworkDispatcher.Update
+// delivers it (DynamicSoundEffectInstance.OnBufferNeeded IL_0000-0012): one buffer pending, one
+// notification, and none from Play itself.
+TEST(DynamicSoundEffectInstanceTest, PlayFromStoppedPostsOneNotificationTheUpdateDelivers)
 {
     DynamicSoundEffectInstance d(44100, AudioChannels::Stereo);
-    if (!tryStartHeadless(d, 44100))
+    int fired = 0;
+    d.BufferNeeded += [&](System::Object*, const System::EventArgs&) { ++fired; };
+    if (!tryStartHeadless(d, 44100)) // one one-second buffer, then Play
     {
         GTEST_SKIP() << "no audio device (dummy driver unavailable)";
     }
-    ASSERT_EQ(d.getPendingBufferCountProperty(), 1);
-
-    int fired = 0;
-    int pendingWhenRaised = -1;
-    d.BufferNeeded += [&](System::Object*, const System::EventArgs&) {
-        if (fired++ == 0) pendingWhenRaised = d.getPendingBufferCountProperty();
-    };
+    EXPECT_EQ(fired, 0) << "Play never raises BufferNeeded itself";
     d.Update();
-    ASSERT_GE(pendingWhenRaised, 0) << "a starved stream must raise BufferNeeded";
-    EXPECT_LE(pendingWhenRaised, 1);
-    EXPECT_EQ(fired, 3 - pendingWhenRaised); // MINIMUM_BUFFER_CHECK(3) - PendingBufferCount
+    EXPECT_EQ(fired, 1);
+    d.Update();
+    EXPECT_EQ(fired, 1) << "a pending buffer that has not finished posts nothing more";
 }
 
 // CP-4: a buffer must remain "pending" until the stream reports it was actually consumed, not
@@ -1429,10 +1418,10 @@ TEST(DynamicSoundEffectInstanceTest, SubmitBufferCopiesOnlySelectedBytesAndOwnsT
     EXPECT_EQ(d.getStateProperty(), SoundState::Stopped);
 }
 
-// TQ-032: FNA DynamicSoundEffectInstance.cs:322-358 Update: while Playing,
-// raise 3-PendingBufferCount events per pump; paused/stopped pumps raise none.
-// This checks CNA's Update extension, not a measured native XNA timing promise.
-// An empty stream has exactly zero buffers regardless of device scheduling.
+// Owner decision 2026-11-12: a dry stream gets XNA's single notification per start from Stopped
+// (KernelDynamicSoundEffectInstance.Play IL_001a-0061), delivered by an update, and no stream of
+// refill requests; Play while Playing and Resume from Paused post none, and Stop discards an
+// undelivered one. An empty stream has exactly zero buffers regardless of device scheduling.
 TEST(DynamicSoundEffectInstanceTest, DryStreamCadenceAndPauseStopGatesUseLiteralCounts)
 {
     UseDummyAudioDriver();
@@ -1446,24 +1435,69 @@ TEST(DynamicSoundEffectInstanceTest, DryStreamCadenceAndPauseStopGatesUseLiteral
     EXPECT_EQ(calls, 0);
     ASSERT_NO_THROW(d.Play());
     ASSERT_EQ(d.getStateProperty(), SoundState::Playing);
-    // Play itself may pump; isolate the explicitly requested Update cadence.
-    calls = 0;
+    EXPECT_EQ(calls, 0) << "Play posts; it does not raise";
     ASSERT_EQ(d.getPendingBufferCountProperty(), 0);
     d.Update();
-    EXPECT_EQ(calls, 3);
+    EXPECT_EQ(calls, 1);
     d.Update();
-    EXPECT_EQ(calls, 6);
+    EXPECT_EQ(calls, 1) << "no completion, no further notification";
+    d.Play();
+    d.Update();
+    EXPECT_EQ(calls, 1) << "Play while Playing starts nothing";
     d.Pause();
     ASSERT_EQ(d.getStateProperty(), SoundState::Paused);
     d.Update();
-    EXPECT_EQ(calls, 6);
+    EXPECT_EQ(calls, 1);
     d.Resume();
     ASSERT_EQ(d.getStateProperty(), SoundState::Playing);
     d.Update();
-    EXPECT_EQ(calls, 9);
+    EXPECT_EQ(calls, 1) << "Resume from Paused is not a start from Stopped";
     d.Stop(true);
     ASSERT_EQ(d.getStateProperty(), SoundState::Stopped);
     d.Update();
-    EXPECT_EQ(calls, 9);
+    EXPECT_EQ(calls, 1);
+    d.Play();
+    d.Stop(true);
+    d.Update();
+    EXPECT_EQ(calls, 1) << "Stop discards the restart's undelivered notification";
+    d.Play();
+    d.Update();
+    EXPECT_EQ(calls, 2) << "each start from Stopped posts one";
     EXPECT_EQ(d.getPendingBufferCountProperty(), 0);
+}
+
+// Owner decision 2026-11-12: three buffers pending at Play post nothing (more than two), and each
+// completion that leaves at most two posts one (OnBufferEnd IL_004b-006a) -- three in all. The
+// count drops as the buffers finish, before any update (get_PendingBufferCount IL_002f-0035 reads
+// the live native count); the notifications wait for FrameworkDispatcher.Update.
+TEST(DynamicSoundEffectInstanceTest, EachCompletedBufferPostsOneNotificationAndTheCountIsLive)
+{
+    UseDummyAudioDriver();
+    DynamicSoundEffectInstance d(8000, AudioChannels::Stereo);
+    int calls = 0;
+    d.BufferNeeded += [&](System::Object*, const System::EventArgs&) { ++calls; };
+    const std::vector<unsigned char> pcm(4 * 64, 0); // 64 stereo S16 frames: 8 ms each
+    d.SubmitBuffer(pcm);
+    d.SubmitBuffer(pcm);
+    d.SubmitBuffer(pcm);
+    try
+    {
+        d.Play();
+    }
+    catch (...)
+    {
+        GTEST_SKIP() << "no audio device (dummy driver unavailable)";
+    }
+    if (d.getStateProperty() != SoundState::Playing)
+        GTEST_SKIP() << "no audio device (dummy driver unavailable)";
+    const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(10);
+    while (d.getPendingBufferCountProperty() != 0 && std::chrono::steady_clock::now() < deadline)
+        std::this_thread::sleep_for(std::chrono::milliseconds(5));
+    ASSERT_EQ(d.getPendingBufferCountProperty(), 0) << "played buffers stop being pending without an update";
+    EXPECT_EQ(calls, 0) << "completions post; only the dispatcher delivers";
+    Microsoft::Xna::Framework::FrameworkDispatcher::Update();
+    EXPECT_EQ(calls, 3);
+    Microsoft::Xna::Framework::FrameworkDispatcher::Update();
+    EXPECT_EQ(calls, 3) << "a drained stream asks for nothing more";
+    d.Stop(true);
 }

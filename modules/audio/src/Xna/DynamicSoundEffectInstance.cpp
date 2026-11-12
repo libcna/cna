@@ -4,6 +4,7 @@
 #include "Internal/AudioFormatMath.hpp"
 #include "Internal/AudioLog.hpp"
 
+#include <utility>
 #include <algorithm>
 
 #include "Microsoft/Xna/Framework/FrameworkDispatcher.hpp"
@@ -128,6 +129,9 @@ namespace Microsoft::Xna::Framework::Audio
         if (getIsDisposedProperty())
             throw System::ObjectDisposedException("DynamicSoundEffectInstance");
         std::lock_guard<std::mutex> lock(queueMutex_);
+        // XNA get_PendingBufferCount IL_002f-0035 reads the live native count, which buffer
+        // completion maintains on its own (OnBufferEnd IL_001f-0027), not the dispatcher.
+        RetireConsumedChunksLocked();
         return static_cast<SharpRuntime::intcs>(queuedBuffers_.size() + submittedChunkSizes_.size());
     }
 
@@ -210,15 +214,8 @@ namespace Microsoft::Xna::Framework::Audio
             throw System::ObjectDisposedException("DynamicSoundEffectInstance");
         }
 
-        // P9-DYNAMIC-001: matches FNA's DynamicSoundEffectInstance.Play() ("Wait! What if we
-        // need moar buffers?"), which unconditionally calls Update() before dispatching on
-        // State -- a no-op here on a fresh/Stopped/Paused instance (Update() itself no-ops
-        // unless already Playing), but a real, observable pump (submits freshly queued data,
-        // fires BufferNeeded if starved) when Play() is called redundantly while already
-        // Playing. Previously only called from the Stopped branch below, silently skipping this
-        // pump for the "already playing" case.
-        Update();
-
+        // XNA's Play never raises BufferNeeded itself (DynamicSoundEffectInstance.Play IL_002f-0041
+        // only starts the voice); a notification it posts is delivered by FrameworkDispatcher.Update.
         SoundState current = getStateProperty();
 
         if (current == SoundState::Paused)
@@ -240,7 +237,14 @@ namespace Microsoft::Xna::Framework::Audio
             return;
         }
 
-        // Stopped — set up fresh playback.
+        // Stopped — set up fresh playback. XNA's kernel Play posts one BufferNeeded when it starts
+        // a Stopped voice with at most two buffers pending (IL_001a-0030, IL_0055-0061).
+        bool postBufferNeeded = false;
+        {
+            std::lock_guard<std::mutex> lock(queueMutex_);
+            postBufferNeeded =
+                queuedBuffers_.size() + submittedChunkSizes_.size() <= BUFFER_NEEDED_AT_OR_BELOW;
+        }
 
 #ifdef SOUND_ENABLED
         // Establish the selected output before allocating a mixer-specific queued source. This
@@ -334,6 +338,11 @@ namespace Microsoft::Xna::Framework::Audio
         packetSubmitted_ = true;
         State_   = SoundState::Playing;
         playing_ = true;
+        if (postBufferNeeded)
+        {
+            std::lock_guard<std::mutex> lock(queueMutex_);
+            ++pendingNotifications_;
+        }
 
         std::lock_guard<std::mutex> lock(Microsoft::Xna::Framework::FrameworkDispatcher::StreamsMutex);
         auto& streams = Microsoft::Xna::Framework::FrameworkDispatcher::Streams;
@@ -590,6 +599,8 @@ namespace Microsoft::Xna::Framework::Audio
             std::lock_guard<std::mutex> lock(queueMutex_);
             queuedBuffers_.clear();
             submittedChunkSizes_.clear();
+            // A stopped voice's undelivered notifications go with its buffers.
+            pendingNotifications_ = 0;
         }
 
 #ifdef SOUND_ENABLED
@@ -603,59 +614,66 @@ namespace Microsoft::Xna::Framework::Audio
 
     void DynamicSoundEffectInstance::Update()
     {
-        if (getStateProperty() != SoundState::Playing)
+        if (getIsDisposedProperty())
         {
             return;
         }
-
-        // Submit any freshly queued buffers.
-        SubmitQueuedToStream();
-
-#ifdef SOUND_ENABLED
-        // A submitted chunk only counts as consumed once the stream reports it no longer holds
-        // that many bytes queued as input (matches FNA polling the native voice's real
-        // BuffersQueued state) -- not the instant it was handed to the mixer engine.
-        auto* stream = AsStream(audioStream_);
-        if (stream)
+        SharpRuntime::intcs notifications = 0;
         {
-            const int queuedBytes = CNA::Internal::Audio::GetMixerStreamQueuedBytes(stream);
-            if (queuedBytes >= 0)
+            std::lock_guard<std::mutex> lock(queueMutex_);
+            // Submit any freshly queued buffers.
+            if (getStateProperty() == SoundState::Playing)
             {
-                std::lock_guard<std::mutex> lock(queueMutex_);
-                std::size_t total = 0;
-                for (std::size_t size : submittedChunkSizes_) total += size;
-
-                // AUDIO-BUFFER-001 (external audit, 2026-07-16): was `while (total >
-                // queuedBytes) pop_front()`, which dropped an ENTIRE chunk the instant the
-                // stream had consumed even a single byte of it (any total > queuedBytes at all),
-                // not once that chunk's own full byte count had actually been played. `consumed`
-                // is how many bytes have genuinely been played since these chunks were tracked --
-                // only pop a chunk once `consumed` covers that chunk's whole size, decrementing
-                // the budget as each one is confirmed, so a second chunk isn't credited with
-                // bytes the first one hasn't finished consuming yet.
-                if (static_cast<std::size_t>(queuedBytes) <= total)
-                {
-                    std::size_t consumed = total - static_cast<std::size_t>(queuedBytes);
-                    while (!submittedChunkSizes_.empty() &&
-                           consumed >= submittedChunkSizes_.front())
-                    {
-                        consumed -= submittedChunkSizes_.front();
-                        submittedChunkSizes_.pop_front();
-                    }
-                }
+                SubmitQueuedToStreamLocked();
             }
+            RetireConsumedChunksLocked();
+            notifications = std::exchange(pendingNotifications_, 0);
         }
-#endif
-
-        // Raise BufferNeeded while we are short of MINIMUM_BUFFER_CHECK worth of data.
-        for (
-            SharpRuntime::intcs i = MINIMUM_BUFFER_CHECK - getPendingBufferCountProperty();
-            (i > 0) && !BufferNeeded.Empty();
-            --i
-        )
+        // XNA delivers each posted notification once (DynamicSoundEffectInstance.OnBufferNeeded
+        // IL_0000-0012), with no lock held, so a handler may submit, stop or dispose.
+        for (; notifications > 0 && !getIsDisposedProperty(); --notifications)
         {
             BufferNeeded.Raise(this, System::EventArgs::Empty);
         }
+    }
+
+    void DynamicSoundEffectInstance::RetireConsumedChunksLocked() const
+    {
+#ifdef SOUND_ENABLED
+        // A submitted chunk only counts as consumed once the stream reports it no longer holds
+        // that many bytes queued as input -- not the instant it was handed to the mixer engine.
+        auto* stream = AsStream(audioStream_);
+        if (!stream)
+        {
+            return;
+        }
+        const int queuedBytes = CNA::Internal::Audio::GetMixerStreamQueuedBytes(stream);
+        if (queuedBytes < 0)
+        {
+            return;
+        }
+        std::size_t total = 0;
+        for (std::size_t size : submittedChunkSizes_) total += size;
+
+        // AUDIO-BUFFER-001: only pop a chunk once the consumed byte count covers that chunk's
+        // whole size, decrementing the budget as each one is confirmed, so a second chunk isn't
+        // credited with bytes the first one hasn't finished consuming yet.
+        if (static_cast<std::size_t>(queuedBytes) > total)
+        {
+            return;
+        }
+        std::size_t consumed = total - static_cast<std::size_t>(queuedBytes);
+        while (!submittedChunkSizes_.empty() && consumed >= submittedChunkSizes_.front())
+        {
+            consumed -= submittedChunkSizes_.front();
+            submittedChunkSizes_.pop_front();
+            // XNA OnBufferEnd IL_004b-006a: a completion leaving at most two pending posts one.
+            if (queuedBuffers_.size() + submittedChunkSizes_.size() <= BUFFER_NEEDED_AT_OR_BELOW)
+            {
+                ++pendingNotifications_;
+            }
+        }
+#endif
     }
 
     // --- private helpers ---
