@@ -111,6 +111,8 @@ protected:
 TEST_F(CnaMixerXna, AFireAndForgetPlayIsAccepted)
 {
     SoundEffect effect(Tone(0.05), 44100, AudioChannels::Mono);
+    // A fire-and-forget Play needs one FrameworkDispatcher.Update first (XNA Play IL_0000-0021).
+    FrameworkDispatcher::Update();
     EXPECT_TRUE(effect.Play());
     EXPECT_TRUE(effect.Play(0.5f, 0.5f, -0.5f));
     // The tracks destroy themselves when they finish; the next Play() frees them. Nothing to see,
@@ -245,6 +247,7 @@ TEST(CnaMixerXnaRecording, APlayedSoundEffectReachesTheAlsaDeviceAtItsPitchAndLe
     std::this_thread::sleep_for(std::chrono::milliseconds(100));
     ASSERT_TRUE(std::filesystem::exists(recording)) << recording;
     const auto before = std::filesystem::file_size(recording);
+    FrameworkDispatcher::Update(); // a fire-and-forget Play needs one first (XNA Play IL_0000-0021)
     ASSERT_TRUE(effect.Play());
     std::this_thread::sleep_for(std::chrono::milliseconds(700));
 
