@@ -435,11 +435,12 @@ namespace
         return from;
     }
 
-    std::vector<SharpRuntime::bytecs> Probe(uint16_t connectPort, uint8_t index)
+    std::vector<SharpRuntime::bytecs> Probe(uint16_t connectPort, uint8_t index, uint32_t trainId = 0)
     {
         DiscoveryQosProbeMessage probe;
         probe.ConnectPort = connectPort;
         probe.Index = index;
+        probe.TrainId = trainId;
         return NetDiscoveryProtocol::Encode(probe);
     }
 }
@@ -935,6 +936,38 @@ TEST_F(SystemLinkDiscoveryTest, ARepeatWithoutItsFirstProbeDoesNotExtendAPartial
     ASSERT_TRUE(host.get());
     ASSERT_EQ(found.size(), 1u);
     EXPECT_GT(Downstream(found, "FarHost"), 300'000) << "the repeat's tail extended the first train";
+}
+
+// With train identifiers, a repeated train is its own measurement even when the first one lost its
+// index 0: the repeat's 0 is not counted into the first train across the gap.
+TEST_F(SystemLinkDiscoveryTest, AnIdentifiedRepeatIsItsOwnTrain)
+{
+    FakeFarHost far("127.0.0.1");
+    ASSERT_TRUE(far.Ready());
+    SystemLinkDiscovery::setExtraSearchAddressesProperty({far.SearchAddress()});
+
+    auto host = std::async(std::launch::async, [&]
+    {
+        const auto from = far.WaitForQuery();
+        if (!from) return false;
+        bool sent = far.Send(*from, NetDiscoveryProtocol::Encode(FarAnnounce("FarHost", 40000, 11)));
+        for (uint8_t index = 1; index < kQosProbeCount; ++index)
+        {
+            std::this_thread::sleep_for(std::chrono::milliseconds(1));
+            sent = far.Send(*from, Probe(40000, index, 0x1111u)) && sent;
+        }
+        std::this_thread::sleep_for(std::chrono::milliseconds(60));
+        for (uint8_t index = 0; index < kQosProbeCount; ++index)
+        {
+            std::this_thread::sleep_for(std::chrono::milliseconds(1));
+            sent = far.Send(*from, Probe(40000, index, 0x2222u)) && sent;
+        }
+        return sent;
+    });
+    const auto found = FoundFar(ENetDiscoveryService::FindSessions(NetworkSessionType::SystemLink));
+    ASSERT_TRUE(host.get());
+    ASSERT_EQ(found.size(), 1u);
+    EXPECT_GT(Downstream(found, "FarHost"), 300'000) << "the repeat's index 0 was timed into the first train";
 }
 
 // Two older hosts on one port; the second then answers by its own address with the first one's

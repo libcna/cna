@@ -174,6 +174,21 @@ TEST(ENetDiscoveryServiceTest, QosProbesAreFixedSizeAndValidated) {
     EXPECT_THROW((void)NetDiscoveryProtocol::DecodeQosProbe(outOfRange), std::runtime_error);
 }
 
+// The train identifier rides in the padding: an older sender's zeros decode as 0, and an older
+// decoder never reads those bytes.
+TEST(ENetDiscoveryServiceTest, AQosProbeCarriesItsTrainIdentifierInThePadding) {
+    DiscoveryQosProbeMessage probe;
+    probe.Index = 1;
+    probe.TrainId = 0xA1B2C3D4u;
+    const auto bytes = NetDiscoveryProtocol::Encode(probe);
+    ASSERT_EQ(bytes.size(), kQosProbeBytes);
+    EXPECT_EQ(NetDiscoveryProtocol::DecodeQosProbe(bytes).TrainId, 0xA1B2C3D4u);
+    EXPECT_EQ(NetDiscoveryProtocol::DecodeQosProbe(NetDiscoveryProtocol::EncodeUpstreamProbe(probe)).TrainId,
+              0xA1B2C3D4u);
+    probe.TrainId = 0;
+    EXPECT_EQ(NetDiscoveryProtocol::DecodeQosProbe(NetDiscoveryProtocol::Encode(probe)).TrainId, 0u);
+}
+
 TEST(ENetDiscoveryServiceTest, UnregisterHostStopsAnsweringQueries) {
     SystemLinkSessionFixture host("HostPlayer");
     ASSERT_GT(ENetBackend::GetBoundPort(host.session), 0);
@@ -476,5 +491,86 @@ TEST(ENetDiscoveryServiceTest, APartialUpstreamTrainIsMeasuredFromWhatArrived) {
     // Only one report per train.
     EXPECT_TRUE(receive(DiscoveryMessageTag::UpstreamReport).empty());
     close(sock);
+}
+
+namespace {
+    // A querier socket on loopback that has the host's upstream invitation in hand.
+    struct UpstreamQuerier {
+        int sock = -1;
+        sockaddr_in local{};
+        DiscoveryUpstreamInviteMessage invite{};
+        explicit UpstreamQuerier(NetworkSession& host) {
+            sock = socket(AF_INET, SOCK_DGRAM, 0);
+            local.sin_family = AF_INET;
+            inet_pton(AF_INET, "127.0.0.1", &local.sin_addr);
+            if (sock < 0 || bind(sock, reinterpret_cast<const sockaddr*>(&local), sizeof(local)) != 0) return;
+            DiscoveryQueryMessage query;
+            Send(61190, NetDiscoveryProtocol::Encode(query));
+            const auto bytes = Receive(DiscoveryMessageTag::UpstreamInvite, std::chrono::seconds(2), &host);
+            if (!bytes.empty()) invite = NetDiscoveryProtocol::DecodeUpstreamInvite(bytes);
+        }
+        ~UpstreamQuerier() { if (sock >= 0) close(sock); }
+        void Send(uint16_t port, const std::vector<SharpRuntime::bytecs>& bytes) {
+            sockaddr_in to = local;
+            to.sin_port = htons(port);
+            (void)sendto(sock, bytes.data(), bytes.size(), 0, reinterpret_cast<const sockaddr*>(&to), sizeof(to));
+        }
+        void SendProbe(uint8_t index, uint32_t trainId) {
+            DiscoveryQosProbeMessage probe;
+            probe.ConnectPort = invite.ConnectPort;
+            probe.Index = index;
+            probe.TrainId = trainId;
+            Send(invite.ResponderPort, NetDiscoveryProtocol::EncodeUpstreamProbe(probe));
+        }
+        std::vector<SharpRuntime::bytecs> Receive(DiscoveryMessageTag wanted, std::chrono::milliseconds within,
+                                                  NetworkSession* host = nullptr) {
+            const auto deadline = std::chrono::steady_clock::now() + within;
+            while (std::chrono::steady_clock::now() < deadline) {
+                if (host != nullptr) ENetDiscoveryService::Poll();
+                fd_set readable;
+                FD_ZERO(&readable);
+                FD_SET(sock, &readable);
+                timeval wait{0, 2000};
+                if (select(sock + 1, &readable, nullptr, nullptr, &wait) <= 0) continue;
+                std::array<SharpRuntime::bytecs, 1500> buffer{};
+                const auto received = recv(sock, buffer.data(), buffer.size(), 0);
+                if (received > 0 && buffer[0] == static_cast<SharpRuntime::bytecs>(wanted))
+                    return {buffer.begin(), buffer.begin() + received};
+            }
+            return {};
+        }
+    };
+}
+
+// A train whose last probe is lost is reported a short silence after its last arrival, inside the
+// querier's 150 ms search; the responder no longer waits a quarter second from the first probe.
+TEST(ENetDiscoveryServiceTest, ATrainThatLostItsLastProbeIsReportedWithinTheSearch) {
+    SystemLinkSessionFixture host("HostPlayer");
+    UpstreamQuerier querier(*host.session);
+    ASSERT_NE(querier.invite.ResponderPort, 0);
+    for (uint8_t index = 0; index + 1 < kQosProbeCount; ++index) {
+        std::this_thread::sleep_for(std::chrono::milliseconds(1));
+        querier.SendProbe(index, 0x5150u);
+    }
+    const auto bytes = querier.Receive(DiscoveryMessageTag::UpstreamReport, std::chrono::milliseconds(120));
+    ASSERT_FALSE(bytes.empty()) << "no report within the search";
+    EXPECT_GT(NetDiscoveryProtocol::DecodeUpstreamReport(bytes).BytesPerSecond, 0);
+}
+
+// Every probe of a train arrives, the last two swapped: one report, once all of them are in, and no
+// second report for the straggler.
+TEST(ENetDiscoveryServiceTest, AReorderedUpstreamTrainIsReportedOnce) {
+    SystemLinkSessionFixture host("HostPlayer");
+    UpstreamQuerier querier(*host.session);
+    ASSERT_NE(querier.invite.ResponderPort, 0);
+    for (const uint8_t index : {0, 1, 2, 3, 4, 5, 7, 6}) {
+        std::this_thread::sleep_for(std::chrono::milliseconds(1));
+        querier.SendProbe(index, 0x6160u);
+    }
+    const auto bytes = querier.Receive(DiscoveryMessageTag::UpstreamReport, std::chrono::milliseconds(500));
+    ASSERT_FALSE(bytes.empty());
+    EXPECT_GT(NetDiscoveryProtocol::DecodeUpstreamReport(bytes).BytesPerSecond, 0);
+    EXPECT_TRUE(querier.Receive(DiscoveryMessageTag::UpstreamReport, std::chrono::milliseconds(500)).empty())
+        << "the swapped probe started a second train";
 }
 #endif

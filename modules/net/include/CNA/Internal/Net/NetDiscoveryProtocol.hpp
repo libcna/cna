@@ -55,6 +55,12 @@ namespace CNA::Internal::Net
         uint8_t Index{0};
         /** @brief Probes in the train. */
         uint8_t Count{kQosProbeCount};
+        /**
+         * @brief Random per train, so a receiver tells a repeated train (a host answering two copies
+         *        of a query) from a lost or reordered probe. Carried in the padding, which older
+         *        decoders ignore; 0 from a sender that has none.
+         */
+        uint32_t TrainId{0};
     };
 
     /** @brief A host's invitation to measure the querier's path to it. */

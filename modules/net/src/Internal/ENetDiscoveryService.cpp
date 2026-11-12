@@ -68,6 +68,9 @@ namespace CNA::Internal::Net
             struct ProbeTrain
             {
                 std::string Address;
+                // The sender's train identifier; 0 from an older host, whose trains are told apart
+                // by their indices alone.
+                std::uint32_t TrainId = 0;
                 // Indices received; Received counts them (the span alone would rank two of eight
                 // probes like eight).
                 std::uint32_t Seen = 0;
@@ -97,9 +100,19 @@ namespace CNA::Internal::Net
             uint16_t ConnectPort = 0;
             std::string Address;
             uint8_t Index = 0;
+            std::uint32_t TrainId = 0;
             std::chrono::steady_clock::time_point At;
         };
         std::vector<EarlyProbe>* earlyProbes_ = nullptr;
+
+        // A fresh nonzero identifier for each train this process sends.
+        std::uint32_t NextTrainId()
+        {
+            static std::mt19937 trains{std::random_device{}()};
+            std::uint32_t id = 0;
+            do { id = trains(); } while (id == 0);
+            return id;
+        }
 
         bool AnsweredFrom(const Found& found, const std::string& address)
         {
@@ -114,16 +127,24 @@ namespace CNA::Internal::Net
                          std::chrono::steady_clock::time_point at)
         {
             if (probe.Index >= kQosProbeCount) return;
+            // An identified train is its own entry: a repeat has another identifier, and a
+            // duplicated probe is only ignored. An older host's trains share one entry per path.
             auto train = std::find_if(found.Trains.begin(), found.Trains.end(),
-                [&](const Found::ProbeTrain& candidate) { return candidate.Address == address; });
+                [&](const Found::ProbeTrain& candidate)
+                { return candidate.Address == address && candidate.TrainId == probe.TrainId; });
             if (train == found.Trains.end())
             {
-                found.Trains.push_back(Found::ProbeTrain{address});
+                if (found.Trains.size() >= 32) return;
+                found.Trains.push_back(Found::ProbeTrain{address, probe.TrainId});
                 train = std::prev(found.Trains.end());
             }
             if (train->Closed) return;
             const std::uint32_t bit = 1u << probe.Index;
-            if ((train->Seen & bit) != 0) { train->Closed = true; return; }
+            if ((train->Seen & bit) != 0)
+            {
+                if (probe.TrainId == 0) train->Closed = true;
+                return;
+            }
             train->Seen |= bit;
             if (train->Received++ == 0)
             {
@@ -201,20 +222,27 @@ namespace CNA::Internal::Net
             uint16_t Port() const { return port_; }
 
         private:
+            // One train from one querier socket, told apart by its identifier (an older querier
+            // sends 0). Its rate counts the probes that arrived, timed from the first arrival to the
+            // last, so a reordered or lost probe neither ends it early nor counts as received.
             struct Train
             {
                 ENetAddress From{};
-                int FirstIndex = -1, LastIndex = -1, Count = 0;
-                std::chrono::steady_clock::time_point First, Last, Started;
+                std::uint32_t TrainId = 0;
+                std::uint32_t Seen = 0;
+                int Received = 0, Count = 0;
+                std::chrono::steady_clock::time_point First, Last;
             };
             static constexpr std::size_t MaxTrains = 64;
-            static constexpr auto TrainWindow = std::chrono::milliseconds(250);
+            // A train is reported once every probe arrived, or this long after its last arrival
+            // (its tail was lost), well inside the querier's 150 ms search.
+            static constexpr auto TrainIdle = std::chrono::milliseconds(30);
 
             void Report(const Train& train)
             {
                 DiscoveryUpstreamReportMessage report;
                 report.ConnectPort = connectPort_;
-                report.BytesPerSecond = TrainRate(train.FirstIndex, train.LastIndex, train.First, train.Last);
+                report.BytesPerSecond = TrainRate(0, train.Received - 1, train.First, train.Last);
                 SendTo(socket_, train.From, NetDiscoveryProtocol::Encode(report));
             }
 
@@ -250,7 +278,7 @@ namespace CNA::Internal::Net
                     const auto now = std::chrono::steady_clock::now();
                     for (auto train = trains.begin(); train != trains.end();)
                     {
-                        if (now - train->Started < TrainWindow) { ++train; continue; }
+                        if (now - train->Last < TrainIdle) { ++train; continue; }
                         Report(*train);
                         train = trains.erase(train);
                     }
@@ -259,23 +287,38 @@ namespace CNA::Internal::Net
 
             void Record(std::vector<Train>& trains, const ENetAddress& from, const DiscoveryQosProbeMessage& probe, std::chrono::steady_clock::time_point at)
             {
+                if (probe.Index >= 32) return;
                 auto train = std::find_if(trains.begin(), trains.end(),
-                    [&](const Train& known) { return known.From.host == from.host && known.From.port == from.port; });
+                    [&](const Train& known)
+                    {
+                        return known.From.host == from.host && known.From.port == from.port
+                            && known.TrainId == probe.TrainId;
+                    });
+                const std::uint32_t bit = 1u << probe.Index;
+                if (train != trains.end() && (train->Seen & bit) != 0)
+                {
+                    // An identified train's duplicate is ignored. An older querier's index seen
+                    // again is its next train: report this one, then time the new one.
+                    if (probe.TrainId != 0) return;
+                    Report(*train);
+                    trains.erase(train);
+                    train = trains.end();
+                }
                 if (train == trains.end())
                 {
                     if (trains.size() >= MaxTrains) return;
                     Train fresh;
                     fresh.From = from;
+                    fresh.TrainId = probe.TrainId;
                     fresh.Count = probe.Count;
-                    fresh.FirstIndex = fresh.LastIndex = probe.Index;
-                    fresh.First = fresh.Last = fresh.Started = at;
+                    fresh.First = at;
                     trains.push_back(fresh);
-                    return;
+                    train = std::prev(trains.end());
                 }
-                if (probe.Index <= train->LastIndex) return;
-                train->LastIndex = probe.Index;
+                train->Seen |= bit;
+                ++train->Received;
                 train->Last = at;
-                if (probe.Index + 1 == train->Count)
+                if (train->Received == train->Count)
                 {
                     Report(*train);
                     trains.erase(train);
@@ -454,6 +497,7 @@ namespace CNA::Internal::Net
             // Back to back, so their spacing at the querier measures the path's bandwidth.
             DiscoveryQosProbeMessage probe;
             probe.ConnectPort = announce.ConnectPort;
+            probe.TrainId = NextTrainId();
             for (uint8_t index = 0; index < kQosProbeCount; ++index)
             {
                 probe.Index = index;
@@ -498,6 +542,7 @@ namespace CNA::Internal::Net
                     DiscoveryQosProbeMessage early;
                     early.ConnectPort = arrival.ConnectPort;
                     early.Index = arrival.Index;
+                    early.TrainId = arrival.TrainId;
                     RecordProbe(found, address, early, arrival.At);
                 }
             for (const EarlyReport& report : earlyReports_)
@@ -631,6 +676,7 @@ namespace CNA::Internal::Net
                             responder.port = invite.ResponderPort;
                             DiscoveryQosProbeMessage probe;
                             probe.ConnectPort = invite.ConnectPort;
+                            probe.TrainId = NextTrainId();
                             for (uint8_t index = 0; index < kQosProbeCount; ++index)
                             {
                                 probe.Index = index;
@@ -656,7 +702,7 @@ namespace CNA::Internal::Net
                             auto found = FoundHost(probe.ConnectPort, fromAddress);
                             if (found != currentResults_->end()) RecordProbe(*found, HostIp(fromAddress), probe, at);
                             else if (earlyProbes_->size() < 64)
-                                earlyProbes_->push_back(EarlyProbe{probe.ConnectPort, HostIp(fromAddress), probe.Index, at});
+                                earlyProbes_->push_back(EarlyProbe{probe.ConnectPort, HostIp(fromAddress), probe.Index, probe.TrainId, at});
                         }
                         break;
                 }

@@ -144,6 +144,8 @@ namespace CNA::Internal::Net
         bytes[3] = static_cast<bytecs>(message.ConnectPort >> 8);
         bytes[4] = message.Index;
         bytes[5] = message.Count;
+        for (int octet = 0; octet < 4; ++octet)
+            bytes[6 + octet] = static_cast<bytecs>((message.TrainId >> (8 * octet)) & 0xff);
         return bytes;
     }
 
@@ -212,6 +214,8 @@ namespace CNA::Internal::Net
         message.ConnectPort = static_cast<uint16_t>(data[2] | (data[3] << 8));
         message.Index = data[4];
         message.Count = data[5];
+        message.TrainId = static_cast<uint32_t>(data[6]) | (static_cast<uint32_t>(data[7]) << 8)
+            | (static_cast<uint32_t>(data[8]) << 16) | (static_cast<uint32_t>(data[9]) << 24);
         if (message.Count < 2 || message.Count > 32 || message.Index >= message.Count)
             throw std::runtime_error("NetDiscoveryProtocol: QoS probe index");
         return message;

@@ -433,7 +433,12 @@ Same-machine host-identity replacement is separate from machine migration. **CNA
   `IsAvailable` turns true once the probes complete; the IL polls the same native QoS query for
   every session type.
 - **CNA now (GAP-17):** SystemLink retains its discovery RTT and receiver-timed
-  probe trains. PlayerMatch/Ranked listings from a service advertising
+  probe trains. Each train carries a random identifier in its padding, so a host that answers two
+  copies of a query (broadcast and unicast) sends two trains the receiver measures apart, and each
+  rate counts the probes that arrived, first to last arrival; a train from an older CNA has no
+  identifier and is told apart by its probe indices, which a lost first probe can still blur. The
+  host's responder reports a train once all of it arrived or 30 ms after its last probe, inside the
+  150 ms search. PlayerMatch/Ranked listings from a service advertising
   `qos-prejoin-v1` start bounded asynchronous probes over a separate verified WSS
   channel through that service to the current host and back, before joining.
   Poll the listing's `QualityOfService` again until `IsAvailable` becomes true;
