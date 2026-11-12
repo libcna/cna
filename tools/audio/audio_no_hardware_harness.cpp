@@ -7,9 +7,10 @@
 // consulting SDL at all. The shared CnaTests binary cannot reliably exercise the SDL3 failure
 // path because AudioMixer's device and SDL's driver selection are process-wide caches.
 //
-// SoundEffect::getMasterVolumeProperty() is used as the trigger: a static property getter that
-// calls GetMixerOrThrowXna() as its very first action, needing no file/buffer/instance setup at
-// all (SoundEffect.cpp, wired by P9-HARDWARE-002).
+// SoundEffect::setMasterVolumeProperty(1) is used as the trigger: a static property setter that
+// calls GetMixerOrThrowXna() right after validating its value, needing no file/buffer/instance
+// setup at all (SoundEffect.cpp, wired by P9-HARDWARE-002). The getter no longer opens output:
+// XNA's reads its cached field (RV-SFX-7).
 //
 // Exit codes: 0 = selection-appropriate behavior, 1 = SDL3 unexpectedly succeeded or NULL
 // unexpectedly reported no hardware, 2 = another exception type was thrown.
@@ -30,7 +31,7 @@ int main()
 
     try
     {
-        (void)Microsoft::Xna::Framework::Audio::SoundEffect::getMasterVolumeProperty();
+        Microsoft::Xna::Framework::Audio::SoundEffect::setMasterVolumeProperty(1.0f);
     }
     catch (const Microsoft::Xna::Framework::Audio::NoAudioHardwareException&)
     {

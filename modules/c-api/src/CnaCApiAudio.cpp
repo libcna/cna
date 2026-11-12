@@ -245,7 +245,9 @@ namespace {
 
     CNA_Bool isPlaybackAvailable = CNA_TRUE;
     try {
-        static_cast<void>(SoundEffect::getMasterVolumeProperty());
+        // Assigning the current master volume opens audio output, or refuses with
+        // NoAudioHardwareException; reading it does not (XNA's getter reads a cached field).
+        SoundEffect::setMasterVolumeProperty(SoundEffect::getMasterVolumeProperty());
     } catch (const NoAudioHardwareException&) {
         isPlaybackAvailable = CNA_FALSE;
     }

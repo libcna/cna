@@ -309,6 +309,28 @@ TEST(SoundEffectTest, GetSampleSizeInBytesOneSecond)
               176400);
 }
 
+// RV-SFX review #9: XNA's Duration is a field Dispose never clears (get_Duration IL_0000-0006,
+// Dispose(bool) IL_001e-0123); CNA kept it in the released implementation and answered zero.
+TEST(SoundEffectTest, DurationSurvivesDispose)
+{
+    std::vector<SharpRuntime::bytecs> pcm(16000, 0);
+    SoundEffect effect(pcm, 8000, AudioChannels::Mono);
+    const auto before = effect.getDurationProperty();
+    EXPECT_EQ(before, System::TimeSpan::FromSeconds(1.0));
+    effect.Dispose();
+    EXPECT_EQ(effect.getDurationProperty(), before);
+}
+
+// RV-SFX review #7: XNA's MasterVolume getter reads its cached field (IL_0000-0005); the value set
+// last is what reads back.
+TEST(SoundEffectTest, MasterVolumeReadsBackTheValueLastSet)
+{
+    const float saved = SoundEffect::getMasterVolumeProperty();
+    SoundEffect::setMasterVolumeProperty(0.375f);
+    EXPECT_EQ(SoundEffect::getMasterVolumeProperty(), 0.375f);
+    SoundEffect::setMasterVolumeProperty(saved);
+}
+
 TEST(SoundEffectTest, GetSampleDurationOneSecond)
 {
     const System::TimeSpan d =

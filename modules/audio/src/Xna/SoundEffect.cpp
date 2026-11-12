@@ -494,14 +494,21 @@ namespace Microsoft::Xna::Framework::Audio
         // C receives this unique, uncached sound owner. Drop the manager's retained
         // payload without cascading disposal into instances subsequently owned by C.
         auto* sound = static_cast<SoundEffect*>(representative.get());
-        sound->impl_.reset();
-        sound->isDisposed_ = true;
+        sound->ReleaseKeepingDuration();
     }
 
     // --- properties ---
 
+    void SoundEffect::ReleaseKeepingDuration() const
+    {
+        if (!isDisposed_) disposedDurationTicks_ = getDurationProperty().getTicksProperty();
+        impl_.reset();
+        isDisposed_ = true;
+    }
+
     System::TimeSpan SoundEffect::getDurationProperty() const
     {
+        if (isDisposed_ && !impl_) return System::TimeSpan(disposedDurationTicks_);
         if (impl_ && impl_->durationTicks >= 0)
             return System::TimeSpan(impl_->durationTicks);
 #ifdef SOUND_ENABLED
@@ -552,15 +559,10 @@ namespace Microsoft::Xna::Framework::Audio
 
     float SoundEffect::getMasterVolumeProperty()
     {
-#ifdef SOUND_ENABLED
-        // CP-16: query the real mixer-engine master gain (matches FNA, which likewise always
-        // queries the live FAudio master voice rather than a cached value) so this reflects
-        // the mixer engine's actual current value, not a value that could drift from it.
-        EnsureMixerOrThrowXna();
-        return CNA::Internal::Audio::GetMixerMasterGain();
-#else
+        // XNA get_MasterVolume IL_0000-0005 reads its cached field (1 from the static
+        // constructor, IL_0028-002d): reading it neither opens audio output nor throws
+        // NoAudioHardwareException, as querying the mixer did.
         return MasterVolume_;
-#endif
     }
 
     void SoundEffect::setMasterVolumeProperty(const float& v)
@@ -575,9 +577,8 @@ namespace Microsoft::Xna::Framework::Audio
         // clamping; the mixer engine does the same (only rejects negative values as an error).
         EnsureMixerOrThrowXna();
         CNA::Internal::Audio::SetMixerMasterGain(v);
-#else
-        MasterVolume_ = v;
 #endif
+        MasterVolume_ = v;
     }
 
     void SoundEffect::setMasterVolumeProperty(float&& v)
@@ -765,8 +766,7 @@ namespace Microsoft::Xna::Framework::Audio
                     if (instance) instance->Dispose();
                 }
             }
-            impl_.reset();
-            isDisposed_ = true;
+            ReleaseKeepingDuration();
             contentOwnership_.MarkDisposed();
         }
     }

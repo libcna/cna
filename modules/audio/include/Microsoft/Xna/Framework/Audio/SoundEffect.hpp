@@ -46,6 +46,11 @@ namespace Microsoft::Xna::Framework::Audio
 
         std::string name_;
         mutable bool isDisposed_ = false;
+        // The duration, kept when Dispose releases the audio: XNA's Duration is a field that
+        // Dispose never clears (get_Duration IL_0000-0006, Dispose(bool) IL_001e-0123).
+        mutable std::int64_t disposedDurationTicks_ = 0;
+        // Releases impl_ and marks the effect disposed, keeping its duration.
+        void ReleaseKeepingDuration() const;
         SharpRuntime::uintcs loopStart_ = 0;
         SharpRuntime::uintcs loopLength_ = 0;
         mutable CNA::Internal::ContentOwnershipLink contentOwnership_{this};
