@@ -431,6 +431,11 @@ namespace Microsoft::Xna::Framework::GamerServices
                         " cannot wait for the answer: no running game is presenting the Guide.");
                 }
             }
+            // RV-GUIDE-WAIT: XNA Framework XOverlappedAsyncResult.PrepareForEndFunction
+            // IL_003d-0048 always WaitOne()s the stored event, even after completion. Pump
+            // first: CNA completes and signals on this thread. A subsequent caller Reset
+            // needs an external Set, just as in XNA; completion must not bypass that wait.
+            action.getAsyncWaitHandleProperty().WaitOne();
         }
 
         void CompletePendingKeyboardInput(bool canceled)

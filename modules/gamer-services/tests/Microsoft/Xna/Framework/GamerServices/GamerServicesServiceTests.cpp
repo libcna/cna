@@ -2,7 +2,11 @@
 #include "../../../../../../platform/tests/CNA/Platform/PlatformTestDecorator.hpp"
 #include "../../../../../src/Internal/GuideOverlay.hpp"
 #include "CNA/Platform/Input/IPlatformKeyboard.hpp"
+#include <atomic>
 #include <functional>
+#include <chrono>
+#include <future>
+#include <thread>
 #include <memory>
 #include <tuple>
 #include <typeinfo>
@@ -824,6 +828,36 @@ namespace {
         }
         ~ModalFramesGuard() { CNA::Internal::GamerServices::setGuideModalFramesForTesting(nullptr); }
     };
+    // RV-GUIDE-WAIT: only the stored EventWaitHandle crosses threads. End and the modal pump stay
+    // on the test/game thread. The setter first waits for the expected Reset (a callback's, when
+    // one is given), then grants a non-waiting End time to return, and from then on keeps
+    // signaling until End has returned: a late Reset -- a broken implementation or a starved
+    // test thread -- can fail the test but never leave End waiting forever.
+    template<class End>
+    void ExpectEndToWaitForSignal(System::Threading::EventWaitHandle& event, End end,
+                                 std::future<void> reset = {}) {
+        std::atomic<bool> signaled{false};
+        std::atomic<bool> returned{false};
+        bool resetObserved = true;
+        std::jthread setter([&] {
+            if (reset.valid())
+                resetObserved = reset.wait_for(std::chrono::seconds(30)) == std::future_status::ready;
+            for (int i = 0; i < 20 && !returned.load(); ++i)
+                std::this_thread::sleep_for(std::chrono::milliseconds(10));
+            while (!returned.load()) {
+                signaled.store(true);
+                event.Set();
+                std::this_thread::sleep_for(std::chrono::milliseconds(5));
+            }
+        });
+        end();
+        const bool signaledBeforeReturn = signaled.load();
+        returned.store(true);
+        setter.join();
+        EXPECT_TRUE(resetObserved) << "modal completion did not reset the event";
+        EXPECT_TRUE(signaledBeforeReturn) << "End returned before the reset event was signaled";
+        EXPECT_TRUE(event.WaitOne(0)) << "End must not consume a manual-reset event";
+    }
     std::unique_ptr<System::IAsyncResult> ShowTwoButtonBox() {
         return std::unique_ptr<System::IAsyncResult>(Guide::BeginShowMessageBox(PlayerIndex::One, "title", "text",
             {"OK", "Cancel"}, 0, MessageBoxIcon::None, System::AsyncCallback{}, std::any{}));
@@ -935,6 +969,65 @@ TEST_F(GuideTest, PendingEndClaimsTheResultBeforePumpingCallbacks) {
     EXPECT_EQ("answer", Guide::EndShowKeyboardInput(input.get()));
     EXPECT_EQ(2, callbacks);
     EXPECT_EQ(2, frames.frames);
+}
+
+// XNA Framework XOverlappedAsyncResult.PrepareForEndFunction IL_003d-0048 always waits,
+// independently of IsCompleted. Both Guide End methods call it at IL_0000-0001.
+TEST_F(GuideTest, MessageBoxEndWaitsForResetEventAfterCompletion) {
+    MessageBoxGuard boxes;
+    auto box = ShowTwoButtonBox();
+    Guide::SimulateMessageBoxClickEXT(1);
+    auto& event = dynamic_cast<System::Threading::EventWaitHandle&>(box->getAsyncWaitHandleProperty());
+    event.Reset();
+    ASSERT_TRUE(box->getIsCompletedProperty());
+    ExpectEndToWaitForSignal(event, [&] { EXPECT_EQ(1, Guide::EndShowMessageBox(box.get())); });
+    EXPECT_THROW((void)Guide::EndShowMessageBox(box.get()), System::InvalidOperationException);
+}
+
+TEST_F(GuideTest, KeyboardEndWaitsForResetEventAfterCompletion) {
+    KeyboardInputGuard keyboards;
+    std::unique_ptr<System::IAsyncResult> input(Guide::BeginShowKeyboardInput(
+        PlayerIndex::One, "", "", "answer", {}, {}));
+    PressEnter();
+    auto& event = dynamic_cast<System::Threading::EventWaitHandle&>(input->getAsyncWaitHandleProperty());
+    event.Reset();
+    ASSERT_TRUE(input->getIsCompletedProperty());
+    ExpectEndToWaitForSignal(event, [&] { EXPECT_EQ("answer", Guide::EndShowKeyboardInput(input.get())); });
+    EXPECT_THROW((void)Guide::EndShowKeyboardInput(input.get()), System::InvalidOperationException);
+}
+
+// Completion signals before invoking the callback (Framework UserAsyncDispatcher
+// HandleFinishedOperation IL_0064-009d). Reset there must still be observed by a pumping End.
+TEST_F(GuideTest, MessageBoxModalEndObservesCallbackResetOfEvent) {
+    MessageBoxGuard boxes;
+    ScriptedModalFrames frames;
+    ModalFramesGuard installed(&frames);
+    std::promise<void> reset;
+    std::unique_ptr<System::IAsyncResult> box(Guide::BeginShowMessageBox(
+        "T", "B", {"A", "B"}, 0, MessageBoxIcon::None, [&](System::IAsyncResult& result) {
+            dynamic_cast<System::Threading::EventWaitHandle&>(result.getAsyncWaitHandleProperty()).Reset();
+            reset.set_value();
+        }, {}));
+    auto& event = dynamic_cast<System::Threading::EventWaitHandle&>(box->getAsyncWaitHandleProperty());
+    frames.answer = [] { Guide::SimulateMessageBoxClickEXT(1); };
+    ExpectEndToWaitForSignal(event, [&] { EXPECT_EQ(1, Guide::EndShowMessageBox(box.get())); }, reset.get_future());
+    EXPECT_EQ(3, frames.frames);
+}
+
+TEST_F(GuideTest, KeyboardModalEndObservesCallbackResetOfEvent) {
+    KeyboardInputGuard keyboards;
+    ScriptedModalFrames frames;
+    ModalFramesGuard installed(&frames);
+    std::promise<void> reset;
+    std::unique_ptr<System::IAsyncResult> input(Guide::BeginShowKeyboardInput(
+        PlayerIndex::One, "", "", "answer", [&](System::IAsyncResult& result) {
+            dynamic_cast<System::Threading::EventWaitHandle&>(result.getAsyncWaitHandleProperty()).Reset();
+            reset.set_value();
+        }, {}));
+    auto& event = dynamic_cast<System::Threading::EventWaitHandle&>(input->getAsyncWaitHandleProperty());
+    frames.answer = [] { PressEnter(); };
+    ExpectEndToWaitForSignal(event, [&] { EXPECT_EQ("answer", Guide::EndShowKeyboardInput(input.get())); }, reset.get_future());
+    EXPECT_EQ(3, frames.frames);
 }
 
 TEST_F(GuideTest, EndFollowsTheReferenceChecks) {

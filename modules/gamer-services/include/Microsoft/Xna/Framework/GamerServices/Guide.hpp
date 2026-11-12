@@ -162,8 +162,9 @@ namespace Microsoft::Xna::Framework::GamerServices
 
         /**
          * @brief Completes an asynchronous BeginShowKeyboardInput request, waiting for the user to
-         * confirm or cancel. While it waits, the running game keeps presenting the Guide and reading
-         * input, but its own Update and Draw do not run.
+         * confirm or cancel. Until completion, the running game keeps presenting the Guide and
+         * reading input, but its own Update and Draw do not run. End also waits on the result's
+         * AsyncWaitHandle after completion; resetting it then requires another thread to signal it.
          *
          * @param result The result returned by BeginShowKeyboardInput.
          * @return The text the user actually typed (or defaultText, if Enter was pressed
@@ -348,9 +349,10 @@ namespace Microsoft::Xna::Framework::GamerServices
         );
 
         /**
-         * @brief Completes an asynchronous BeginShowMessageBox request, waiting for the answer. While
-         * it waits, the running game keeps presenting the Guide and reading input, but its own
-         * Update and Draw do not run.
+         * @brief Completes an asynchronous BeginShowMessageBox request, waiting for the answer.
+         * Until completion, the running game keeps presenting the Guide and reading input, but its
+         * own Update and Draw do not run. End also waits on the result's AsyncWaitHandle after
+         * completion; resetting it then requires another thread to signal it.
          *
          * @param result The result returned by BeginShowMessageBox.
          * @return The zero-based index of the selected button, or empty if the box was cancelled
