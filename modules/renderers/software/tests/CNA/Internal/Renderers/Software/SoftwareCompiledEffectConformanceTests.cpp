@@ -145,6 +145,10 @@ TEST(SoftwareCompiledEffectConformanceTest, RunsEverySharedCompiledEffectContrac
         RunCompiledEffectDeviceSamplerAfterApplyContract(device);
         RunCompiledEffectMrtWriteMaskContract(device);
     });
+    RunOnFreshSoftwareDevice("SpriteBatch s0 sampler", [](GraphicsDevice& device)
+    {
+        RunCompiledEffectSpriteBatchSamplerContract(device);
+    });
     RunOnFreshSoftwareDevice("per-register/per-draw LOD bias, AddressW, SpriteBatch alternation",
                              [](GraphicsDevice& device)
     {

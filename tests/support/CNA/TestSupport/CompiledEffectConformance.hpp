@@ -3753,6 +3753,56 @@ namespace CNA::TestSupport
     }
 
     /**
+     * @brief Contract: a compiled SpriteBatch pass samples the sprite under the pass's own s0
+     *        sampler when it assigns one, else under the sampler SpriteBatch.Begin installed.
+     *
+     * XNA's SpriteBatch.SetRenderState installs the Begin sampler in SamplerStates[0]
+     * (IL_0089-00b3); RenderBatch applies the custom pass (IL_0038) and then replaces only the
+     * texture (IL_003d-004a), so a pass-assigned sampler wins and otherwise Begin's stands. The
+     * sprite is a 2x1 [red, green] texture drawn from source rectangle (2, 0, 1, 1), so its
+     * texture coordinates run from u = 1 to 1.5: Clamp reads green, Wrap reads red.
+     *
+     * @param device Device whose renderer claims CompiledEffects.
+     */
+    inline void RunCompiledEffectSpriteBatchSamplerContract(GraphicsDevice& device)
+    {
+        namespace Fx = EffectFormat;
+        Texture2D strip(device, 2, 1);
+        const Color texels[2] = {Color(255, 0, 0, 255), Color(0, 255, 0, 255)};
+        strip.SetData(texels, 2);
+        RenderTarget2D target(device, 8, 8);
+        const auto drawWith = [&](Effect& effect, const SamplerState* beginSampler)
+        {
+            effect.getParametersProperty()["Tint"]->SetValue(Vector4::One);
+            device.SetRenderTarget(&target);
+            device.Clear(Color::Black);
+            SpriteBatch batch(device);
+            batch.Begin(SpriteSortMode::Deferred, BlendState::Opaque, beginSampler, nullptr, nullptr,
+                        &effect);
+            batch.Draw(strip, Rectangle(0, 0, 8, 8), Rectangle(2, 0, 1, 1), Color::White);
+            batch.End();
+            device.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
+            Color pixel = Color::Transparent;
+            const Rectangle centre(4, 4, 1, 1);
+            target.GetData(0, &centre, &pixel, 0, 1);
+            return pixel;
+        };
+
+        Effect assigning(device, BuildSyntheticPixelOnlySamplingEffect({
+            {Fx::SampMagFilter, Fx::FilterPoint}, {Fx::SampMinFilter, Fx::FilterPoint},
+            {Fx::SampMipFilter, Fx::FilterPoint}, {Fx::SampAddressU, Fx::AddressClamp},
+            {Fx::SampAddressV, Fx::AddressClamp}}, 0));
+        const Color passSampler = drawWith(assigning, &SamplerState::PointWrap);
+        EXPECT_NEAR(passSampler.getRProperty(), 0, 3) << "the pass's own Clamp sampler lost to Begin's Wrap";
+        EXPECT_NEAR(passSampler.getGProperty(), 255, 3);
+
+        Effect plain(device, BuildSyntheticPixelOnlySamplingEffect({}, 0));
+        const Color beginSampler = drawWith(plain, &SamplerState::PointClamp);
+        EXPECT_NEAR(beginSampler.getRProperty(), 0, 3) << "Begin's Clamp sampler was not used";
+        EXPECT_NEAR(beginSampler.getGProperty(), 255, 3);
+    }
+
+    /**
      * @brief Contract: a multi-pass compiled Effect batches the way XNA's SpriteBatch does.
      *
      * FX-102. XNA runs a compiled Effect's passes at FLUSH granularity, over a whole

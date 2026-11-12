@@ -5278,6 +5278,18 @@ namespace CNA::Internal::Renderers::SdlGpu
                 SDL_GPU_VERTEXINPUTRATE_VERTEX}};
             command.compiledEffect = BuildCompiledEffectBindingEXT(
                 *sdlGpuEffect, streams, compiledParams, &nativeTexture);
+            // The sprite's slot-0 bind at replay takes the s0 sampler the binding captured -- the
+            // pass's own, else the device's -- rather than the Begin sampler it was queued with.
+            if (const auto& captured = command.compiledEffect.spriteSampler)
+            {
+                command.textureFilter = captured->filter;
+                command.addressU = captured->addressU;
+                command.addressV = captured->addressV;
+                command.addressW = captured->addressW;
+                command.maxAnisotropy = captured->maxAnisotropy;
+                command.maxMipLevel = captured->maxMipLevel;
+                command.lodBias = captured->lodBias;
+            }
         }
 #endif
         const float rgba[4] = {
@@ -7659,7 +7671,24 @@ namespace CNA::Internal::Renderers::SdlGpu
                             "effect declares a different sampler dimension there.");
                     }
                     samplerBinding.texture = *spriteTextureOverride;
-                    if (!samplerAssigned && slot < samplerSlots_.size())
+                    // XNA's RenderBatch applies the pass (IL_0038) and replaces only the texture
+                    // (IL_003d-004a): a sampler the pass assigns to s0 stands, and otherwise the
+                    // one SpriteBatch.Begin installed in the device's s0 (SetRenderState
+                    // IL_0089-00b3). The renderer's own slot cache is flushed from slot 1 for
+                    // sprites, so its s0 may be stale and is only a fallback without a device.
+                    const bool deviceSampler = !samplerAssigned && params != nullptr &&
+                                               params->compiledDeviceSamplerStates != nullptr;
+                    if (samplerAssigned || deviceSampler)
+                    {
+                        samplerBinding.filter = static_cast<int>(samplerState.getFilterProperty());
+                        samplerBinding.addressU = static_cast<int>(samplerState.getAddressUProperty());
+                        samplerBinding.addressV = static_cast<int>(samplerState.getAddressVProperty());
+                        samplerBinding.maxAnisotropy = samplerState.getMaxAnisotropyProperty();
+                        samplerBinding.maxMipLevel = samplerState.getMaxMipLevelProperty();
+                        samplerBinding.lodBias = samplerState.getMipMapLevelOfDetailBiasProperty();
+                        samplerBinding.addressW = static_cast<int>(samplerState.getAddressWProperty());
+                    }
+                    else if (slot < samplerSlots_.size())
                     {
                         const SamplerSlotState& deviceSlot = samplerSlots_[slot];
                         samplerBinding.filter = deviceSlot.filter;
@@ -7670,6 +7699,7 @@ namespace CNA::Internal::Renderers::SdlGpu
                         samplerBinding.lodBias = deviceSlot.lodBias;
                         samplerBinding.addressW = deviceSlot.addressW;
                     }
+                    binding.spriteSampler = samplerBinding;
                     continue;
                 }
                 if (boundTexture == nullptr)

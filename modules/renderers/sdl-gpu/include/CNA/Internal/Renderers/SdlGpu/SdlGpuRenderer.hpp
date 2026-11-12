@@ -18,6 +18,7 @@
 #include <cstdint>
 #include <memory>
 #include <mutex>
+#include <optional>
 #include <string>
 #include <unordered_map>
 #include <unordered_set>
@@ -2136,6 +2137,9 @@ namespace CNA::Internal::Renderers::SdlGpu
             std::vector<CompiledEffectSamplerBinding> pixelSamplers;
             /// Independent vertex-stage slots, with the same lifetime and dummy-binding rules.
             std::vector<CompiledEffectSamplerBinding> vertexSamplers;
+            /// A SpriteBatch draw's s0 as captured -- the pass's own sampler, else the device's --
+            /// which the sprite's trailing slot-0 bind uses instead of its Begin sampler.
+            std::optional<CompiledEffectSamplerBinding> spriteSampler;
         };
 #endif  // CNA_SDLGPU_COMPILED_EFFECTS
 
