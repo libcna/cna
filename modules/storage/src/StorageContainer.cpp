@@ -192,6 +192,51 @@ namespace Microsoft::Xna::Framework::Storage
     // Path.GetFullPath (fullCheck), and through a search's Path.InternalCombine. Without it an
     // embedded NUL let the native call act on the prefix -- DeleteDirectory("victim\0x") deleted
     // victim.
+    // Framework 4's FileSystemEnumerableIterator, which XNA's pattern searches reach
+    // (GetFileNames/GetDirectoryNames IL_0017-0023): NormalizeSearchPattern (IL_0000-001e) trims
+    // Path.TrimEndChars (tab, LF, VT, FF, CR, space, U+0085, U+00A0) and maps "." to "*";
+    // CheckSearchPattern refuses ".." at the end or before a separator; an empty pattern then
+    // finds nothing (iterator .ctor IL_0024-0033); a trailing separator searches "*"
+    // (GetFullSearchString IL_0017-0034); and the combined path's characters are checked last.
+    // A leading "./" names the container itself.
+    StorageContainer::SearchPattern StorageContainer::SplitSearchPattern(const std::string& searchPattern)
+    {
+        std::string normalized = searchPattern;
+        for (;;)
+        {
+            const std::size_t size = normalized.size();
+            if (size >= 1 && (normalized.back() == ' ' || (normalized.back() >= '\t' && normalized.back() <= '\r')))
+                normalized.pop_back();
+            else if (size >= 2 && static_cast<unsigned char>(normalized[size - 2]) == 0xC2 &&
+                     (static_cast<unsigned char>(normalized[size - 1]) == 0x85 ||
+                      static_cast<unsigned char>(normalized[size - 1]) == 0xA0))
+                normalized.resize(size - 2);
+            else
+                break;
+        }
+        if (normalized == ".") normalized = "*";
+        for (std::size_t at = normalized.find(".."); at != std::string::npos; at = normalized.find("..", at + 2))
+        {
+            if (at + 2 == normalized.size() || normalized[at + 2] == '/' || normalized[at + 2] == '\\')
+                throw System::ArgumentException(
+                    "Search pattern cannot contain \"..\" to move up directories and can be contained "
+                    "only internally in file/directory names, as in \"a..b\".");
+        }
+        SearchPattern result;
+        if (normalized.empty()) return result;
+        RequireValidPathChars(normalized);
+        for (char& value : normalized) if (value == '\\') value = '/';
+        while (normalized.rfind("./", 0) == 0) normalized.erase(0, 2);
+        if (!normalized.empty() && normalized.back() == '/') normalized += '*';
+        if (normalized.empty()) normalized = "*";
+        const auto separator = normalized.find_last_of('/');
+        result.any = true;
+        result.hasParent = separator != std::string::npos;
+        result.parent = result.hasParent ? normalized.substr(0, separator) : std::string{};
+        result.leaf = result.hasParent ? normalized.substr(separator + 1) : normalized;
+        return result;
+    }
+
     void StorageContainer::RequireValidPathChars(const std::string& path)
     {
         for (const unsigned char value : path)
@@ -310,19 +355,14 @@ namespace Microsoft::Xna::Framework::Storage
         VerifyNotDisposed(*this);
         if (searchPattern.empty())
             return {};
-        RequireValidPathChars(searchPattern);
         // XNA GetDirectoryNames(string) IL_0017-0023 searches the pattern's directory;
         // IL_0063-007d removes only the container root, retaining relative subdirectories.
-        std::string normalized = searchPattern;
-        for (char& value : normalized) if (value == '\\') value = '/';
-        const auto separator = normalized.find_last_of('/');
-        const auto parent = separator == std::string::npos ? std::string{}
-            : normalized.substr(0, separator);
-        const auto pattern = separator == std::string::npos ? normalized
-            : normalized.substr(separator + 1);
-        const fs::path base = separator == std::string::npos
+        const auto search = SplitSearchPattern(searchPattern);
+        if (!search.any) return {};
+        const auto& pattern = search.leaf;
+        const fs::path base = !search.hasParent
             ? CNA::Internal::PathFromUtf8(storagePath_)
-            : ResolveNativePath(parent.empty() ? "/" : parent, "searchPattern");
+            : ResolveNativePath(search.parent.empty() ? "/" : search.parent, "searchPattern");
         std::vector<std::string> result;
         for (const auto& path : System::IO::Directory::GetDirectories(CNA::Internal::PathToUtf8(base)))
         {
@@ -381,19 +421,14 @@ namespace Microsoft::Xna::Framework::Storage
         VerifyNotDisposed(*this);
         if (searchPattern.empty())
             return {};
-        RequireValidPathChars(searchPattern);
         // XNA GetFileNames(string) IL_0017-0023 searches the pattern's directory;
         // IL_0063-007d removes only the container root, retaining relative subdirectories.
-        std::string normalized = searchPattern;
-        for (char& value : normalized) if (value == '\\') value = '/';
-        const auto separator = normalized.find_last_of('/');
-        const auto parent = separator == std::string::npos ? std::string{}
-            : normalized.substr(0, separator);
-        const auto pattern = separator == std::string::npos ? normalized
-            : normalized.substr(separator + 1);
-        const fs::path base = separator == std::string::npos
+        const auto search = SplitSearchPattern(searchPattern);
+        if (!search.any) return {};
+        const auto& pattern = search.leaf;
+        const fs::path base = !search.hasParent
             ? CNA::Internal::PathFromUtf8(storagePath_)
-            : ResolveNativePath(parent.empty() ? "/" : parent, "searchPattern");
+            : ResolveNativePath(search.parent.empty() ? "/" : search.parent, "searchPattern");
         std::vector<std::string> result;
         for (const auto& path : System::IO::Directory::GetFiles(CNA::Internal::PathToUtf8(base)))
         {

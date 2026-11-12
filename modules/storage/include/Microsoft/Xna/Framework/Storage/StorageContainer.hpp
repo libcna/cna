@@ -220,6 +220,15 @@ namespace Microsoft::Xna::Framework::Storage
         // Joins UTF-8 relative onto root. An escape throws System::ArgumentException(escapeMessage).
         // Refuses the characters Framework 4's Path.CheckInvalidPathChars refuses.
         static void RequireValidPathChars(const std::string& path);
+        // A search pattern as Framework 4 normalizes it, split at its last separator.
+        struct SearchPattern
+        {
+            bool any = false;       // false: the normalized pattern is empty and matches nothing
+            bool hasParent = false; // the pattern names a directory below the container
+            std::string parent;
+            std::string leaf;
+        };
+        [[nodiscard]] static SearchPattern SplitSearchPattern(const std::string& searchPattern);
         [[nodiscard]] static std::filesystem::path ResolveBelow(const std::filesystem::path& root,
                                                                 const std::string& relative,
                                                                 const char* escapeMessage,

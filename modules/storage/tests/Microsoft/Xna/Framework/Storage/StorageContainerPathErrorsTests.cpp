@@ -8,6 +8,7 @@
 #include <string>
 #include <typeinfo>
 #include <type_traits>
+#include <vector>
 #include "Microsoft/Xna/Framework/Storage/StorageDevice.hpp"
 #include "CNA/Internal/PathUtf8.hpp"
 #include "System/ArgumentNullException.hpp"
@@ -90,6 +91,26 @@ TEST_F(StorageContainerPathErrorsTest, IllegalPathCharactersRefuseBeforeTheFiles
     illegal([&] { (void)container->OpenFile("q\"uote.dat", System::IO::FileMode::OpenOrCreate); });
     illegal([&] { (void)container->GetFileNames("*|.txt"); });
     illegal([&] { (void)container->GetDirectoryNames("child/\x01*"); });
+}
+
+// RV-STORAGE review #3 and rv-fix5 #2: Framework 4's search iterator normalizes the pattern before
+// anything else -- trims trailing whitespace (Path.TrimEndChars), maps "." to "*", refuses ".." at
+// the end or before a separator, finds nothing for an empty pattern, searches "*" after a trailing
+// separator -- and only then checks the combined path's characters. A leading "./" is the container.
+TEST_F(StorageContainerPathErrorsTest, SearchPatternsAreNormalizedAsFramework4DoesBeforeTheyAreChecked)
+{
+    { std::ofstream nested(root / "child" / "nested.dat"); nested << "n"; }
+    using Names = std::vector<std::string>;
+    EXPECT_EQ(container->GetFileNames("\t"), Names{}) << "a pattern trimmed to nothing finds nothing";
+    EXPECT_EQ(container->GetDirectoryNames("\n"), Names{});
+    EXPECT_EQ(container->GetFileNames("*.txt\t "), Names{"seed.txt"});
+    EXPECT_EQ(container->GetFileNames("."), Names{"seed.txt"});
+    EXPECT_EQ(container->GetDirectoryNames("."), Names{"child"});
+    EXPECT_EQ(container->GetFileNames("./*.txt"), Names{"seed.txt"});
+    EXPECT_EQ(container->GetFileNames("child/"), Names{"child/nested.dat"});
+    EXPECT_EQ(container->GetFileNames("a..b"), Names{});
+    for (const char* refused : {"..", "*..", "../*", "child/..\\x"})
+        Exact<System::ArgumentException>([&] { (void)container->GetFileNames(refused); });
 }
 
 TEST_F(StorageContainerPathErrorsTest, EmptyDirectoryArgumentsPreserveExactExceptionAndParameter)
