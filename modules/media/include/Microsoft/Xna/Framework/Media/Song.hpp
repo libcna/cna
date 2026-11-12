@@ -17,6 +17,7 @@ namespace Microsoft::Xna::Framework::Media
     // exposes a SongCollection of its members, and Song points back at all three. Matches the same
     // pattern Album.hpp already uses to forward-declare SongCollection (MEDIA-174).
     class Album;
+    class AlbumCollection;
     class Artist;
     class Genre;
     class MediaLibrary;
@@ -63,26 +64,26 @@ namespace Microsoft::Xna::Framework::Media
          *
          * Only songs obtained from a MediaLibrary scan belong to an album; a song constructed
          * directly from a file path (or loaded from an XNB) has no library context and returns
-         * nullptr, matching the null a C# get-only reference property would yield.
+         * XNA's shared empty album (Album.Empty: an empty name, Artist.Empty, Genre.Empty, no
+         * songs), never null.
          *
-         * @return Non-owning pointer to the containing Album, or nullptr if this song is not part
-         *         of a media library.
+         * @return Non-owning pointer to the containing Album, or to the shared empty album.
          */
         [[nodiscard]] Album* getAlbumProperty() const;
 
         /**
          * @brief Gets the Artist of the Song.
          *
-         * @return Non-owning pointer to the containing Artist, or nullptr if this song is not part
-         *         of a media library.
+         * @return Non-owning pointer to the containing Artist, or to XNA's shared empty artist
+         *         (Artist.Empty) if this song is not part of a media library; never null.
          */
         [[nodiscard]] Artist* getArtistProperty() const;
 
         /**
          * @brief Gets the Genre of the Song.
          *
-         * @return Non-owning pointer to the containing Genre, or nullptr if this song is not part
-         *         of a media library.
+         * @return Non-owning pointer to the containing Genre, or to XNA's shared empty genre
+         *         (Genre.Empty) if this song is not part of a media library; never null.
          */
         [[nodiscard]] Genre* getGenreProperty() const;
 
@@ -264,6 +265,11 @@ namespace Microsoft::Xna::Framework::Media
         // by the disposed guards on the public getters.
         friend class MediaPlayer;
         [[nodiscard]] std::shared_ptr<System::IDisposable> GetContentDisposalRecord() const override;
+        // XNA's Album.Empty, Artist.Empty, Genre.Empty and AlbumCollection.Empty sentinels.
+        static Album& EmptyAlbumInternal();
+        static Artist& EmptyArtistInternal();
+        static Genre& EmptyGenreInternal();
+        static AlbumCollection& EmptyAlbumsInternal();
         // Non-owning back-pointers into the MediaLibrary that produced this song; null for any
         // song not created by a library scan. The library outlives the songs it owns, so these do
         // not dangle in normal use -- the same non-owning-pointer contract Album::songs_ already

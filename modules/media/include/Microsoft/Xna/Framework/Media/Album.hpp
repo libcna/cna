@@ -139,6 +139,7 @@ namespace Microsoft::Xna::Framework::Media
 
     private:
         friend class MediaLibrary;
+        friend class Song; // Album.Empty, the album of a song without one
         Album(std::string name, Artist* artist, Genre* genre, System::TimeSpan duration,
               std::string artPath, SongCollection* songs);
 

@@ -547,12 +547,16 @@ TEST_F(MediaLibraryTestFixture, SongsPointBackAtTheirOwningAlbumArtistAndGenre)
     bool checkedAtLeastOneAlbum = false;
     bool checkedAtLeastOneArtist = false;
     bool checkedAtLeastOneGenre = false;
+    // A song without one of them reports XNA's shared empty sentinel (never null); those are the
+    // ones a song without a library also reports.
+    const Song standalone("tests/assets/media/music/Artist One/Album Alpha/01 - Sunrise.ogg", "Standalone");
+    const auto known = [](auto* value, auto* empty) { return value != empty ? value : nullptr; };
 
     for (Song* song : *library->getSongsProperty())
     {
         ASSERT_NE(song, nullptr);
 
-        if (Album* album = song->getAlbumProperty())
+        if (Album* album = known(song->getAlbumProperty(), standalone.getAlbumProperty()))
         {
             checkedAtLeastOneAlbum = true;
             // The pointer must be one the library actually owns and exposes.
@@ -565,7 +569,7 @@ TEST_F(MediaLibraryTestFixture, SongsPointBackAtTheirOwningAlbumArtistAndGenre)
             EXPECT_TRUE(roundTrip) << "album does not list back the song that points at it";
         }
 
-        if (Artist* artist = song->getArtistProperty())
+        if (Artist* artist = known(song->getArtistProperty(), standalone.getArtistProperty()))
         {
             checkedAtLeastOneArtist = true;
             bool inLibrary = false;
@@ -577,7 +581,7 @@ TEST_F(MediaLibraryTestFixture, SongsPointBackAtTheirOwningAlbumArtistAndGenre)
             EXPECT_TRUE(roundTrip);
         }
 
-        if (Genre* genre = song->getGenreProperty())
+        if (Genre* genre = known(song->getGenreProperty(), standalone.getGenreProperty()))
         {
             checkedAtLeastOneGenre = true;
             bool inLibrary = false;
@@ -597,15 +601,27 @@ TEST_F(MediaLibraryTestFixture, SongsPointBackAtTheirOwningAlbumArtistAndGenre)
     EXPECT_TRUE(checkedAtLeastOneGenre)  << "no song had a Genre -- back-references never populated";
 }
 
-// A Song that never came from a library scan has no library context, so all three return nullptr
-// (owner decision: nullptr rather than empty singletons, matching C# null semantics for a get-only
-// reference property) -- MEDIA-174.
-TEST(SongLibraryBackReferenceTest, StandaloneSongHasNoAlbumArtistOrGenre)
+// A Song that never came from a library scan has no library context. XNA never returns null there:
+// Song's constructor installs the shared Album.Empty, Artist.Empty and Genre.Empty (URI .ctor
+// IL_0019-0035, getters IL_002a-0048) -- empty names, no songs, the album's artist and genre the
+// empty ones. Owner decision 2026-11-12, superseding MEDIA-174's nullptr.
+TEST(SongLibraryBackReferenceTest, StandaloneSongHasXnasEmptyAlbumArtistAndGenre)
 {
     Song song("tests/assets/media/music/Artist One/Album Alpha/01 - Sunrise.ogg", "Standalone");
-    EXPECT_EQ(song.getAlbumProperty(), nullptr);
-    EXPECT_EQ(song.getArtistProperty(), nullptr);
-    EXPECT_EQ(song.getGenreProperty(), nullptr);
+    Album* album = song.getAlbumProperty();
+    Artist* artist = song.getArtistProperty();
+    Genre* genre = song.getGenreProperty();
+    ASSERT_NE(album, nullptr);
+    ASSERT_NE(artist, nullptr);
+    ASSERT_NE(genre, nullptr);
+    EXPECT_EQ(album->getNameProperty(), "");
+    EXPECT_EQ(artist->getNameProperty(), "");
+    EXPECT_EQ(genre->getNameProperty(), "");
+    EXPECT_EQ(album->getArtistProperty(), artist);
+    EXPECT_EQ(album->getGenreProperty(), genre);
+    EXPECT_EQ(album->getSongsProperty()->getCountProperty(), 0);
+    Song other("tests/assets/media/music/Artist One/Album Alpha/01 - Sunrise.ogg", "Other");
+    EXPECT_EQ(other.getAlbumProperty(), album) << "the empty album is one shared object, as in XNA";
 }
 
 // MEDIA-176: XNA declares Song.ToString(); CNA had no override at all (inherited

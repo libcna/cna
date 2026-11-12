@@ -1,10 +1,16 @@
 // SPDX-License-Identifier: MS-PL
 #include "Microsoft/Xna/Framework/Media/Song.hpp"
+#include "Microsoft/Xna/Framework/Media/Album.hpp"
+#include "Microsoft/Xna/Framework/Media/AlbumCollection.hpp"
+#include "Microsoft/Xna/Framework/Media/Artist.hpp"
+#include "Microsoft/Xna/Framework/Media/Genre.hpp"
+#include "Microsoft/Xna/Framework/Media/SongCollection.hpp"
 
 #include <algorithm>
 #include <cctype>
 #include <filesystem>
 #include <utility>
+#include <vector>
 
 #include "CNA/Internal/PathUtf8.hpp"
 #include "CNA/Internal/Media/MediaObjectDisposal.hpp"
@@ -18,6 +24,42 @@
 namespace Microsoft::Xna::Framework::Media
 {
     using CNA::Internal::Media::ThrowIfDisposed;
+
+    // XNA's Song installs Artist.Empty, Album.Empty and Genre.Empty in every constructor (URI
+    // .ctor IL_0019-0035), and a relationship getter returns that sentinel unless native metadata
+    // replaces it (IL_002a-0048): Album, Artist and Genre are never null (owner decision
+    // 2026-11-12, superseding MEDIA-174). The sentinels are named, empty and shared, as XNA's
+    // statics are (Artist/Album/Genre .cctor; their collections are SongCollection.Empty and
+    // AlbumCollection.Empty).
+    namespace
+    {
+        SongCollection& EmptySongs()
+        {
+            static SongCollection songs{std::vector<Song*>{}};
+            return songs;
+        }
+    }
+    AlbumCollection& Song::EmptyAlbumsInternal()
+    {
+        static AlbumCollection albums{std::vector<Album*>{}};
+        return albums;
+    }
+    Artist& Song::EmptyArtistInternal()
+    {
+        static Artist artist{std::string(), &EmptyAlbumsInternal(), &EmptySongs()};
+        return artist;
+    }
+    Genre& Song::EmptyGenreInternal()
+    {
+        static Genre genre{std::string(), &EmptyAlbumsInternal(), &EmptySongs()};
+        return genre;
+    }
+    Album& Song::EmptyAlbumInternal()
+    {
+        static Album album{std::string(), &EmptyArtistInternal(), &EmptyGenreInternal(),
+                           System::TimeSpan::Zero, std::string(), &EmptySongs()};
+        return album;
+    }
 
     Song::Song(std::string fileName, std::string name)
         : name_(std::move(name)),
@@ -91,19 +133,19 @@ namespace Microsoft::Xna::Framework::Media
     Album* Song::getAlbumProperty() const
     {
         ThrowIfDisposed(isDisposed_, "Song");
-        return album_;
+        return album_ != nullptr ? album_ : &EmptyAlbumInternal();
     }
 
     Artist* Song::getArtistProperty() const
     {
         ThrowIfDisposed(isDisposed_, "Song");
-        return artist_;
+        return artist_ != nullptr ? artist_ : &EmptyArtistInternal();
     }
 
     Genre* Song::getGenreProperty() const
     {
         ThrowIfDisposed(isDisposed_, "Song");
-        return genre_;
+        return genre_ != nullptr ? genre_ : &EmptyGenreInternal();
     }
 
     System::TimeSpan Song::getDurationProperty() const

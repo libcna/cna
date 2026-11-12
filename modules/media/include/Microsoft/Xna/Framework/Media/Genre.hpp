@@ -88,6 +88,7 @@ namespace Microsoft::Xna::Framework::Media
 
     private:
         friend class MediaLibrary;
+        friend class Song; // Genre.Empty, the genre of a song without one
         Genre(std::string name, AlbumCollection* albums, SongCollection* songs);
         void SetAlbums(AlbumCollection* albums) { albums_ = albums; }
 

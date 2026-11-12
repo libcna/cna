@@ -89,6 +89,7 @@ namespace Microsoft::Xna::Framework::Media
     private:
         friend class MediaLibrary;
         friend class Album; // compares and hashes its artist by name, disposed or not
+        friend class Song;  // Artist.Empty, the artist of a song without one
         Artist(std::string name, AlbumCollection* albums, SongCollection* songs);
         void SetAlbums(AlbumCollection* albums) { albums_ = albums; }
 

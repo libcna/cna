@@ -1012,20 +1012,30 @@ static int validate_library_graph(const CNA_Handle game)
         return 0;
     }
 
-    /* A song a caller built has no library context, so all three back-pointers are absent. */
+    /* A song a caller built has no library context. As in XNA, which installs Album.Empty,
+       Artist.Empty and Genre.Empty in Song's constructor, all three are present and empty
+       (owner decision 2026-11-12). */
     {
         CNA_SongHandle standalone = CNA_INVALID_HANDLE;
         char path[1024];
-        CNA_AlbumHandle absent = CNA_INVALID_HANDLE;
+        CNA_AlbumHandle emptyAlbum = CNA_INVALID_HANDLE;
+        CNA_ArtistHandle emptyArtist = CNA_INVALID_HANDLE;
+        CNA_GenreHandle emptyGenre = CNA_INVALID_HANDLE;
+        uint64_t nameBytes = UINT64_C(9);
         if (!join_fixture_path(path, sizeof(path), "first_track.mp3") ||
             cna_song_create(game, view(path), view("Standalone"), &standalone) !=
                 CNA_RESULT_SUCCESS ||
-            cna_song_get_album(standalone, &absent, &flag) != CNA_RESULT_SUCCESS ||
-            flag != CNA_FALSE || absent != CNA_INVALID_HANDLE ||
-            cna_song_get_artist(standalone, &absent, &flag) != CNA_RESULT_SUCCESS ||
-            flag != CNA_FALSE ||
-            cna_song_get_genre(standalone, &absent, &flag) != CNA_RESULT_SUCCESS ||
-            flag != CNA_FALSE ||
+            cna_song_get_album(standalone, &emptyAlbum, &flag) != CNA_RESULT_SUCCESS ||
+            flag != CNA_TRUE || emptyAlbum == CNA_INVALID_HANDLE ||
+            cna_album_get_name_size(emptyAlbum, &nameBytes) != CNA_RESULT_SUCCESS ||
+            nameBytes != UINT64_C(0) ||
+            cna_song_get_artist(standalone, &emptyArtist, &flag) != CNA_RESULT_SUCCESS ||
+            flag != CNA_TRUE ||
+            cna_song_get_genre(standalone, &emptyGenre, &flag) != CNA_RESULT_SUCCESS ||
+            flag != CNA_TRUE ||
+            cna_album_destroy(emptyAlbum) != CNA_RESULT_SUCCESS ||
+            cna_artist_destroy(emptyArtist) != CNA_RESULT_SUCCESS ||
+            cna_genre_destroy(emptyGenre) != CNA_RESULT_SUCCESS ||
             cna_song_destroy(standalone) != CNA_RESULT_SUCCESS) {
             return 0;
         }

@@ -64,6 +64,7 @@ namespace Microsoft::Xna::Framework::Media
 
     private:
         friend class MediaLibrary;
+        friend class Song; // AlbumCollection.Empty, the albums of Artist.Empty and Genre.Empty
         explicit AlbumCollection(std::vector<Album*> albums);
 
         CNA::Internal::Media::MediaCollectionBase<Album> base_;
