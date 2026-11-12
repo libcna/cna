@@ -1467,10 +1467,11 @@ TEST_F(SoundEffectInstanceTest, SetVolumeAfterApply3DPreservesDistanceAttenuatio
     EXPECT_NEAR(MIX_GetTrackGain(track), 0.2f, 1e-5f); // 0.4 * 0.5, not a bare 0.4
 }
 
-// Scenario 2 (AUDIO-001 observable failure #2, Pitch): setPitchProperty() used to write
-// MIX_SetTrackFrequencyRatio(track, pow(2, Pitch_)) directly, with no Doppler term at all,
-// discarding whatever Doppler shift the last Apply3D() call had established.
-TEST_F(SoundEffectInstanceTest, SetPitchAfterApply3DPreservesDopplerFactor)
+// Review rv-sfx #3: XNA's Pitch setter writes the octave ratio alone
+// (KernelSoundEffectInstance.SetPitch IL_0026-005e), so a Doppler shift Apply3D established is gone
+// until the next Apply3D writes base * DopplerFactor (Apply3D IL_0246-025f); a Volume write in
+// between does not bring it back. FNA recombined the last Doppler factor.
+TEST_F(SoundEffectInstanceTest, SetPitchAfterApply3DWritesTheOctaveRatioUntilTheNextApply3D)
 {
     REQUIRE_DEVICE();
     SoundEffectInstance inst = instance();
@@ -1487,6 +1488,10 @@ TEST_F(SoundEffectInstanceTest, SetPitchAfterApply3DPreservesDopplerFactor)
     ASSERT_NEAR(MIX_GetTrackFrequencyRatio(track), 2.0f / 3.0f, 1e-4f);
 
     inst.setPitchProperty(0.5f);
+    EXPECT_NEAR(MIX_GetTrackFrequencyRatio(track), std::pow(2.0f, 0.5f), 1e-4f);
+    inst.setVolumeProperty(0.8f);
+    EXPECT_NEAR(MIX_GetTrackFrequencyRatio(track), std::pow(2.0f, 0.5f), 1e-4f);
+    inst.Apply3D(listener, emitter);
     EXPECT_NEAR(MIX_GetTrackFrequencyRatio(track), std::pow(2.0f, 0.5f) * (2.0f / 3.0f), 1e-4f);
 }
 

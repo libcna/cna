@@ -90,9 +90,8 @@ page under `docs/` (index: `docs/README.md`), deliberate divergences from FNA an
   mixer tracks hold their own sample data, so nothing dangles; stopping them needs a stop path whose
   synchronously fired stopped callback does not destroy the track inside the stop call.
 - Reviews of 2026-11-12 (rv-sfx, rv-media, rv-storage, rv-fix7), source-traced and not fixed:
-  Audio -- after Apply3D, setting Pitch keeps the Doppler factor where XNA's set_Pitch writes the
-  base ratio alone (KernelSoundEffectInstance.SetPitch IL_0026-005e; rv-sfx #3); SoundEffect.FromStream
-  accepts fmt chunks XNA refuses (wrong nAvgBytesPerSec, cbSize other than 0, a 20-byte fmt; #10).
+  Audio -- SoundEffect.FromStream accepts fmt chunks XNA refuses (wrong nAvgBytesPerSec, cbSize
+  other than 0, a 20-byte fmt; rv-sfx #10).
   An immediate DynamicSoundEffectInstance.Stop flushes XNA's voice, and each flushed buffer that
   leaves one or two pending posts a BufferNeeded (KernelSoundEffectInstance.Stop IL_0011-0062 with
   OnBufferEnd IL_004b-006a in the Stopping state, source-traced, unmeasured); CNA's Stop posts none

@@ -1343,11 +1343,12 @@ namespace Microsoft::Xna::Framework::Audio
         }
         Pitch_ = pitch;
 
-        // AUDIO-001: was a direct ratio write with no Doppler term, which erased any Doppler
-        // shift Apply3D had established (FNA's UpdatePitch() always recombines pitch with the
-        // last-computed Doppler factor, matching FAudio's single combined frequency-ratio voice
-        // stage -- the mixer's ratio is the same single combined stage, so CNA must
-        // recompose the two explicitly on every write instead).
+        // XNA's set_Pitch (IL_003f-0052) reaches KernelSoundEffectInstance.SetPitch, which stores
+        // the octave ratio and writes it alone (IL_0026-005e): the frequency ratio drops the Doppler
+        // factor until the next Apply3D writes base * DopplerFactor again (Apply3D IL_0246-025f).
+        // FNA recombines the last Doppler factor here. Volume and Pan writes leave the ratio as is,
+        // which the composed write below then keeps.
+        dopplerFactor_ = 1.0f;
         INTERNAL_applyComposedTrackProperties();
     }
 
