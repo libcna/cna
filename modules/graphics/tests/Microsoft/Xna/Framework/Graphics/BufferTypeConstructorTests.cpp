@@ -103,9 +103,15 @@ TEST(BufferTypeConstructorTest, IndexBufferResolvesThirtyTwoBitTypes)
     GraphicsDevice device = MakeHiDefDevice();
     const IndexBuffer fromInt32(device, System::Type::From<std::int32_t>(), 8, BufferUsage::None);
     const IndexBuffer fromUInt32(device, System::Type::From<std::uint32_t>(), 8, BufferUsage::None);
+    // XNA asks Marshal.SizeOf (IB Type .ctor IL_0021-0022) and accepts any 4-byte type
+    // (CreateBuffer IL_0007-0043): Single, and Boolean, which marshals as a 4-byte BOOL.
+    const IndexBuffer fromSingle(device, System::Type::From<float>(), 8, BufferUsage::None);
+    const IndexBuffer fromBoolean(device, System::Type::From<bool>(), 8, BufferUsage::None);
 
     EXPECT_EQ(fromInt32.getIndexElementSizeProperty(), IndexElementSize::ThirtyTwoBits);
     EXPECT_EQ(fromUInt32.getIndexElementSizeProperty(), IndexElementSize::ThirtyTwoBits);
+    EXPECT_EQ(fromSingle.getIndexElementSizeProperty(), IndexElementSize::ThirtyTwoBits);
+    EXPECT_EQ(fromBoolean.getIndexElementSizeProperty(), IndexElementSize::ThirtyTwoBits);
 }
 
 TEST(BufferTypeConstructorTest, IndexBufferTypeConstructorMatchesTheElementSizeConstructor)
@@ -124,7 +130,10 @@ TEST(BufferTypeConstructorTest, IndexBufferRefusesAnUnusableIndexType)
     GraphicsDevice device;
     EXPECT_THROW((void)IndexBuffer(device, System::Type::From<std::uint8_t>(), 8, BufferUsage::None),
                  System::ArgumentException);
-    EXPECT_THROW((void)IndexBuffer(device, System::Type::From<float>(), 8, BufferUsage::None),
+    // Char marshals as a one-byte ANSI char, Double as eight bytes.
+    EXPECT_THROW((void)IndexBuffer(device, System::Type::From<char16_t>(), 8, BufferUsage::None),
+                 System::ArgumentException);
+    EXPECT_THROW((void)IndexBuffer(device, System::Type::From<double>(), 8, BufferUsage::None),
                  System::ArgumentException);
     EXPECT_THROW((void)IndexBuffer(device, System::Type::From<std::int64_t>(), 8, BufferUsage::None),
                  System::ArgumentException);
@@ -153,7 +162,9 @@ TEST(BufferTypeConstructorTest, DynamicIndexBufferResolvesTheSameTypes)
     EXPECT_EQ(thirtyTwo.getIndexElementSizeProperty(), IndexElementSize::ThirtyTwoBits);
     EXPECT_EQ(sixteen.getBufferUsageProperty(), BufferUsage::WriteOnly);
 
-    EXPECT_THROW((void)DynamicIndexBuffer(device, System::Type::From<float>(), 8,
+    const DynamicIndexBuffer single(device, System::Type::From<float>(), 8, BufferUsage::WriteOnly);
+    EXPECT_EQ(single.getIndexElementSizeProperty(), IndexElementSize::ThirtyTwoBits);
+    EXPECT_THROW((void)DynamicIndexBuffer(device, System::Type::From<double>(), 8,
                                           BufferUsage::WriteOnly),
                  System::ArgumentException);
 }

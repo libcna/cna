@@ -133,9 +133,12 @@ namespace Microsoft::Xna::Framework::Graphics
     namespace
     {
         /// XNA's `Marshal.SizeOf(indexType)` followed by its `size != 2 ? ThirtyTwoBits
-        /// : SixteenBits` rule, restricted to the index value types an index buffer can have. C++
-        /// cannot ask an arbitrary `System::Type` for its size, and a type outside this set is one
-        /// XNA would also fail on -- either inside Marshal.SizeOf or at buffer creation.
+        /// : SixteenBits` rule (CreateBuffer IL_0007-0043 accepts 2 and 4), for the primitive types
+        /// whose marshalled size is 2 or 4: Int16/UInt16, and Int32/UInt32/Single/Boolean (a
+        /// Boolean marshals as a 4-byte BOOL). The other primitives marshal to 1 (Byte, SByte, and
+        /// Char as an ANSI char) or 8 bytes and fail at buffer creation as in XNA. C++ cannot ask an
+        /// arbitrary `System::Type` -- a user struct of 2 or 4 bytes -- for its marshalled size; such
+        /// a type is refused like a wrong-sized one.
         IndexElementSize IndexElementSizeFromType(const System::Type& indexType, int indexCount)
         {
             // Refresh IB/DIB Type .ctor IL_0006-0019 checks count before Marshal.SizeOf.
@@ -148,7 +151,9 @@ namespace Microsoft::Xna::Framework::Graphics
                 return IndexElementSize::SixteenBits;
             }
             if (indexType == System::Type::From<std::int32_t>() ||
-                indexType == System::Type::From<std::uint32_t>())
+                indexType == System::Type::From<std::uint32_t>() ||
+                indexType == System::Type::From<float>() ||
+                indexType == System::Type::From<bool>())
             {
                 return IndexElementSize::ThirtyTwoBits;
             }
