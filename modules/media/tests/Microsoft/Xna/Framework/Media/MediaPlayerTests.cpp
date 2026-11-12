@@ -10,6 +10,7 @@
 #include <thread>
 #include <limits>
 #include <typeinfo>
+#include <stdexcept>
 #include <vector>
 #include "System/ArgumentNullException.hpp"
 #include "System/ArgumentException.hpp"
@@ -302,6 +303,32 @@ TEST_F(MediaPlayerTest, AStateChangeMadeInsideAMediaHandlerIsReportedByTheNextUp
     MediaPlayer::MediaStateChanged.Remove(token);
     EXPECT_EQ(seen, (std::vector<MediaState>{MediaState::Playing, MediaState::Paused}))
         << "the Pause made inside the first notification was not reported";
+}
+
+// rv-fix5 review #3: XNA clears its dispatched copy only after every call returned (Update
+// IL_0112-0117), so a handler that throws leaves the whole batch for the next Update: the song
+// notification is raised again and the state notification it pre-empted is not lost.
+TEST_F(MediaPlayerTest, AThrowingMediaHandlerLeavesItsBatchForTheNextUpdate)
+{
+    int songs = 0;
+    int states = 0;
+    auto songToken = MediaPlayer::ActiveSongChanged.Add(
+        [&songs](System::Object*, const System::EventArgs&)
+        {
+            if (++songs == 1) throw std::runtime_error("first song notification");
+        });
+    auto stateToken = MediaPlayer::MediaStateChanged.Add(
+        [&states](System::Object*, const System::EventArgs&) { ++states; });
+    Microsoft::Xna::Framework::FrameworkDispatcher::ActiveSongChanged = false;
+    Microsoft::Xna::Framework::FrameworkDispatcher::MediaStateChanged = false;
+    Song song(kFixtureA, "A");
+    MediaPlayer::Play(&song);
+    EXPECT_THROW(Microsoft::Xna::Framework::FrameworkDispatcher::Update(), std::runtime_error);
+    Microsoft::Xna::Framework::FrameworkDispatcher::Update();
+    MediaPlayer::ActiveSongChanged.Remove(songToken);
+    MediaPlayer::MediaStateChanged.Remove(stateToken);
+    EXPECT_EQ(songs, 2);
+    EXPECT_EQ(states, 1) << "the state notification behind the throwing handler was lost";
 }
 
 // MEDIA-84/188/189/190: IsVisualizationEnabled/GetVisualizationData.

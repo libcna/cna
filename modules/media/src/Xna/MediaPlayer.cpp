@@ -25,17 +25,25 @@ namespace Microsoft::Xna::Framework::Media
     namespace
     {
         // FrameworkDispatcher::Update()'s media step: the song tracking, then the events it owes.
+        // The batch the media step is dispatching: XNA's static pendingCallsCopy.
+        bool batchSongChanged = false;
+        bool batchStateChanged = false;
+
         void UpdateFrameworkMedia()
         {
             using Microsoft::Xna::Framework::FrameworkDispatcher;
             MediaPlayer::Update();
-            // XNA's FrameworkDispatcher.Update copies and clears its pending calls before invoking
-            // any (IL_001b-005a, then IL_00b3-00c4): a change a handler makes -- Pause inside
-            // MediaStateChanged -- is owed to the next Update instead of being cleared with this one.
-            const bool songChanged = std::exchange(FrameworkDispatcher::ActiveSongChanged, false);
-            const bool stateChanged = std::exchange(FrameworkDispatcher::MediaStateChanged, false);
-            if (songChanged) MediaPlayer::OnActiveSongChanged();
-            if (stateChanged) MediaPlayer::OnMediaStateChanged();
+            // XNA's FrameworkDispatcher.Update moves its pending calls into a copy before invoking
+            // any (IL_001b-005a, then IL_006b-0102): a change a handler makes -- Pause inside
+            // MediaStateChanged -- is owed to the next Update. The copy is cleared only after every
+            // call returned (IL_0112-0117); a handler that throws leaves it for the next Update,
+            // which dispatches it again.
+            batchSongChanged |= std::exchange(FrameworkDispatcher::ActiveSongChanged, false);
+            batchStateChanged |= std::exchange(FrameworkDispatcher::MediaStateChanged, false);
+            if (batchSongChanged) MediaPlayer::OnActiveSongChanged();
+            if (batchStateChanged) MediaPlayer::OnMediaStateChanged();
+            batchSongChanged = false;
+            batchStateChanged = false;
         }
 
         // Every change the dispatcher must report passes here, so the media step is installed
