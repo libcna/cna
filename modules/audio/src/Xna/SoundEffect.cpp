@@ -35,11 +35,30 @@
 
 namespace Microsoft::Xna::Framework::Audio
 {
+#ifdef SOUND_ENABLED
+    namespace
+    {
+        struct FireAndForgetPanState;
+        struct FireAndForgetRegistry
+        {
+            // Links are protected by MixerLock. The atomic empty check lets Dispose avoid
+            // reopening a device after DestroyMixer has stopped/unlinked every live track.
+            std::atomic<FireAndForgetPanState*> first{nullptr};
+            // Set by Dispose before it reads `first`; Play links before it reads this flag
+            // (both sequentially consistent), so a Play racing Dispose either sees the effect
+            // disposed and withdraws its track, or Dispose sees the track and stops it.
+            std::atomic<bool> disposed{false};
+        };
+    }
+#endif
+
     class SoundEffect::Impl
     {
     public:
 #ifdef SOUND_ENABLED
         CNA::Internal::Audio::MixerAudioPtr audio;
+        std::shared_ptr<FireAndForgetRegistry> fireAndForget =
+            std::make_shared<FireAndForgetRegistry>();
         SharpRuntime::intcs sampleRate = 44100;
         SharpRuntime::uintcs channels  = 2;
 #endif
@@ -98,9 +117,8 @@ namespace Microsoft::Xna::Framework::Audio
         // Play() time, by a SoundEffect member function (a friend of SoundEffectInstance) --
         // FireAndForgetPanCallback below is a free-function mixer trampoline, not a class member,
         // so it can't call the private, friended INTERNAL_calculatePanCrossfeedMatrix itself.
-        // Heap-allocated with a lifetime tied to the track itself, freed in
-        // OnFireAndForgetStopped below (which already runs exactly once, when this track is
-        // destroyed on natural completion).
+        // Heap-allocated with a lifetime tied to the track. Natural completion defers its
+        // reclamation until the final cooked callback is finished.
         struct FireAndForgetPanState
         {
             bool  active = false; // false: pan == 0 at Play() time, matrix is the identity
@@ -110,6 +128,30 @@ namespace Microsoft::Xna::Framework::Audio
             // reuses this already-heap-allocated object as its own queue node instead of a
             // separate std::vector entry, so queuing one for cleanup never allocates.
             FireAndForgetPanState* next = nullptr;
+
+            // Keep the registry alive even if the SoundEffect wrapper has gone away. Only
+            // control-side cleanup releases this shared ownership, never the audio callback.
+            std::shared_ptr<FireAndForgetRegistry> registry;
+            CNA::Internal::Audio::MixerTrack* track = nullptr;
+            FireAndForgetPanState* previousActive = nullptr;
+            FireAndForgetPanState* nextActive = nullptr;
+
+            void Link(const std::shared_ptr<FireAndForgetRegistry>& owner,
+                      CNA::Internal::Audio::MixerTrack* value)
+            {
+                registry = owner;
+                track = value;
+                nextActive = registry->first.load(std::memory_order_relaxed);
+                if (nextActive) nextActive->previousActive = this;
+                registry->first.store(this, std::memory_order_seq_cst);
+            }
+
+            void Unlink()
+            {
+                if (previousActive) previousActive->nextActive = nextActive;
+                else registry->first.store(nextActive, std::memory_order_release);
+                if (nextActive) nextActive->previousActive = previousActive;
+            }
         };
 
         // AUD-05-006: best-effort detection that the caller passed whole-file container bytes
@@ -232,17 +274,6 @@ namespace Microsoft::Xna::Framework::Audio
                 }
             }
 
-            // Queue() runs inside the stopped callback, but SDL3_mixer may still invoke the
-            // cooked callback with the final buffer after that callback returns. MixerLock is a
-            // callback barrier: once acquired, the iteration that queued every currently-visible
-            // node has finished and its cooked callback can no longer read the node.
-            void DrainAfterMixerBarrier()
-            {
-                if (!head.load(std::memory_order_acquire)) return;
-                CNA::Internal::Audio::MixerLock barrier;
-                DrainClaimed();
-            }
-
             ~PendingPanStateCleanup()
             {
                 DrainClaimed();
@@ -253,8 +284,33 @@ namespace Microsoft::Xna::Framework::Audio
 
         void OnFireAndForgetStopped(void* userdata, CNA::Internal::Audio::MixerTrack* track)
         {
-            g_pendingPanStateCleanup.Queue(static_cast<FireAndForgetPanState*>(userdata));
+            auto* state = static_cast<FireAndForgetPanState*>(userdata);
+            state->Unlink();
+            g_pendingPanStateCleanup.Queue(state);
             CNA::Internal::Audio::DestroyMixerTrack(track);
+        }
+
+        void StopFireAndForget(FireAndForgetRegistry& registry)
+        {
+            registry.disposed.store(true, std::memory_order_seq_cst);
+            if (!registry.first.load(std::memory_order_seq_cst)) return;
+            CNA::Internal::Audio::MixerLock barrier;
+            while (auto* state = registry.first.load(std::memory_order_relaxed))
+            {
+                // The barrier excludes natural completion and its final cooked callback.
+                // Stop synchronously calls the stopped callback on both backends; disarm it
+                // first so ownership stays here until Stop's native stack has returned.
+                // Called from inside a mixer callback, both facades defer the destruction
+                // itself until the mix iteration that may still visit this track is over.
+                auto* track = state->track;
+                CNA::Internal::Audio::SetMixerTrackStoppedCallback(track, nullptr, nullptr);
+                CNA::Internal::Audio::SetMixerTrackMixCallback(track, nullptr, nullptr);
+                state->Unlink();
+                CNA::Internal::Audio::StopMixerTrack(track);
+                CNA::Internal::Audio::DestroyMixerTrack(track);
+                delete state;
+            }
+            g_pendingPanStateCleanup.DrainClaimed();
         }
 
         // P9-HARDWARE-002: CNA::Internal::Audio::GetMixer() throws a raw std::runtime_error on
@@ -648,6 +704,8 @@ namespace Microsoft::Xna::Framework::Audio
 
     SoundEffectInstance SoundEffect::CreateInstance() const
     {
+        // XNA CreateInstance IL_0003-000e takes the same syncObject as Dispose(bool).
+        const std::lock_guard lock(syncObject_);
         if (isDisposed_)
         {
             throw System::ObjectDisposedException("SoundEffect");
@@ -676,9 +734,19 @@ namespace Microsoft::Xna::Framework::Audio
         // Volume, Pitch and Pan setters in that order, so each refuses what the setter refuses,
         // NaN included, as ArgumentOutOfRangeException("value"). FNA returned false when disposed
         // and clamped the pitch.
-        if (isDisposed_)
+        //
+        // XNA Play IL_0025-0030 / IL_0100-010b holds syncObject through registration and play.
+        // CNA takes it only to check disposal and keep the resource: holding it while waiting for
+        // the mixer lock would deadlock against a Dispose called from a mixer callback (review
+        // rv-prv1 S2). The registry's disposed flag closes the remaining race below.
+        std::shared_ptr<Impl> impl;
         {
-            throw System::ObjectDisposedException("SoundEffect");
+            const std::lock_guard lock(syncObject_);
+            if (isDisposed_)
+            {
+                throw System::ObjectDisposedException("SoundEffect");
+            }
+            impl = impl_;
         }
         if (!(volume >= 0.0f && volume <= 1.0f))
         {
@@ -698,15 +766,17 @@ namespace Microsoft::Xna::Framework::Audio
         // finished fire-and-forget track -- see PendingPanStateCleanup's own comment for why
         // this can't happen directly in OnFireAndForgetStopped (a real ASan-caught
         // heap-use-after-free otherwise).
-        g_pendingPanStateCleanup.DrainAfterMixerBarrier();
-
-        auto* audio = static_cast<CNA::Internal::Audio::MixerAudio*>(getNativeAudioHandle());
+        auto* audio = impl && impl->audio ? impl->audio.get() : nullptr;
         if (!audio)
         {
             return false;
         }
-
-        CNA::Internal::Audio::MixerTrack* track = CNA::Internal::Audio::CreateMixerTrack();
+        // Allocate callback storage before creating a track; failed setup keeps both under RAII.
+        auto panState = std::make_unique<FireAndForgetPanState>();
+        std::unique_ptr<CNA::Internal::Audio::MixerTrack,
+                        decltype(&CNA::Internal::Audio::DestroyMixerTrack)> trackOwner(
+            CNA::Internal::Audio::CreateMixerTrack(), CNA::Internal::Audio::DestroyMixerTrack);
+        auto* track = trackOwner.get();
         if (!track)
         {
             return false;
@@ -714,7 +784,6 @@ namespace Microsoft::Xna::Framework::Audio
 
         if (!CNA::Internal::Audio::SetMixerTrackAudio(track, audio))
         {
-            CNA::Internal::Audio::DestroyMixerTrack(track);
             return false;
         }
 
@@ -728,7 +797,6 @@ namespace Microsoft::Xna::Framework::Audio
         // instead, matching P11-PAN-001's design for SoundEffectInstance.
         CNA::Internal::Audio::SetMixerTrackStereoUnity(track);
 
-        auto* panState = new FireAndForgetPanState{};
         if (pan != 0.0f)
         {
             // Computed once here, not in FireAndForgetPanCallback -- SoundEffect::Play() is a
@@ -739,8 +807,12 @@ namespace Microsoft::Xna::Framework::Audio
             SoundEffectInstance::INTERNAL_calculatePanCrossfeedMatrix(
                 pan, panState->ll, panState->rl, panState->lr, panState->rr);
         }
+        // Bind audio before taking MixerLock: the SDL facade may reload it under its own
+        // resource mutex. Only callback publication, playback and linking need the barrier.
+        CNA::Internal::Audio::MixerLock barrier;
+        g_pendingPanStateCleanup.DrainClaimed();
         CNA::Internal::Audio::SetMixerTrackMixCallback(
-            track, FireAndForgetPanCallback, panState);
+            track, FireAndForgetPanCallback, panState.get());
 
         if (pitch != 0.0f)
         {
@@ -753,19 +825,34 @@ namespace Microsoft::Xna::Framework::Audio
                 track, ratio < 0.01f ? 0.01f : ratio);
         }
 
-        // Auto-destroy track (and free panState) when playback finishes.
+        // Natural completion unlinks and defers cleanup; explicit Dispose owns cleanup itself.
         CNA::Internal::Audio::SetMixerTrackStoppedCallback(
-            track, OnFireAndForgetStopped, panState);
+            track, OnFireAndForgetStopped, panState.get());
 
+        // XNA 4.0 Refresh SoundEffect.Play IL_0089-0095 registers fire-and-forget children;
+        // Dispose(bool) IL_0079-00a2 disposes them alongside CreateInstance children. Link
+        // before playing, then look at the disposed flag: a Dispose that ran since the check
+        // above has either found this track (and waits for this barrier to stop it) or been
+        // seen here -- then the track is withdrawn unplayed and Play refuses, as it would have
+        // after waiting for XNA's syncObject.
+        panState->Link(impl->fireAndForget, track);
+        const auto withdraw = [&] {
+            panState->Unlink();
+            CNA::Internal::Audio::SetMixerTrackStoppedCallback(track, nullptr, nullptr);
+            CNA::Internal::Audio::SetMixerTrackMixCallback(track, nullptr, nullptr);
+        };
+        if (impl->fireAndForget->disposed.load(std::memory_order_seq_cst))
+        {
+            withdraw();
+            throw System::ObjectDisposedException("SoundEffect");
+        }
         if (!CNA::Internal::Audio::PlayMixerTrack(track))
         {
-            // A failed play means the track never actually started, so
-            // OnFireAndForgetStopped will never fire for it -- free panState here instead.
-            delete panState;
-            CNA::Internal::Audio::DestroyMixerTrack(track);
+            withdraw();
             return false;
         }
-
+        (void)panState.release();
+        (void)trackOwner.release();
         return true;
 #else
         (void)volume; (void)pitch; (void)pan;
@@ -776,22 +863,31 @@ namespace Microsoft::Xna::Framework::Audio
     void SoundEffect::Dispose()
     {
         if (contentOwnership_.DisposeRepresentative()) return;
-        if (!isDisposed_)
+        std::shared_ptr<Impl> impl;
+        std::vector<SoundEffectInstance*> instancesSnapshot;
         {
-            if (impl_)
-            {
-                // instance->Dispose() unregisters itself from impl_->instances, mutating the
-                // live vector -- iterate a snapshot so that's safe (matches FNA's
-                // Instances.ToArray() before the foreach in SoundEffect.Dispose()).
-                auto instancesSnapshot = impl_->instances;
-                for (auto* instance : instancesSnapshot)
-                {
-                    if (instance) instance->Dispose();
-                }
-            }
+            // XNA Dispose(bool) IL_0003-000e serializes against Play and CreateInstance, and
+            // publishes disposal (IL_001e-0020) before any child runs. ReleaseKeepingDuration
+            // marks this wrapper disposed; the children keep the shared resource alive.
+            const std::lock_guard lock(syncObject_);
+            if (isDisposed_) return;
+            impl = impl_;
+            // instance->Dispose() unregisters itself from impl->instances, mutating the live
+            // vector -- iterate a snapshot (FNA: Instances.ToArray() before the foreach).
+            if (impl) instancesSnapshot = impl->instances;
             ReleaseKeepingDuration();
-            contentOwnership_.MarkDisposed();
         }
+#ifdef SOUND_ENABLED
+        if (impl) StopFireAndForget(*impl->fireAndForget);
+#endif
+        // No wrapper lock is held while children run: a derived instance's Dispose(bool) may
+        // dispose this effect again, which finds it disposed and returns (review rv-prv1 S1).
+        for (auto* instance : instancesSnapshot)
+        {
+            if (instance) instance->Dispose();
+        }
+        impl.reset();
+        contentOwnership_.MarkDisposed();
     }
 
     void* SoundEffect::getNativeAudioHandle() const

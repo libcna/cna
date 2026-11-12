@@ -13,6 +13,7 @@
 #include "Microsoft/Xna/Framework/Audio/AudioEngine.hpp"
 #include "Microsoft/Xna/Framework/Audio/SoundBank.hpp"
 #include "Microsoft/Xna/Framework/Audio/SoundEffect.hpp"
+#include "CNA/Internal/Audio/FrameworkUpdates.hpp"
 #include "Microsoft/Xna/Framework/Audio/WaveBank.hpp"
 #include "Microsoft/Xna/Framework/Audio/InstancePlayLimitException.hpp"
 #include "System/IndexOutOfRangeException.hpp"
@@ -30,7 +31,11 @@
 #include <algorithm>
 #include <atomic>
 #include <barrier>
+#include <chrono>
+#include <cstdio>
+#include <cstdlib>
 #include <future>
+#include <exception>
 #include <thread>
 #include <array>
 #include <cstdint>
@@ -534,6 +539,7 @@ TEST(XactFiniteAdapter, ExplicitMaxWithoutTailKeepsItsExistingTruncationContract
 struct VoiceReceipt { float gain = -99.0f, ratio = -99.0f; };
 std::map<void*, VoiceReceipt> voiceReceipts;
 
+#include "SoundEffectDisposeCases.hpp"
 #include "XactSchedulerCases.hpp"
 #include "XactValueEventCases.hpp"
 #include "XactAttackOriginCases.hpp"

@@ -84,11 +84,6 @@ page under `docs/` (index: `docs/README.md`), deliberate divergences from FNA an
   cascade's list (out of memory), which then propagates. XNA serializes AudioEngine.Update and every Cue/bank call with one lock (UnsafeNativeMethods
   pSyncObject); CNA has none, so calling Update on one thread while another stops or disposes a
   cue, or disposes the engine, is a data race (review rv-cue #3, not reproduced).
-- SoundEffect.Dispose (review rv-sfx #1, 2026-11-12): sounds started with `SoundEffect.Play`
-  (fire-and-forget) keep playing to their natural end after the effect is disposed; XNA disposes
-  them with it (Play IL_0089-0095 registers them, Dispose(bool) IL_0079-00a2 disposes them). Their
-  mixer tracks hold their own sample data, so nothing dangles; stopping them needs a stop path whose
-  synchronously fired stopped callback does not destroy the track inside the stop call.
 - Reviews of 2026-11-12 (rv-sfx, rv-media, rv-storage, rv-fix7), source-traced and not fixed:
   Audio -- immediate Stop accounts for its flush during the call; native XNA flush-callback timing
   and transient PendingBufferCount observations remain unmeasured. CNA notices a completed buffer

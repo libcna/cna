@@ -203,6 +203,20 @@ namespace CNA::Internal::Audio
         std::atomic<TrackContext*> g_deferredTrackDestruction{nullptr};
         std::atomic<bool> g_mixerShuttingDown{false};
 
+        // Depth of SDL_mixer callbacks (cooked, stopped, postmix) running on this thread. SDL's
+        // mix iteration saves the next track before it calls a track's callback and visits it
+        // afterwards, so a track destroyed from any callback -- not only its own stopped one --
+        // must outlive that iteration (review rv-prv1 S3: SoundEffect.Dispose from a callback).
+        thread_local int t_mixerCallbackDepth = 0;
+
+        struct MixerCallbackScope
+        {
+            MixerCallbackScope() noexcept { ++t_mixerCallbackDepth; }
+            ~MixerCallbackScope() { --t_mixerCallbackDepth; }
+            MixerCallbackScope(const MixerCallbackScope&) = delete;
+            MixerCallbackScope& operator=(const MixerCallbackScope&) = delete;
+        };
+
         void DeferTrackDestruction(TrackContext* context) noexcept
         {
             if (!context || context->destructionDeferred.exchange(true, std::memory_order_acq_rel))
@@ -248,6 +262,7 @@ namespace CNA::Internal::Audio
         void SDLCALL MixCallback(void* userdata, MIX_Track* track,
                                  const SDL_AudioSpec* spec, float* pcm, int samples)
         {
+            const MixerCallbackScope scope;
             auto* context = static_cast<TrackContext*>(userdata);
             const auto callback = context->mixCallback;
             if (callback)
@@ -284,6 +299,7 @@ namespace CNA::Internal::Audio
 
         void SDLCALL StoppedCallback(void* userdata, MIX_Track* track)
         {
+            const MixerCallbackScope scope;
             auto* context = static_cast<TrackContext*>(userdata);
             if (context->resumePastLoopEnd.exchange(false, std::memory_order_acq_rel))
             {
@@ -307,6 +323,7 @@ namespace CNA::Internal::Audio
         void SDLCALL PostMixCallback(void*, MIX_Mixer* mixer,
                                      const SDL_AudioSpec* spec, float* pcm, int samples)
         {
+            const MixerCallbackScope scope;
             MixReverbReturns(pcm,spec?spec->channels:0,samples,MIX_GetMixerGain(mixer));
             const auto* context = PostMixContextOwner().get();
             if (context && context->callback)
@@ -544,11 +561,14 @@ namespace CNA::Internal::Audio
         TrackContext* context = GetTrackContext(Native(track));
         if (context && context->diagnosticAlive.exchange(false, std::memory_order_relaxed))
             CNA_DIAGNOSTICS_GAUGE_ADD("Audio/AllocatedVoices", -1);
-        if (context && context->stoppedCallbackActive.load(std::memory_order_acquire))
+        if (context && (context->stoppedCallbackActive.load(std::memory_order_acquire) ||
+                        t_mixerCallbackDepth > 0))
         {
             // Destroying from SDL_mixer's stopped callback would free the stream whose lock the
-            // native StopTrack frame still owns. During whole-mixer shutdown its own subsequent
-            // destroy loop owns this track; otherwise defer to the next safe engine entry.
+            // native StopTrack frame still owns, and destroying any track from inside a mix
+            // iteration would free one that iteration may still visit. During whole-mixer
+            // shutdown its own subsequent destroy loop owns this track; otherwise defer to the
+            // next safe engine entry.
             if (!g_mixerShuttingDown.load(std::memory_order_acquire))
                 DeferTrackDestruction(context);
             return;

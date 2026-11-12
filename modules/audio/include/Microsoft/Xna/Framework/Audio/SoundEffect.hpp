@@ -4,6 +4,7 @@
 #include <cstddef>
 #include <istream>
 #include <memory>
+#include <mutex>
 #include <string>
 #include <vector>
 
@@ -38,6 +39,9 @@ namespace Microsoft::Xna::Framework::Audio
         void DetachContentOwnership() const;
         class Impl;
         mutable std::shared_ptr<Impl> impl_;
+        // XNA's syncObject: guards disposal against Play and CreateInstance. It is never held
+        // while waiting for the mixer lock or while a child's Dispose runs (SoundEffect.cpp).
+        mutable std::mutex syncObject_;
 
         static float MasterVolume_;
         static float DistanceScale_;
@@ -308,7 +312,7 @@ namespace Microsoft::Xna::Framework::Audio
          */
         bool Play(float volume, float pitch, float pan);
 
-        /** @brief Releases the underlying audio resource. */
+        /** @brief Disposes all child instances, stops fire-and-forget playback and releases audio. */
         void Dispose() override;
 
         // --- Static methods ---
