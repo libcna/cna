@@ -437,6 +437,18 @@ guarantees for every overload, value or platform.
 
 These are current decisions, not open defects:
 
+- **Guide dialog callbacks run inline on the game thread** (review rv-storage #1, owner decision
+  2026-11-12). XNA 4.0 Refresh `BeginShowMessageBox` IL_0245–0257 and `BeginShowKeyboardInput`
+  IL_02e3–02f5 register their operations with Framework `UserAsyncDispatcher`, whose
+  `HandleFinishedOperation` IL_007a–009d queues the AsyncCallback on the ThreadPool. CNA completes the
+  dialog on the game thread and calls the callback there, inside completion; games, demos and samples
+  change game state from these callbacks, and moving them to a worker would make every one of them a
+  data race. The completion event is still signaled before the callback, as in XNA.
+- **Guide.IsScreenSaverEnabled controls the host's screen saver** (review rv-storage #6, owner
+  decision 2026-11-12). Windows XNA 4.0 Refresh `get_IsScreenSaverEnabled` IL_0000–0001 returns a
+  literal true and `set_IsScreenSaverEnabled` IL_0000 does nothing. CNA keeps the platform-backed
+  getter and setter (`IPlatformDisplays`; true and a no-op without a display service) as a
+  portability exception, so a title that disables the screen saver through the Guide still does.
 - **A managed null has no C++ form where CNA takes a reference** (TQ-074, owner decision
   2026-11-05). XNA throws `ArgumentNullException` for a null text or font in `SpriteBatch.DrawString`
   and similar members. CNA keeps its reference-based signatures and does not add the eight CNAEXT

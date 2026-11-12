@@ -106,11 +106,11 @@ page under `docs/` (index: `docs/README.md`), deliberate divergences from FNA an
   between distinct Videos of equal size recreates the frame textures XNA reuses (#5); public playback
   calls have no serialization (#9); PlayPosition past 2,147,483,647 ms (about 24.86 days) returns
   values XNA's Int32-millisecond results cannot hold, native rollover unmeasured (rv-fix7 #4).
-  Gamer services and storage -- Guide dialog callbacks run inline on the input/game thread
-  (rv-storage #1); Guide.IsScreenSaverEnabled follows the platform where Windows XNA's getter is always
-  true and its setter does nothing (#6); a caller-signaled wait handle on a still-pending Guide dialog
-  does not bypass CNA's modal completion pump, while XNA proceeds to native result retrieval (#9,
-  residual; the native result for that premature signal is unmeasured).
+  Gamer services -- a caller-signaled wait handle on a still-pending Guide dialog does not bypass
+  CNA's modal completion pump, while XNA proceeds to native result retrieval (rv-storage #9,
+  residual; the native result for that premature signal is unmeasured). Inline Guide callbacks
+  (#1) and the platform-backed IsScreenSaverEnabled (#6) are owner-approved boundaries, recorded in
+  docs/xna-fna-behavior-decisions.md.
 - XACT (HND-XACT-06, evidence `../cnaplan/evidence/rev002/hnd-xact-06-loop-extensions/`): with only an
   effect NEW_ON_LOOP (families 4/6), XACT holds one wave and varies its pitch per pass; CNA plays n+1
   complete waves of the first candidate with a new effect draw each (count and candidate match).
