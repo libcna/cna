@@ -2794,6 +2794,29 @@ protected:
     GraphicsDevice gd;
 };
 
+// RV-TEX review #4: a float texel is converted to Color as XNA's Color(float...) packs a channel --
+// the Single product value * 255 rounded half to even (SaveAsImage IL_015c-0169 -> SingleToColor ->
+// PackUNorm -> ClampAndRound IL_0036-0038). 0.3f * 255 is exactly 76.5f: XNA saves 76, not 77.
+TEST(SaveAsPngRoundingTest, AFloatTexelRoundsHalfToEvenAsXnaPacksAColor)
+{
+    GraphicsDevice device(GraphicsAdapter::getDefaultAdapterProperty(), GraphicsProfile::HiDef,
+                          PresentationParameters::CreateWindowedEXT(64, 64));
+    std::unique_ptr<Texture2D> single;
+    try { single = std::make_unique<Texture2D>(device, 1, 1, false, SurfaceFormat::Single); }
+    catch (const System::NotSupportedException&) { GTEST_SKIP() << "renderer has no Single textures"; }
+    ASSERT_EQ(0.3f * 255.0f, 76.5f);
+    const float texel = 0.3f;
+    single->SetData(&texel, 1);
+    MemoryStream encoded;
+    single->SaveAsPng(&encoded, 1, 1);
+    auto bytes = encoded.GetBuffer();
+    MemoryStream readBack(bytes.data(), static_cast<System::IO::intcs>(bytes.size()));
+    Texture2D decoded = Texture2D::FromStream(device, readBack);
+    Color pixel;
+    decoded.GetData(&pixel, 1);
+    EXPECT_EQ(pixel.getRProperty(), 76);
+}
+
 TEST_F(SaveAsPngTest, NullStreamThrowsArgumentNullException)
 {
     Texture2D tex(gd, 1, 1);

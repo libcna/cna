@@ -3,6 +3,7 @@
 #include "CNA/Internal/Graphics/SurfaceFormatDecoder.hpp"
 
 #include "CNA/Internal/Graphics/DxtUtil.hpp"
+#include "CNA/Internal/PackedRounding.hpp"
 #include "Microsoft/Xna/Framework/Graphics/PackedVector/HalfTypeHelper.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SurfaceFormat.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Texture.hpp"
@@ -62,11 +63,13 @@ namespace CNA::Internal::Graphics::SurfaceFormatDecoder
             return value <= -127 ? -1.0f : static_cast<float>(value) / 127.0f;
         }
 
+        // XNA converts a decoded texel to Color through Color(float, float, float, float)
+        // (Texture2D.SaveAsImage IL_015c-0169 -> SingleToColor -> PackUtils.PackUNorm): the Single
+        // product value * 255, clamped, rounded half to even (ClampAndRound IL_0036-0038). Adding
+        // 0.5 and truncating rounded 76.5 up to 77 where XNA gives 76.
         [[nodiscard]] std::uint8_t FloatToByte(float value) noexcept
         {
-            if (!(value > 0.0f)) return 0u;
-            if (value >= 1.0f) return 255u;
-            return static_cast<std::uint8_t>(value * 255.0f + 0.5f);
+            return static_cast<std::uint8_t>(CNA::Internal::ClampAndRound(value * 255.0f, 0.0f, 255.0f));
         }
 
         void StoreDecodedTexel(std::size_t texel, float r, float g, float b, float a,
