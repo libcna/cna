@@ -154,13 +154,10 @@ page under `docs/` (index: `docs/README.md`), deliberate divergences from FNA an
   lost with the effect that owned it.
 - C API: content tags of meshes/parts have no C route; HND-TQ-22 C route (ObjectValue handles, ABI 0.61)
   not done; `CNA::Net::SystemLinkDiscovery` (GALAXY-NET-01) has no C route (planned, CBIND-127).
-- Content (review rv-content, 2026-11-12, source-traced): XNA's three texture readers read and set
-  each level in turn, so a level count past the full chain fails inside SetData with
-  InvalidOperationException ("An unexpected error has occurred.", D3DERR_INVALIDCALL) and a wrong
-  level byte count with ArgumentException (InvalidTotalSize), after the earlier levels are set; CNA
-  decodes every level first and refuses both with ContentLoadException. The TextureCube reader still
-  decodes before it constructs, so the profile's cube refusals come after the levels, and the
-  Texture2D reader looks up the device before it reads the header; ContentManager asks a custom
+- Content (review rv-content, 2026-11-12, source-traced): Negative texture-level byte counts
+  retain CNA's ContentLoadException safety refusal; Refresh's GetByteBuffer allocation / cached-buffer
+  path (IL_0023-0031) can instead fail allocation or reach SetData's copy-parameter check.
+  ContentManager asks a custom
   stream's CanSeek before it validates the XNB header (XNA after it, PrepareStream IL_009f-00a5),
   which only a stream whose CanSeek getter throws can observe; ReadObject/ReadRawObject with an
   existing Texture2D or TextureCube returns the reader's new texture where XNA's InvokeReader throws

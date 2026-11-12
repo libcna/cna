@@ -39,33 +39,21 @@ namespace CNA::Internal::Xnb
         // levels (IL_003c-008a). Like Texture2DReader it never loads existingInstance, so a
         // supplied volume is neither written nor a way around Reach's refusal.
         std::shared_ptr<Texture3D> texture;
-        const XnbTextureData decoded = DecodeTexture3DXnbData(
+        (void)DecodeTexture3DXnbData(
             input, [&](const XnbTextureData& header) {
-                if (!texture)
-                {
-                    texture = std::make_shared<Texture3D>(
-                        RequireGraphicsDevice(input), static_cast<int32_t>(header.width),
-                        static_cast<int32_t>(header.height), static_cast<int32_t>(header.depth),
-                        header.mipCount > 1, header.surfaceFormat);
-                }
+                texture = std::make_shared<Texture3D>(
+                    RequireGraphicsDevice(input), static_cast<int32_t>(header.width),
+                    static_cast<int32_t>(header.height), static_cast<int32_t>(header.depth),
+                    header.mipCount > 1, header.surfaceFormat);
+            },
+            [&](const XnbTextureData& header, std::uint32_t, std::uint32_t level,
+                const std::vector<std::uint8_t>& bytes) {
+                texture->SetData(static_cast<int32_t>(level), 0, 0,
+                    static_cast<int32_t>(std::max(1u, header.width >> level)),
+                    static_cast<int32_t>(std::max(1u, header.height >> level)), 0,
+                    static_cast<int32_t>(std::max(1u, header.depth >> level)),
+                    bytes.data(), 0, static_cast<int>(bytes.size()));
             });
-        int32_t width = static_cast<int32_t>(decoded.width);
-        int32_t height = static_cast<int32_t>(decoded.height);
-        int32_t depth = static_cast<int32_t>(decoded.depth);
-        const int32_t levelCount = static_cast<int32_t>(decoded.mipCount);
-
-        for (int32_t level = 0; level < levelCount; ++level)
-        {
-            const std::vector<uint8_t>& bytes =
-                decoded.levels[static_cast<std::size_t>(level)];
-            texture->SetData(level, 0, 0, width, height, 0, depth,
-                             bytes.data(), 0, static_cast<int>(bytes.size()));
-
-            // Calculate dimensions of the next mip level, matching FNA exactly.
-            width = std::max(width >> 1, 1);
-            height = std::max(height >> 1, 1);
-            depth = std::max(depth >> 1, 1);
-        }
 
         return texture;
     }

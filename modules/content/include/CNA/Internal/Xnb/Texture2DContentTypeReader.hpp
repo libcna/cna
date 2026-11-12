@@ -46,6 +46,19 @@ namespace CNA::Internal::Xnb
         Microsoft::Xna::Framework::Graphics::GraphicsDevice& device, const XnbTextureData& header);
 
     /**
+     * @brief Submits one validated XNB level, converting DXT only when required by the renderer.
+     * @param texture Constructed destination texture.
+     * @param device The texture's graphics device.
+     * @param header Source texture metadata.
+     * @param level Destination mip index.
+     * @param bytes Source bytes for this mip.
+     */
+    void UploadTexture2DXnbLevel(Microsoft::Xna::Framework::Graphics::Texture2D& texture,
+                                Microsoft::Xna::Framework::Graphics::GraphicsDevice& device,
+                                const XnbTextureData& header, std::uint32_t level,
+                                const std::vector<std::uint8_t>& bytes);
+
+    /**
      * @brief Sets every decoded level of @p texture, constructed for @p decoded.
      *
      * @param texture The texture ConstructTexture2DForXnbData made for @p decoded.

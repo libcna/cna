@@ -11,6 +11,7 @@
 #include <cstring>
 #include <algorithm>
 #include <exception>
+#include <functional>
 #include <limits>
 #include <memory>
 #include <string>
@@ -26,6 +27,7 @@
 #include "System/ArgumentOutOfRangeException.hpp"
 #include "System/IO/EndOfStreamException.hpp"
 #include "System/NotSupportedException.hpp"
+#include "System/ArgumentException.hpp"
 #include "Microsoft/Xna/Framework/Content/ContentManager.hpp"
 #include "Microsoft/Xna/Framework/Content/ContentReader.hpp"
 #include "Microsoft/Xna/Framework/Content/ContentTypeReaderManager.hpp"
@@ -429,7 +431,7 @@ TEST_F(Texture2DContentTypeReaderTest, NormalizedByte2RejectsAFourBytePerTexelLe
         "Microsoft.Xna.Framework.Content.Texture2DReader");
     ASSERT_NE(typeReader, nullptr);
 
-    EXPECT_THROW(typeReader->ReadUntyped(reader, std::any{}), ContentLoadException);
+    EXPECT_THROW(typeReader->ReadUntyped(reader, std::any{}), System::ArgumentException);
 }
 
 TEST_F(Texture2DContentTypeReaderTest, NormalizedByte4PreservesSignedPackedTexels)
@@ -484,7 +486,7 @@ TEST_F(Texture2DContentTypeReaderTest, NormalizedByte4PreservesSignedPackedTexel
 // heap-buffer-overflow under -DCNA_SANITIZE=address,undefined (the pixel-unpack loop indexed into
 // `bytes` using width*height*4, not the byte count actually available).
 
-TEST_F(Texture2DContentTypeReaderTest, ByteCountMismatchedWithWidthHeightThrowsContentLoadException)
+TEST_F(Texture2DContentTypeReaderTest, ByteCountMismatchedWithWidthHeightThrowsArgumentException)
 {
     ContentManager cm;
     cm.setGraphicsDevice(gd);
@@ -506,7 +508,7 @@ TEST_F(Texture2DContentTypeReaderTest, ByteCountMismatchedWithWidthHeightThrowsC
     auto typeReader = ContentTypeReaderManager::CreateReader("Microsoft.Xna.Framework.Content.Texture2DReader");
     ASSERT_NE(typeReader, nullptr);
 
-    EXPECT_THROW(typeReader->ReadUntyped(reader, std::any{}), ContentLoadException);
+    EXPECT_THROW(typeReader->ReadUntyped(reader, std::any{}), System::ArgumentException);
 }
 
 // KI-CONTENT-TEXDIM: Refresh's Texture2DReader.Read reads all four header fields (IL_0000-001e)
@@ -747,13 +749,8 @@ TEST_F(Texture2DContentTypeReaderTest, AnOversizedSpriteFontAtlasIsRefusedAsATex
                  System::NotSupportedException);
 }
 
-// Reproduces the fuzz-discovered "mipLevels=25 against a 15-level maximum"
-// shape -- a declared levelCount exceeding what a real width x height texture can ever have. Before
-// this task's fix, the read loop below would call Texture2D::SetData() for mip levels the actual
-// constructed texture never allocated, the confirmed root cause of the Vulkan/WebGPU crashes.
-// KI-CONTENT-LEVELS: Refresh's Texture2DReader.Read asks for mipmaps when levelCount > 1
-// (IL_0027-002b) and then reads and sets exactly levelCount levels (IL_0035-0064). A count of zero
-// or less creates the texture and reads no level; fewer levels than the full chain set only those.
+// Refresh Texture2DReader.Read asks for mipmaps above one level and then loops over
+// the serialized levels (IL_0027-002b, IL_0035-0064); the count itself is not validated.
 TEST_F(Texture2DContentTypeReaderTest, ALevelCountOfZeroOrLessCreatesTheTextureAndReadsNoLevel)
 {
     for (const int32_t levelCount : {0, -1, std::numeric_limits<int32_t>::min()})
@@ -798,7 +795,7 @@ TEST_F(Texture2DContentTypeReaderTest, APartialMipChainSetsOnlyTheLevelsItHolds)
     EXPECT_EQ(level1, levels[1]);
 }
 
-TEST_F(Texture2DContentTypeReaderTest, MipLevelCountExceedingCeilingThrowsContentLoadException)
+TEST_F(Texture2DContentTypeReaderTest, ExcessDeclaredMipCountStillReadsTheFirstLevelCount)
 {
     ContentManager cm;
     cm.setGraphicsDevice(gd);
@@ -818,7 +815,7 @@ TEST_F(Texture2DContentTypeReaderTest, MipLevelCountExceedingCeilingThrowsConten
     auto typeReader = ContentTypeReaderManager::CreateReader("Microsoft.Xna.Framework.Content.Texture2DReader");
     ASSERT_NE(typeReader, nullptr);
 
-    EXPECT_THROW(typeReader->ReadUntyped(reader, std::any{}), ContentLoadException);
+    EXPECT_THROW(typeReader->ReadUntyped(reader, std::any{}), System::IO::EndOfStreamException);
 }
 
 // Refresh Texture2DReader.Read never loads its existingInstance argument (no ldarg.2): a supplied
@@ -857,5 +854,124 @@ TEST_F(Texture2DContentTypeReaderTest, TheReaderIgnoresAnExistingInstance)
         std::vector<Color> back(fill.size());
         existing.GetData(back.data(), static_cast<int>(back.size()));
         EXPECT_EQ(back, fill) << "the existing texture was written";
+    }
+}
+
+namespace
+{
+    class ObserveLevelStream final : public System::IO::MemoryStream
+    {
+    public:
+        ObserveLevelStream(const std::vector<uint8_t>& bytes, std::function<void()> observe)
+            : MemoryStream(bytes.data(), static_cast<int32_t>(bytes.size())), observe_(std::move(observe)) {}
+
+        SharpRuntime::intcs Read(SharpRuntime::bytecs buffer[], SharpRuntime::intcs offset,
+                                 SharpRuntime::intcs count) override
+        {
+            // Header (16), base-level length (4), and its 16 bytes have been consumed.
+            if (!observed_ && getPositionProperty() == 36)
+            {
+                observed_ = true;
+                observe_();
+            }
+            return MemoryStream::Read(buffer, offset, count);
+        }
+
+    private:
+        std::function<void()> observe_;
+        bool observed_ = false;
+    };
+}
+
+TEST_F(Texture2DContentTypeReaderTest, EarlierLevelsAreUploadedBeforeTheNextReadAndFailureReleasesTheTexture)
+{
+    using namespace CNA::Testing::Renderers;
+    // Reads level 0 back mid-load: Software keeps texels; Headless never returns them (its
+    // texture GetData is a documented constant false).
+    CNA_SKIP_IF_RENDERER_IS_NONE_OF(Software);
+    // Refresh CreateTexture IL_00a3 -> AddTrackedObject IL_00e3 -> FireCreatedEvent
+    // IL_001a-0031 exposes the new resource before Texture2DReader reads its levels.
+    std::weak_ptr<CNA::Internal::Renderers::ITextureRenderer> renderer;
+    int created = 0;
+    int destroyed = 0;
+    bool observed = false;
+    GraphicsDevice device;
+    device.ResourceCreated += [&](System::Object*, const auto& args) {
+        if (auto* texture = dynamic_cast<Texture2D*>(args.getResourceProperty()))
+        {
+            renderer = texture->GetRendererWeak();
+            ++created;
+        }
+    };
+    device.ResourceDestroyed += [&](System::Object*, const auto&) { ++destroyed; };
+
+    System::IO::MemoryStream source;
+    System::IO::BinaryWriter writer(&source, true);
+    writer.Write(static_cast<int32_t>(SurfaceFormat::Color));
+    writer.Write(int32_t{2});
+    writer.Write(int32_t{2});
+    writer.Write(int32_t{2});
+    writer.Write(int32_t{16});
+    for (int i = 0; i < 16; ++i) writer.Write(uint8_t{0x31});
+    writer.Write(int32_t{1}); // valid mip index, invalid byte count
+    writer.Write(uint8_t{0x42});
+    writer.Flush();
+    const auto bytes = source.ToArray();
+    ObserveLevelStream stream(bytes, [&] {
+        observed = true;
+        const auto handle = renderer.lock();
+        ASSERT_NE(handle, nullptr);
+        std::vector<uint8_t> actual(16, 0xCD);
+        ASSERT_TRUE(handle->GetData(0, 0, 0, 2, 2, actual.data(), static_cast<int>(actual.size())));
+        EXPECT_EQ(actual, std::vector<uint8_t>(16, 0x31));
+    });
+    ContentManager manager;
+    manager.setGraphicsDevice(device);
+    ContentReader reader(&manager, &stream, "levels", 5, 'w');
+    auto typeReader = ContentTypeReaderManager::CreateReader("Microsoft.Xna.Framework.Content.Texture2DReader");
+    ASSERT_NE(typeReader, nullptr);
+    EXPECT_THROW((void)typeReader->ReadUntyped(reader, std::any{}), System::ArgumentException);
+    EXPECT_TRUE(observed);
+    EXPECT_EQ(created, 1);
+    EXPECT_EQ(destroyed, 1);
+    EXPECT_TRUE(renderer.expired());
+}
+
+TEST_F(Texture2DContentTypeReaderTest, SpriteFontAtlasReportsTheTextureLevelExceptionUnwrapped)
+{
+    CNA::Internal::Xnb::RegisterAllBuiltInXnbReaders();
+    std::ifstream input("tests/assets/xnb/cna/windows/uncompressed/spritefont_two_glyphs.xnb",
+                        std::ios::binary);
+    std::vector<uint8_t> file((std::istreambuf_iterator<char>(input)), std::istreambuf_iterator<char>());
+    ASSERT_FALSE(file.empty());
+    const std::vector<uint8_t> header{0, 0, 0, 0, 8, 0, 0, 0, 8, 0, 0, 0, 1, 0, 0, 0};
+    const auto at = std::search(file.begin(), file.end(), header.begin(), header.end());
+    ASSERT_NE(at, file.end());
+    ASSERT_GE(std::distance(at, file.end()), 20);
+    // Replace the atlas's first byte count, leaving a complete one-byte payload.
+    for (int i = 0; i < 4; ++i) *(at + 16 + i) = i == 0 ? 1 : 0;
+    class FontLevelManager final : public ContentManager
+    {
+    public:
+        explicit FontLevelManager(const std::vector<uint8_t>& bytes) : bytes_(bytes)
+        {
+            RouteLoadsThroughOpenStreamEXT(true);
+        }
+    protected:
+        std::unique_ptr<System::IO::Stream> OpenStream(const std::string&) override
+        {
+            return std::make_unique<System::IO::MemoryStream>(
+                bytes_.data(), static_cast<int32_t>(bytes_.size()), false);
+        }
+    private:
+        std::vector<uint8_t> bytes_;
+    };
+    FontLevelManager manager(file);
+    manager.setGraphicsDevice(gd);
+    try { (void)manager.Load<Microsoft::Xna::Framework::Graphics::SpriteFont>("font"); FAIL(); }
+    catch (const System::ArgumentException& error)
+    {
+        EXPECT_EQ(error.getMessageProperty(),
+            "The size of the data passed in is too large or too small for this resource.");
     }
 }

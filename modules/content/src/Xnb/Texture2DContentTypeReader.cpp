@@ -5,6 +5,7 @@
 #include <algorithm>
 #include <bit>
 #include <cstdint>
+#include <limits>
 
 #include "CNA/Internal/Graphics/DxtUtil.hpp"
 #include "CNA/Internal/Renderers/Common/IGraphicsRenderer.hpp"
@@ -79,32 +80,79 @@ namespace CNA::Internal::Xnb
         }
     }
 
+    void UploadTexture2DXnbLevel(Texture2D& texture, GraphicsDevice& device,
+                                 const XnbTextureData& header, const std::uint32_t mip,
+                                 const std::vector<std::uint8_t>& sourceBytes)
+    {
+        const int32_t width = static_cast<int32_t>(header.width);
+        const int32_t height = static_cast<int32_t>(header.height);
+        const int32_t level = static_cast<int32_t>(mip);
+        const SurfaceFormat surfaceFormat = header.surfaceFormat;
+        const bool keepCompressed = PlanTexture2DUpload(device, header).keepCompressed;
+        std::vector<std::uint8_t> converted;
+        if (IsCompressed(surfaceFormat) && !keepCompressed)
+        {
+            XnbTextureData oneLevel;
+            oneLevel.surfaceFormat = surfaceFormat;
+            oneLevel.platform = header.platform;
+            oneLevel.width = std::max(1u, header.width >> mip);
+            oneLevel.height = std::max(1u, header.height >> mip);
+            oneLevel.depth = 1;
+            oneLevel.faceCount = 1;
+            oneLevel.mipCount = 1;
+            oneLevel.levels = {sourceBytes};
+            converted = ConvertXnbTextureToCnbRgba8(oneLevel, true)
+                .representations.front().levels.front();
+        }
+        const auto& bytes = IsCompressed(surfaceFormat) && !keepCompressed
+            ? converted : sourceBytes;
+        const int32_t levelWidth = std::max(1, width >> level);
+        const int32_t levelHeight = std::max(1, height >> level);
+
+        if (IsCompressed(surfaceFormat) && keepCompressed)
+        {
+            // WEBGPU-144 Phase 2: upload the validated raw blocks through the compressed
+            // SetData path (no CPU decode); the RGBA-pixel validation below does not apply.
+            texture.SetData(level, nullptr, bytes.data(), 0, static_cast<int>(bytes.size()));
+            return;
+        }
+
+        if (IsCompressed(surfaceFormat))
+        {
+            const int32_t pixelCount = levelWidth * levelHeight;
+            // Color is not a raw 4-byte POD -- it derives from IPackedVectorT, which has
+            // virtual methods, so construct real values instead of reinterpreting the bytes.
+            std::vector<Color> colors;
+            colors.reserve(static_cast<std::size_t>(pixelCount));
+            for (int32_t i = 0; i < pixelCount; ++i)
+            {
+                const std::size_t o = static_cast<std::size_t>(i) * 4;
+                colors.emplace_back(bytes[o], bytes[o + 1], bytes[o + 2], bytes[o + 3]);
+            }
+            texture.SetData(level, nullptr, colors.data(), 0, pixelCount);
+            return;
+        }
+
+        texture.SetData(level, nullptr, bytes.data(), 0, static_cast<int>(bytes.size()));
+    }
+
     Texture2D Texture2DReader::Read(ContentReader& input, std::optional<Texture2D> /*existingInstance*/)
     {
-        GraphicsDevice* device = input.getContentManagerProperty()
-            ? &CNA::Internal::ContentManagerAccess::GraphicsDeviceFromContentReader(input)
-            : nullptr;
-        if (!device)
-        {
-            throw ContentLoadException(
-                "Texture2DReader: no GraphicsDevice available (ContentManager was not set on "
-                "this ContentReader).");
-        }
-        // Refresh Texture2DReader.Read constructs the texture once the header is read
-        // (IL_001f-002f) -- the constructor's refusals, the profile's size limit among them, come
-        // before any level is read -- and then reads and sets the levels (IL_0035-0064). It never
-        // loads its existingInstance argument: a supplied texture is neither checked nor written.
+        GraphicsDevice* device = nullptr;
         std::optional<Texture2D> constructed;
-        const XnbTextureData decoded = DecodeTexture2DXnbData(
-            input, static_cast<std::uint32_t>(device->GetMaxTextureDimension()),
+        // Refresh Texture2DReader.Read IL_0000-002f reads the header before device lookup
+        // and construction. The new texture is owned here if any level subsequently fails.
+        (void)DecodeTexture2DXnbData(
+            input, std::numeric_limits<std::uint32_t>::max(),
             [&](const XnbTextureData& header) {
+                device = &CNA::Internal::ContentManagerAccess::GraphicsDeviceFromContentReader(input);
+                RequireXnbTextureFormatBeforeConstruction(input, header);
                 constructed.emplace(ConstructTexture2DForXnbData(*device, header));
+            },
+            [&](const XnbTextureData& header, std::uint32_t, std::uint32_t level,
+                const std::vector<std::uint8_t>& bytes) {
+                UploadTexture2DXnbLevel(*constructed, *device, header, level, bytes);
             });
-        if (!constructed)
-        {
-            return CreateTexture2DFromXnbData(input, *device, decoded, std::nullopt);
-        }
-        UploadTexture2DXnbData(*constructed, *device, decoded);
         return std::move(*constructed);
     }
 
@@ -159,55 +207,9 @@ namespace CNA::Internal::Xnb
     void UploadTexture2DXnbData(Texture2D& texture, GraphicsDevice& device,
                                 const XnbTextureData& decoded)
     {
-        const int32_t width = static_cast<int32_t>(decoded.width);
-        const int32_t height = static_cast<int32_t>(decoded.height);
-        const int32_t levelCount = static_cast<int32_t>(decoded.mipCount);
-        const SurfaceFormat surfaceFormat = decoded.surfaceFormat;
-        const bool keepCompressed = PlanTexture2DUpload(device, decoded).keepCompressed;
-
-        std::vector<std::vector<uint8_t>> uploadLevels;
-        if (IsCompressed(surfaceFormat) && !keepCompressed)
+        for (std::uint32_t level = 0; level < decoded.mipCount; ++level)
         {
-            uploadLevels = ConvertXnbTextureToCnbRgba8(decoded, true)
-                .representations.front().levels;
-        }
-        else
-        {
-            uploadLevels = decoded.levels;
-        }
-
-        for (int32_t level = 0; level < levelCount; ++level)
-        {
-            std::vector<uint8_t>& bytes = uploadLevels[static_cast<std::size_t>(level)];
-
-            const int32_t levelWidth = std::max(1, width >> level);
-            const int32_t levelHeight = std::max(1, height >> level);
-
-            if (IsCompressed(surfaceFormat) && keepCompressed)
-            {
-                // WEBGPU-144 Phase 2: upload the validated raw blocks through the compressed
-                // SetData path (no CPU decode); the RGBA-pixel validation below does not apply.
-                texture.SetData(level, nullptr, bytes.data(), 0, static_cast<int>(bytes.size()));
-                continue;
-            }
-
-            if (IsCompressed(surfaceFormat))
-            {
-                const int32_t pixelCount = levelWidth * levelHeight;
-                // Color is not a raw 4-byte POD -- it derives from IPackedVectorT, which has
-                // virtual methods, so construct real values instead of reinterpreting the bytes.
-                std::vector<Color> colors;
-                colors.reserve(static_cast<std::size_t>(pixelCount));
-                for (int32_t i = 0; i < pixelCount; ++i)
-                {
-                    const std::size_t o = static_cast<std::size_t>(i) * 4;
-                    colors.emplace_back(bytes[o], bytes[o + 1], bytes[o + 2], bytes[o + 3]);
-                }
-                texture.SetData(level, nullptr, colors.data(), 0, pixelCount);
-                continue;
-            }
-
-            texture.SetData(level, nullptr, bytes.data(), 0, static_cast<int>(bytes.size()));
+            UploadTexture2DXnbLevel(texture, device, decoded, level, decoded.levels.at(level));
         }
     }
 

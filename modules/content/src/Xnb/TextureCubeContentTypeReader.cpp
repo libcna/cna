@@ -45,55 +45,55 @@ namespace CNA::Internal::Xnb
 
     TextureCube TextureCubeReader::Read(ContentReader& input, std::optional<TextureCube> /*existingInstance*/)
     {
-        const XnbTextureData decoded = DecodeTextureCubeXnbData(input);
-        const int32_t size = static_cast<int32_t>(decoded.width);
-        const int32_t levels = static_cast<int32_t>(decoded.mipCount);
-        GraphicsDevice& device = RequireGraphicsDevice(input);
-        const bool keepCompressed = IsCompressed(decoded.surfaceFormat)
-            && device.GetRenderer().LoadsCompressedContentNativelyEXT()
-            && device.GetRenderer().IsCompressedCubeTransferFormatEXT(
-                static_cast<int>(decoded.surfaceFormat));
-        const SurfaceFormat uploadFormat = keepCompressed
-            ? decoded.surfaceFormat
-            : (IsCompressed(decoded.surfaceFormat) ? SurfaceFormat::Color : decoded.surfaceFormat);
-        std::vector<std::vector<uint8_t>> uploadLevels =
-            IsCompressed(decoded.surfaceFormat) && !keepCompressed
-                ? ConvertXnbTextureToCnbRgba8(decoded, true).representations.front().levels
-                : decoded.levels;
-
-        // Refresh TextureCubeReader.Read never loads existingInstance: it constructs a new cube.
-        TextureCube textureCube(device, size, levels > 1, uploadFormat);
-
-        for (int32_t face = 0; face < 6; ++face)
-        {
-            int32_t faceSize = size;
-            for (int32_t level = 0; level < levels; ++level)
-            {
-                const std::vector<uint8_t>& bytes = uploadLevels[
-                    static_cast<std::size_t>(face) * decoded.mipCount +
-                    static_cast<std::size_t>(level)];
-                if (!IsCompressed(decoded.surfaceFormat) || keepCompressed)
+        GraphicsDevice* device = nullptr;
+        bool keepCompressed = false;
+        std::optional<TextureCube> constructed;
+        // Refresh TextureCubeReader.Read IL_0018-0027: device lookup and constructor
+        // refusals precede every level. RAII releases this new cube if decoding fails.
+        (void)DecodeTextureCubeXnbData(
+            input, [&](const XnbTextureData& header) {
+                device = &RequireGraphicsDevice(input);
+                RequireXnbTextureFormatBeforeConstruction(input, header);
+                keepCompressed = IsCompressed(header.surfaceFormat)
+                    && device->GetRenderer().LoadsCompressedContentNativelyEXT()
+                    && device->GetRenderer().IsCompressedCubeTransferFormatEXT(
+                        static_cast<int>(header.surfaceFormat));
+                const SurfaceFormat uploadFormat = IsCompressed(header.surfaceFormat) && !keepCompressed
+                    ? SurfaceFormat::Color : header.surfaceFormat;
+                constructed.emplace(*device, static_cast<int32_t>(header.width),
+                                    header.mipCount > 1, uploadFormat);
+            },
+            [&](const XnbTextureData& header, std::uint32_t face, std::uint32_t level,
+                const std::vector<std::uint8_t>& bytes) {
+                if (!IsCompressed(header.surfaceFormat) || keepCompressed)
                 {
-                    textureCube.SetData(static_cast<CubeMapFace>(face), level, nullptr,
-                                        bytes.data(), 0, static_cast<int>(bytes.size()));
-                    faceSize = std::max(faceSize >> 1, 1);
-                    continue;
+                    constructed->SetData(static_cast<CubeMapFace>(face), static_cast<int>(level),
+                                         nullptr, bytes.data(), 0, static_cast<int>(bytes.size()));
+                    return;
                 }
-                const int32_t pixelCount = faceSize * faceSize;
+                XnbTextureData oneLevel;
+                oneLevel.surfaceFormat = header.surfaceFormat;
+                oneLevel.platform = header.platform;
+                oneLevel.width = std::max(1u, header.width >> level);
+                oneLevel.height = oneLevel.width;
+                oneLevel.depth = 1;
+                oneLevel.faceCount = 1;
+                oneLevel.mipCount = 1;
+                oneLevel.levels = {bytes};
+                const auto rgba = ConvertXnbTextureToCnbRgba8(oneLevel, true)
+                    .representations.front().levels.front();
+                const auto pixelCount = static_cast<int32_t>(oneLevel.width * oneLevel.height);
                 std::vector<Color> colors;
                 colors.reserve(static_cast<std::size_t>(pixelCount));
                 for (int32_t i = 0; i < pixelCount; ++i)
                 {
                     const std::size_t o = static_cast<std::size_t>(i) * 4;
-                    colors.emplace_back(bytes[o], bytes[o + 1], bytes[o + 2], bytes[o + 3]);
+                    colors.emplace_back(rgba[o], rgba[o + 1], rgba[o + 2], rgba[o + 3]);
                 }
-                textureCube.SetData(static_cast<CubeMapFace>(face), level, nullptr, colors.data(), 0, pixelCount);
-
-                faceSize = std::max(faceSize >> 1, 1);
-            }
-        }
-
-        return textureCube;
+                constructed->SetData(static_cast<CubeMapFace>(face), static_cast<int>(level),
+                                     nullptr, colors.data(), 0, pixelCount);
+            });
+        return std::move(*constructed);
     }
 
     void RegisterTextureCubeXnbReader()

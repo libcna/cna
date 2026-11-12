@@ -31,6 +31,8 @@
 #include "System/IO/MemoryStream.hpp"
 #include "System/ArgumentOutOfRangeException.hpp"
 #include "System/NotSupportedException.hpp"
+#include "System/ArgumentException.hpp"
+#include "System/InvalidOperationException.hpp"
 
 namespace CNA::Internal::Xnb
 {
@@ -159,9 +161,12 @@ namespace CNA::Internal::Xnb
         }
 
         void ReadTextureLevels(ContentReader& input, XnbTextureData& data,
-                               const char* readerName)
+                               const char* readerName, const bool runtimeTexture,
+                               const XnbTextureLevelRead& atLevel)
         {
-            data.levels.reserve(static_cast<std::size_t>(data.faceCount) * data.mipCount);
+            const auto maximum = MaxMipCount(data.width, data.height, data.depth);
+            data.levels.reserve(static_cast<std::size_t>(data.faceCount) *
+                                std::min(data.mipCount, maximum));
             std::int64_t cumulativeDecodedBytes = 0;
             for (std::uint32_t face = 0u; face < data.faceCount; ++face)
             {
@@ -173,10 +178,34 @@ namespace CNA::Internal::Xnb
                     const std::int32_t byteCount = input.ReadInt32();
                     std::vector<std::uint8_t> bytes =
                         input.ReadBytesExactOrThrow(byteCount, readerName);
+                    // Refresh reads the entire buffer before SetData (2DReader IL_0042-0059,
+                    // 3DReader IL_004b-0060, CubeReader IL_003e-0056). GetLevelDesc fails before
+                    // size validation (2D.CopyData IL_00f8-010b, 3D IL_00e1-00f1, cube
+                    // IL_00fb-010e); D3DERR_INVALIDCALL maps through Helpers.GetExceptionFromResult
+                    // (Framework IL_0252-025c) to InvalidOperationException(UnexpectedError).
+                    // Do not read the next level.
+                    if (runtimeTexture && mip >= maximum)
+                    {
+                        throw System::InvalidOperationException("An unexpected error has occurred.");
+                    }
+                    // Refresh Helpers.ValidateCopyParameters IL_002e-0041 refuses zero
+                    // elements before ValidateTotalSize (the level lookup above still wins).
+                    if (runtimeTexture && byteCount == 0)
+                    {
+                        throw System::ArgumentOutOfRangeException(
+                            "elementCount", "This parameter must be a valid index within the array.");
+                    }
                     const std::size_t expected =
                         RawLevelBytes(data.surfaceFormat, width, height, depth);
                     if (bytes.size() != expected)
                     {
+                        if (runtimeTexture)
+                        {
+                            // Refresh Texture.ValidateTotalSize IL_006c-0076 and
+                            // Texture3D.CopyData IL_0157-0161: ArgumentException(InvalidTotalSize).
+                            throw System::ArgumentException(
+                                "The size of the data passed in is too large or too small for this resource.");
+                        }
                         throw ContentLoadException(
                             std::string(readerName) + ": face " + std::to_string(face) +
                             " level " + std::to_string(mip) + " byte count (" +
@@ -195,6 +224,9 @@ namespace CNA::Internal::Xnb
                     }
                     cumulativeDecodedBytes += decodedLevelBytes;
                     input.CheckDecodedByteSize(cumulativeDecodedBytes, readerName);
+                    // AddTrackedObject IL_00e3 -> FireCreatedEvent IL_001a-0031 exposes the
+                    // texture before these reads, so earlier uploads can be observed.
+                    if (atLevel) { atLevel(data, face, mip, bytes); }
                     data.levels.push_back(std::move(bytes));
                     width = std::max(1u, width / 2u);
                     height = std::max(1u, height / 2u);
@@ -238,9 +270,36 @@ namespace CNA::Internal::Xnb
         }
     }
 
+    void RequireXnbTextureFormatBeforeConstruction(ContentReader& input, const XnbTextureData& header)
+    {
+        if (static_cast<std::int32_t>(header.width) <= 0 || static_cast<std::int32_t>(header.height) <= 0)
+        {
+            return;
+        }
+        // An XNA ordinal meets the constructor's own profile refusal, with XNA's message. Only an
+        // ordinal no XNA SurfaceFormat has -- which CNA's constructors would admit as an extension
+        // -- is refused here, as the decoder refuses it after construction (TQ-018, HND-TQ-16).
+        const int ordinal = static_cast<int>(header.surfaceFormat);
+        if (ordinal >= static_cast<int>(SurfaceFormat::Color) &&
+            ordinal <= static_cast<int>(SurfaceFormat::HdrBlendable))
+        {
+            return;
+        }
+        const bool cube = header.kind == XnbTextureKind::TextureCube;
+        // A version-4 container's legacy format 1 is read as ColorBgraEXT (Texture2DFormat).
+        if (!cube && input.getVersionProperty() < 5 && header.surfaceFormat == SurfaceFormat::ColorBgraEXT)
+        {
+            return;
+        }
+        throw System::NotSupportedException(
+            std::string(cube ? "TextureCubeReader" : "Texture2DReader") + ": SurfaceFormat " +
+            std::to_string(ordinal) + " is not supported.");
+    }
+
     XnbTextureData DecodeTexture2DXnbData(
         ContentReader& input, const std::uint32_t maximumDimension,
-        const XnbTextureConstruction& atConstruction)
+        const XnbTextureConstruction& atConstruction,
+        const XnbTextureLevelRead& atLevel)
     {
         XnbTextureData data;
         data.kind = XnbTextureKind::Texture2D;
@@ -248,9 +307,20 @@ namespace CNA::Internal::Xnb
         const std::int32_t width = input.ReadInt32();
         const std::int32_t height = input.ReadInt32();
         const std::int32_t mipCount = input.ReadInt32();
+        data.width = atConstruction ? static_cast<std::uint32_t>(width)
+                                    : PositiveDimension(width, "width");
+        data.height = atConstruction ? static_cast<std::uint32_t>(height)
+                                     : PositiveDimension(height, "height");
+        data.surfaceFormat = Texture2DFormat(input, format);
+        data.depth = 1u;
+        data.faceCount = 1u;
+        data.mipCount = mipCount > 0 ? static_cast<std::uint32_t>(mipCount) : 0u;
+        data.platform = input.getPlatformProperty();
+        // Refresh Texture2DReader.Read IL_001f-002f: device lookup and construction after
+        // all four header reads, before constructor validation or any level payload.
+        if (atConstruction) { atConstruction(data); }
         data.width = PositiveDimension(width, "width");
         data.height = PositiveDimension(height, "height");
-        data.surfaceFormat = Texture2DFormat(input, format);
         // ColorBgraEXT is how a version-4 container's legacy format 1 is read, not an XNA 4.0
         // SurfaceFormat: a version-5 container names XNA ordinals only (the writer refuses to put a
         // CNA extension format there, IsXnbWritableSurfaceFormat), and XNA's
@@ -264,20 +334,6 @@ namespace CNA::Internal::Xnb
                 " is not supported.");
         }
         RequireTextureFormat("Texture2DReader", data.surfaceFormat, XnbTextureKind::Texture2D);
-        data.depth = 1u;
-        data.faceCount = 1u;
-        // Refresh Texture2DReader.Read uses the level count only to ask for mipmaps
-        // (levelCount > 1, IL_0027-002b) and to bound the loop that reads and sets each level
-        // (IL_0035-0064): zero or less reads no level, and fewer than the texture's full chain
-        // leaves the remaining levels unset. A count past the chain stays CNA's own refusal.
-        data.mipCount = mipCount > 0 ? static_cast<std::uint32_t>(mipCount) : 0u;
-        data.platform = input.getPlatformProperty();
-        // Refresh Texture2DReader.Read IL_001f-002f constructs the texture here, before any level
-        // is read; CNA's own bounds below come after it.
-        if (atConstruction)
-        {
-            atConstruction(data);
-        }
         if (data.width > maximumDimension || data.height > maximumDimension)
         {
             throw ContentLoadException(
@@ -292,13 +348,14 @@ namespace CNA::Internal::Xnb
                  data.surfaceFormat == SurfaceFormat::NormalizedByte2 ? 2u : 4u},
                 "Texture2DReader"),
             "Texture2DReader");
-        ValidateMipCount("Texture2DReader", data, 0u);
-        ReadTextureLevels(input, data, "Texture2DReader");
+        if (!atConstruction) { ValidateMipCount("Texture2DReader", data, 0u); }
+        ReadTextureLevels(input, data, "Texture2DReader", static_cast<bool>(atConstruction), atLevel);
         return data;
     }
 
-    XnbTextureData DecodeTexture3DXnbData(ContentReader& input,
-                                          const XnbTextureConstruction& atConstruction)
+    XnbTextureData DecodeTexture3DXnbData(
+        ContentReader& input, const XnbTextureConstruction& atConstruction,
+        const XnbTextureLevelRead& atLevel)
     {
         XnbTextureData data;
         data.kind = XnbTextureKind::Texture3D;
@@ -307,9 +364,9 @@ namespace CNA::Internal::Xnb
         const std::int32_t height = input.ReadInt32();
         const std::int32_t depth = input.ReadInt32();
         const std::int32_t mipCount = input.ReadInt32();
-        data.width = PositiveDimension(width, "width");
-        data.height = PositiveDimension(height, "height");
-        data.depth = PositiveDimension(depth, "depth");
+        data.width = static_cast<std::uint32_t>(width);
+        data.height = static_cast<std::uint32_t>(height);
+        data.depth = static_cast<std::uint32_t>(depth);
         data.faceCount = 1u;
         data.mipCount = mipCount > 0 ? static_cast<std::uint32_t>(mipCount) : 0u;
         data.platform = input.getPlatformProperty();
@@ -320,6 +377,9 @@ namespace CNA::Internal::Xnb
         {
             atConstruction(data);
         }
+        data.width = PositiveDimension(width, "width");
+        data.height = PositiveDimension(height, "height");
+        data.depth = PositiveDimension(depth, "depth");
         RequireTextureFormat("Texture3DReader", data.surfaceFormat, XnbTextureKind::Texture3D);
         input.CheckDecodedByteSize(
             CheckedMultiplyOrThrow(
@@ -331,20 +391,21 @@ namespace CNA::Internal::Xnb
         // Like Texture2DReader, Refresh Texture3DReader.Read asks for mipmaps only when the count
         // is above one (IL_002b-0035) and loops `level < count` (IL_0087-008a): zero or less
         // creates a one-level texture and reads no level.
-        ValidateMipCount("Texture3DReader", data, 0u);
-        ReadTextureLevels(input, data, "Texture3DReader");
+        if (!atConstruction) { ValidateMipCount("Texture3DReader", data, 0u); }
+        ReadTextureLevels(input, data, "Texture3DReader", static_cast<bool>(atConstruction), atLevel);
         return data;
     }
 
-    XnbTextureData DecodeTextureCubeXnbData(ContentReader& input)
+    XnbTextureData DecodeTextureCubeXnbData(
+        ContentReader& input, const XnbTextureConstruction& atConstruction,
+        const XnbTextureLevelRead& atLevel)
     {
         XnbTextureData data;
         data.kind = XnbTextureKind::TextureCube;
         data.surfaceFormat = static_cast<SurfaceFormat>(input.ReadInt32());
         const std::int32_t size = input.ReadInt32();
         const std::int32_t mipCount = input.ReadInt32();
-        data.width = PositiveDimension(size, "size");
-        RequireTextureFormat("TextureCubeReader", data.surfaceFormat, XnbTextureKind::TextureCube);
+        data.width = static_cast<std::uint32_t>(size);
         data.height = data.width;
         data.depth = 1u;
         data.faceCount = 6u;
@@ -352,11 +413,15 @@ namespace CNA::Internal::Xnb
         // per-face loop `level < count` (IL_005f-0062) reads no level for zero or less.
         data.mipCount = mipCount > 0 ? static_cast<std::uint32_t>(mipCount) : 0u;
         data.platform = input.getPlatformProperty();
+        // Refresh TextureCubeReader.Read IL_0018-0027 constructs before any face/level.
+        if (atConstruction) { atConstruction(data); }
+        data.width = PositiveDimension(size, "size");
+        RequireTextureFormat("TextureCubeReader", data.surfaceFormat, XnbTextureKind::TextureCube);
         input.CheckDecodedByteSize(
             CheckedMultiplyOrThrow({data.width, data.height, 4u}, "TextureCubeReader"),
             "TextureCubeReader");
-        ValidateMipCount("TextureCubeReader", data, 0u);
-        ReadTextureLevels(input, data, "TextureCubeReader");
+        if (!atConstruction) { ValidateMipCount("TextureCubeReader", data, 0u); }
+        ReadTextureLevels(input, data, "TextureCubeReader", static_cast<bool>(atConstruction), atLevel);
         return data;
     }
 

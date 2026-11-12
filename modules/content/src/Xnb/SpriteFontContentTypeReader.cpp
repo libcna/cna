@@ -1,5 +1,7 @@
 // SPDX-License-Identifier: MS-PL
 #include "CNA/Internal/Xnb/SpriteFontContentTypeReader.hpp"
+
+#include <limits>
 #include "CNA/Internal/ContentManagerAccess.hpp"
 
 #include "CNA/Internal/Xnb/CollectionContentTypeReaders.hpp"
@@ -37,22 +39,22 @@ namespace CNA::Internal::Xnb
                 "supported (CanDeserializeIntoExistingObject is false, matching FNA).");
         }
 
-        if (!input.getContentManagerProperty())
-        {
-            throw Microsoft::Xna::Framework::Content::ContentLoadException(
-                "SpriteFontReader: no GraphicsDevice available (ContentManager was not set on "
-                "this ContentReader).");
-        }
-        auto& device = CNA::Internal::ContentManagerAccess::GraphicsDeviceFromContentReader(input);
-        const auto maximumDimension = static_cast<std::uint32_t>(device.GetMaxTextureDimension());
-        // The atlas is read by Refresh's Texture2DReader, which constructs it once its header is
-        // read (IL_001f-002f) and before its levels.
+        Microsoft::Xna::Framework::Graphics::GraphicsDevice* device = nullptr;
+        // Refresh SpriteFontReader delegates its atlas to Texture2DReader: lookup/construction
+        // follows the atlas header (Texture2DReader.Read IL_001f-002f), then each read is
+        // followed by SetData before the next level (IL_0039-0064).
         std::optional<Texture2D> atlas;
         XnbSpriteFontData decoded = DecodeSpriteFontXnbData(
-            input, maximumDimension, [&](const XnbTextureData& header) {
-                atlas.emplace(ConstructTexture2DForXnbData(device, header));
+            input, std::numeric_limits<std::uint32_t>::max(),
+            [&](const XnbTextureData& header) {
+                device = &CNA::Internal::ContentManagerAccess::GraphicsDeviceFromContentReader(input);
+                RequireXnbTextureFormatBeforeConstruction(input, header);
+                atlas.emplace(ConstructTexture2DForXnbData(*device, header));
+            },
+            [&](const XnbTextureData& header, std::uint32_t, std::uint32_t level,
+                const std::vector<std::uint8_t>& bytes) {
+                UploadTexture2DXnbLevel(*atlas, *device, header, level, bytes);
             });
-        UploadTexture2DXnbData(*atlas, device, decoded.atlas);
         Texture2D texture = std::move(*atlas);
         // Canonical decoding bypasses ReadObject<Texture2D>, but the atlas is
         // still a newly materialized disposable belonging to this read.

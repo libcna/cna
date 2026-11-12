@@ -478,7 +478,12 @@ namespace CNA::Internal::Xnb
 
     /**
      * @brief Called with a texture's header -- format, size and level count, no level bytes --
-     *        once the decoder has read and checked it and before it reads any level.
+     *        once the decoder has read it and before validation or any level reads.
+     *
+     * Dimensions retain the serialized signed bits; the callback must construct/validate before
+     * using them as sizes. Supplying this callback selects runtime SetData refusal semantics:
+     * each level is read before its level index and exact byte count are validated. Without it,
+     * the standalone canonical decoder retains its ContentLoadException validation.
      *
      * That is where Refresh's texture readers construct the texture (Texture2DReader.Read
      * IL_001f-002f), so a reader that builds the runtime texture there meets the constructor's
@@ -487,53 +492,91 @@ namespace CNA::Internal::Xnb
     using XnbTextureConstruction = std::function<void(const XnbTextureData& header)>;
 
     /**
+     * @brief Submits one validated runtime level before reading the next level's byte count.
+     * @param header Texture metadata (the levels vector is incomplete).
+     * @param face Face index, zero for non-cube textures.
+     * @param level Mip index.
+     * @param bytes Serialized bytes for this level.
+     */
+    using XnbTextureLevelRead = std::function<void(
+        const XnbTextureData& header, std::uint32_t face, std::uint32_t level,
+        const std::vector<std::uint8_t>& bytes)>;
+
+    /**
+     * @brief Refuses a format an .xnb Texture2D or TextureCube cannot name, before construction.
+     *
+     * A runtime reader calls this after its device lookup and before it constructs the texture.
+     * CNA's constructors admit CNA extension formats (ColorBgraEXT, ColorSrgbEXT) that no XNA
+     * SurfaceFormat ordinal names, so they cannot stand in for the .xnb format whitelist: XNA's
+     * ValidateCreationParameters refuses those ordinals (Texture2D IL_0034-005d, TextureCube
+     * IL_0020-0049) with NotSupportedException. Dimensions come first in XNA (Texture2D
+     * IL_0000-0027, TextureCube IL_0000-0013), so a non-positive dimension is left to the
+     * constructor's own refusal.
+     *
+     * @param input Content reader of the asset (its container version selects the format rules).
+     * @param header Decoded header of a Texture2D (or SpriteFont atlas) or TextureCube.
+     */
+    void RequireXnbTextureFormatBeforeConstruction(
+        Microsoft::Xna::Framework::Content::ContentReader& input, const XnbTextureData& header);
+
+    /**
      * @brief Reads and validates one Texture2D payload without constructing a GraphicsDevice object.
      *
      * @param input Content reader positioned at the first Texture2D field.
      * @param maximumDimension Optional caller-owned target limit checked before level bytes.
      * @param atConstruction Optional call made with the header before any level is read.
+     * @param atLevel Optional submission after each level passes runtime validation.
      * @return Canonical source format, dimensions, mip count, and raw level bytes.
      */
     [[nodiscard]] XnbTextureData DecodeTexture2DXnbData(
         Microsoft::Xna::Framework::Content::ContentReader& input,
         std::uint32_t maximumDimension = std::numeric_limits<std::uint32_t>::max(),
-        const XnbTextureConstruction& atConstruction = {});
+        const XnbTextureConstruction& atConstruction = {},
+        const XnbTextureLevelRead& atLevel = {});
 
     /**
      * @brief Reads and validates one Texture3D payload without constructing a GPU resource.
      *
      * @param input Content reader positioned at the first Texture3D field.
-     * @param atConstruction Optional call made with the header -- once its size is checked and
-     *        before its format is, as Refresh's Texture3D.CreateTexture checks the profile's volume
-     *        support first -- and before any level is read.
+     * @param atConstruction Optional constructor call with the raw header before validation
+     *        or level reads; selects runtime SetData refusal semantics.
+     * @param atLevel Optional submission after each level passes runtime validation.
      * @return Canonical volume dimensions, mip count, and raw level bytes.
      */
     [[nodiscard]] XnbTextureData DecodeTexture3DXnbData(
         Microsoft::Xna::Framework::Content::ContentReader& input,
-        const XnbTextureConstruction& atConstruction = {});
+        const XnbTextureConstruction& atConstruction = {},
+        const XnbTextureLevelRead& atLevel = {});
 
     /**
      * @brief Reads and validates one TextureCube payload without constructing a GPU resource.
      *
      * @param input Content reader positioned at the first TextureCube field.
+     * @param atConstruction Optional constructor call with the raw header before validation
+     *        or level reads; selects runtime SetData refusal semantics.
+     * @param atLevel Optional submission after each level passes runtime validation.
      * @return Canonical cube dimensions and face-major raw level bytes.
      */
     [[nodiscard]] XnbTextureData DecodeTextureCubeXnbData(
-        Microsoft::Xna::Framework::Content::ContentReader& input);
+        Microsoft::Xna::Framework::Content::ContentReader& input,
+        const XnbTextureConstruction& atConstruction = {},
+        const XnbTextureLevelRead& atLevel = {});
 
     /**
      * @brief Reads a SpriteFont payload, including its nested built-in Texture2D and list readers.
      *
      * @param input Initialized content reader positioned at the first SpriteFont field.
      * @param maximumTextureDimension Optional target limit for the nested atlas.
-     * @param atlasConstruction Optional call made with the atlas header before its levels are read.
+     * @param atlasConstruction Optional call made with the raw atlas header before validation.
+     * @param atlasLevel Optional submission after each atlas level passes runtime validation.
      * @return Canonical font and atlas CPU data.
      */
     [[nodiscard]] XnbSpriteFontData DecodeSpriteFontXnbData(
         Microsoft::Xna::Framework::Content::ContentReader& input,
         std::uint32_t maximumTextureDimension =
             std::numeric_limits<std::uint32_t>::max(),
-        const XnbTextureConstruction& atlasConstruction = {});
+        const XnbTextureConstruction& atlasConstruction = {},
+        const XnbTextureLevelRead& atlasLevel = {});
 
     /**
      * @brief Reads a SoundEffect payload into neutral WAVEFORMATEX and sample data.

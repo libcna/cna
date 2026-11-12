@@ -18,6 +18,8 @@
 #include <exception>
 #include <gtest/gtest.h>
 #include <stdexcept>
+#include <functional>
+#include <typeinfo>
 
 #include "CNA/RendererTestGate.hpp"
 
@@ -27,6 +29,7 @@ using namespace CNA::Testing::Renderers;
 
 #include "CNA/Internal/Renderers/Common/IGraphicsRenderer.hpp"
 #include "CNA/Internal/Xnb/Texture3DContentTypeReader.hpp"
+#include "CNA/Internal/Xnb/Texture2DContentTypeReader.hpp"
 #include "CNA/Internal/Xnb/TextureCubeContentTypeReader.hpp"
 #include "Microsoft/Xna/Framework/Content/ContentLoadException.hpp"
 #include "Microsoft/Xna/Framework/Content/ContentManager.hpp"
@@ -44,6 +47,8 @@ using namespace CNA::Testing::Renderers;
 #include "System/IO/MemoryStream.hpp"
 #include "System/ArgumentOutOfRangeException.hpp"
 #include "System/NotSupportedException.hpp"
+#include "System/ArgumentException.hpp"
+#include "System/InvalidOperationException.hpp"
 
 using Microsoft::Xna::Framework::Color;
 using Microsoft::Xna::Framework::Content::ContentLoadException;
@@ -161,6 +166,7 @@ namespace
         void SetUp() override
         {
             ContentTypeReaderManager::ClearTypeCreators();
+            CNA::Internal::Xnb::RegisterTexture2DXnbReader();
             CNA::Internal::Xnb::RegisterTexture3DXnbReader();
             CNA::Internal::Xnb::RegisterTextureCubeXnbReader();
         }
@@ -628,7 +634,7 @@ TEST_F(Texture3DTextureCubeContentTypeReaderTest, TextureCubeReaderRejectsByteCo
 
     auto typeReader = ContentTypeReaderManager::CreateReader("Microsoft.Xna.Framework.Content.TextureCubeReader");
     ASSERT_NE(typeReader, nullptr);
-    EXPECT_THROW(typeReader->ReadUntyped(reader, std::any{}), ContentLoadException);
+    EXPECT_THROW(typeReader->ReadUntyped(reader, std::any{}), System::ArgumentException);
 }
 
 // Texture3DReader's own decoded-byte-size check has one more factor than
@@ -751,7 +757,7 @@ TEST_F(Texture3DTextureCubeContentTypeReaderTest, Texture3DReaderRefusesTheSizeB
 // TextureCubeReader's own decoded-byte-size check (size*size*4) shares the
 // identical signed-int64-overflow UB shape as Texture2DReader's -- confirmed during that task's
 // root-cause sweep.
-TEST_F(Texture3DTextureCubeContentTypeReaderTest, TextureCubeReaderAbsurdlyLargeSizeThrowsContentLoadExceptionNotBadAlloc)
+TEST_F(Texture3DTextureCubeContentTypeReaderTest, TextureCubeReaderAbsurdlyLargeSizeThrowsNotSupportedExceptionNotBadAlloc)
 {
     System::IO::MemoryStream ms;
     System::IO::BinaryWriter writer(&ms, true);
@@ -770,7 +776,7 @@ TEST_F(Texture3DTextureCubeContentTypeReaderTest, TextureCubeReaderAbsurdlyLarge
 
     auto typeReader = ContentTypeReaderManager::CreateReader("Microsoft.Xna.Framework.Content.TextureCubeReader");
     ASSERT_NE(typeReader, nullptr);
-    EXPECT_THROW(typeReader->ReadUntyped(reader, std::any{}), ContentLoadException);
+    EXPECT_THROW(typeReader->ReadUntyped(reader, std::any{}), System::NotSupportedException);
 }
 
 // KI-CONTENT-REACH3D: Refresh's Texture3DReader.Read reads its five header fields, looks up the device
@@ -974,5 +980,328 @@ TEST_F(Texture3DTextureCubeContentTypeReaderTest, BothReadersIgnoreAnExistingIns
         EXPECT_NE(result.get(), existing.get());
         EXPECT_EQ(result->getWidthProperty(), 1);
         EXPECT_EQ(existing->getWidthProperty(), 2);
+    }
+}
+
+namespace
+{
+    // RV-CONTENT-LEVELS: shared adversarial streams for all three Refresh readers.
+    struct LevelReaderCase
+    {
+        const char* name;
+        std::vector<int32_t> dimensions;
+        std::vector<int32_t> sizes;
+    };
+
+    const std::array<LevelReaderCase, 3> LevelReaders{{
+        {"Microsoft.Xna.Framework.Content.Texture2DReader", {2, 2}, {16, 4}},
+        // The depth alone determines this volume's three-level chain.
+        {"Microsoft.Xna.Framework.Content.Texture3DReader", {1, 1, 4}, {16, 8, 4}},
+        {"Microsoft.Xna.Framework.Content.TextureCubeReader", {2}, {16, 4}},
+    }};
+
+    template<class Exception, class Read>
+    void ExpectLevelException(Read&& read, const std::string& message)
+    {
+        try { read(); FAIL() << "expected " << typeid(Exception).name(); }
+        catch (const Exception& error)
+        {
+            EXPECT_EQ(typeid(error), typeid(Exception));
+            EXPECT_EQ(error.getMessageProperty(), message);
+        }
+        catch (const std::exception& error) { FAIL() << error.what(); }
+    }
+
+    constexpr const char* InvalidLevelSize =
+        "The size of the data passed in is too large or too small for this resource.";
+    constexpr const char* InvalidLevel = "An unexpected error has occurred.";
+    constexpr int32_t LevelMarker = 0x13572468;
+
+    std::vector<uint8_t> LevelBody(const LevelReaderCase& test, int32_t count,
+                                  const std::vector<int32_t>& sizes)
+    {
+        System::IO::MemoryStream stream;
+        System::IO::BinaryWriter writer(&stream, true);
+        writer.Write(static_cast<int32_t>(SurfaceFormat::Color));
+        for (auto size : test.dimensions) writer.Write(size);
+        writer.Write(count);
+        for (auto size : sizes)
+        {
+            writer.Write(size);
+            for (int32_t i = 0; i < size; ++i) writer.Write(uint8_t{0x31});
+        }
+        writer.Write(LevelMarker);
+        writer.Flush();
+        return stream.ToArray();
+    }
+
+    bool CanSubmitLevels(GraphicsDevice& device, const LevelReaderCase& test)
+    {
+        if (test.dimensions.size() == 3)
+            return device.SupportsCapability(CNA::GraphicsCapability::Texture3D);
+        return test.dimensions.size() != 1 || CubeStorageSupported();
+    }
+
+    class LevelContentManager final : public ContentManager
+    {
+    public:
+        LevelContentManager(GraphicsDevice& device, bool strict, const LevelReaderCase& test,
+                            const std::vector<uint8_t>& payload)
+            : ContentManager(CNA::TestSupport::EmptyServices(), "Content")
+        {
+            setGraphicsDevice(device);
+            RouteLoadsThroughOpenStreamEXT(strict);
+            System::IO::MemoryStream stream;
+            System::IO::BinaryWriter writer(&stream, true);
+            writer.Write7BitEncodedInt(1);
+            writer.Write(std::string(test.name));
+            writer.Write(int32_t{0});
+            writer.Write7BitEncodedInt(0);
+            writer.Write7BitEncodedInt(1);
+            for (auto value : payload) writer.Write(value);
+            writer.Flush();
+            const auto body = stream.ToArray();
+            file_ = {'X', 'N', 'B', 'w', 5, 0, 0, 0, 0, 0};
+            file_.insert(file_.end(), body.begin(), body.end());
+            const auto size = static_cast<uint32_t>(file_.size());
+            for (int i = 0; i < 4; ++i) file_[6 + i] = static_cast<uint8_t>(size >> (i * 8));
+        }
+
+        void LoadCase(const LevelReaderCase& test)
+        {
+            if (test.dimensions.size() == 3) (void)Load<std::shared_ptr<Texture3D>>("levels");
+            else if (test.dimensions.size() == 1) (void)Load<TextureCube>("levels");
+            else (void)Load<Microsoft::Xna::Framework::Graphics::Texture2D>("levels");
+        }
+
+    protected:
+        std::unique_ptr<System::IO::Stream> OpenStream(const std::string&) override
+        {
+            return std::make_unique<System::IO::MemoryStream>(
+                file_.data(), static_cast<int32_t>(file_.size()), false);
+        }
+
+    private:
+        std::vector<uint8_t> file_;
+    };
+}
+
+TEST_F(Texture3DTextureCubeContentTypeReaderTest, LevelRefusalsConsumeOnlyTheFailingLevel)
+{
+    for (const auto& test : LevelReaders)
+    {
+        SCOPED_TRACE(test.name);
+        if (!CanSubmitLevels(gd, test)) continue;
+        for (const bool excess : {false, true})
+        {
+            SCOPED_TRACE(excess);
+            auto sizes = test.sizes;
+            if (excess) sizes.push_back(1); // invalid index wins even though the byte size is wrong
+            else sizes.back() = 1; // earlier valid levels precede InvalidTotalSize
+            const auto bytes = LevelBody(test, std::numeric_limits<int32_t>::max(), sizes);
+            ContentManager manager;
+            manager.setGraphicsDevice(gd);
+            System::IO::MemoryStream stream(bytes.data(), static_cast<int32_t>(bytes.size()));
+            ContentReader reader(&manager, &stream, "levels", 5, 'w');
+            auto typeReader = ContentTypeReaderManager::CreateReader(test.name);
+            ASSERT_NE(typeReader, nullptr);
+            const auto read = [&] { (void)typeReader->ReadUntyped(reader, std::any{}); };
+            if (excess) ExpectLevelException<System::InvalidOperationException>(read, InvalidLevel);
+            else ExpectLevelException<System::ArgumentException>(read, InvalidLevelSize);
+            EXPECT_EQ(reader.ReadInt32(), LevelMarker);
+        }
+    }
+}
+
+TEST_F(Texture3DTextureCubeContentTypeReaderTest, ATruncatedExcessLevelFailsDuringItsRead)
+{
+    for (const auto& test : LevelReaders)
+    {
+        SCOPED_TRACE(test.name);
+        if (!CanSubmitLevels(gd, test)) continue;
+        auto sizes = test.sizes;
+        sizes.push_back(4);
+        auto bytes = LevelBody(test, static_cast<int32_t>(sizes.size()), sizes);
+        bytes.resize(bytes.size() - 6); // remove marker and two of the excess level's four bytes
+        ContentManager manager;
+        manager.setGraphicsDevice(gd);
+        System::IO::MemoryStream stream(bytes.data(), static_cast<int32_t>(bytes.size()));
+        ContentReader reader(&manager, &stream, "levels", 5, 'w');
+        auto typeReader = ContentTypeReaderManager::CreateReader(test.name);
+        ASSERT_NE(typeReader, nullptr);
+        EXPECT_THROW((void)typeReader->ReadUntyped(reader, std::any{}),
+                     System::IO::EndOfStreamException);
+    }
+}
+
+TEST_F(Texture3DTextureCubeContentTypeReaderTest, ZeroLevelBytesHaveTheCopyParameterRefusal)
+{
+    for (const auto& test : LevelReaders)
+    {
+        SCOPED_TRACE(test.name);
+        // No earlier SetData call is needed, including on STUB.
+        if (test.dimensions.size() == 3 && !CanSubmitLevels(gd, test)) continue;
+        const auto bytes = LevelBody(test, 1, {0});
+        ContentManager manager;
+        manager.setGraphicsDevice(gd);
+        System::IO::MemoryStream stream(bytes.data(), static_cast<int32_t>(bytes.size()));
+        ContentReader reader(&manager, &stream, "levels", 5, 'w');
+        auto typeReader = ContentTypeReaderManager::CreateReader(test.name);
+        ASSERT_NE(typeReader, nullptr);
+        try { (void)typeReader->ReadUntyped(reader, std::any{}); FAIL(); }
+        catch (const System::ArgumentOutOfRangeException& error)
+        {
+            EXPECT_EQ(error.getParamNameProperty(), "elementCount");
+            const System::ArgumentOutOfRangeException expected(
+                "elementCount", "This parameter must be a valid index within the array.");
+            EXPECT_EQ(error.getMessageProperty(), expected.getMessageProperty());
+        }
+        EXPECT_EQ(reader.ReadInt32(), LevelMarker);
+    }
+}
+
+TEST_F(Texture3DTextureCubeContentTypeReaderTest, DeviceLookupFollowsAllHeaderReadsAndPrecedesValidation)
+{
+    for (const auto& test : LevelReaders)
+    {
+        SCOPED_TRACE(test.name);
+        auto malformed = test;
+        malformed.dimensions[0] = 0;
+        const auto bytes = LevelBody(malformed, 1, {});
+        // Each incomplete prefix must fail reading the header, even without a device.
+        for (std::size_t length = 0; length < 4 * (test.dimensions.size() + 2); length += 4)
+        {
+            ContentManager manager;
+            System::IO::MemoryStream stream(bytes.data(), static_cast<int32_t>(length));
+            ContentReader reader(&manager, &stream, "levels", 5, 'w');
+            auto typeReader = ContentTypeReaderManager::CreateReader(test.name);
+            ASSERT_NE(typeReader, nullptr);
+            EXPECT_THROW((void)typeReader->ReadUntyped(reader, std::any{}),
+                         System::IO::EndOfStreamException);
+        }
+        ContentManager manager;
+        System::IO::MemoryStream stream(bytes.data(), static_cast<int32_t>(bytes.size()));
+        ContentReader reader(&manager, &stream, "levels", 5, 'w');
+        auto typeReader = ContentTypeReaderManager::CreateReader(test.name);
+        ExpectLevelException<ContentLoadException>(
+            [&] { (void)typeReader->ReadUntyped(reader, std::any{}); },
+            "Error loading \"levels\". GraphicsDevice component not found.");
+        EXPECT_EQ(reader.ReadInt32(), LevelMarker);
+    }
+}
+
+TEST_F(Texture3DTextureCubeContentTypeReaderTest, LoadPreservesLevelExceptionsOnBothStreamRoutes)
+{
+    for (const auto& test : LevelReaders)
+    {
+        SCOPED_TRACE(test.name);
+        if (!CanSubmitLevels(gd, test)) continue;
+        for (const bool strict : {false, true})
+        {
+            SCOPED_TRACE(strict);
+            for (const bool excess : {false, true})
+            {
+                auto sizes = test.sizes;
+                if (excess) sizes.push_back(4);
+                else sizes.back() = 1;
+                LevelContentManager manager(gd, strict, test,
+                    LevelBody(test, static_cast<int32_t>(sizes.size()), sizes));
+                const auto read = [&] { manager.LoadCase(test); };
+                if (excess) ExpectLevelException<System::InvalidOperationException>(read, InvalidLevel);
+                else ExpectLevelException<System::ArgumentException>(read, InvalidLevelSize);
+            }
+        }
+    }
+}
+
+TEST_F(Texture3DTextureCubeContentTypeReaderTest, CubeProfileRefusalsPrecedeMissingLevelBytes)
+{
+    GraphicsDevice reach{GraphicsAdapter::getDefaultAdapterProperty(), GraphicsProfile::Reach,
+                         PresentationParameters::CreateWindowedEXT(800, 480)};
+    const int limit = reach.GetRenderer().GetMaxCubeSizeForProfileEXT(
+        static_cast<int>(GraphicsProfile::Reach));
+    const auto sizeError = ReadTextureHeaderOnly(
+        reach, TextureCubeReaderName, SurfaceFormat::Color, {limit + 1, 1});
+    ASSERT_NE(sizeError, nullptr);
+    ExpectLevelException<System::NotSupportedException>(
+        [&] { std::rethrow_exception(sizeError); },
+        "XNA Framework Reach profile supports a maximum TextureCube size of " +
+            std::to_string(limit) + ".");
+    // A format the cube constructor itself refuses (CNA keeps float cubes on Reach, an owner
+    // policy, so XNA's Reach-only Vector4 refusal cannot be the witness here).
+    const auto formatError = ReadTextureHeaderOnly(
+        reach, TextureCubeReaderName, SurfaceFormat::NormalizedByte2, {4, 1});
+    ASSERT_NE(formatError, nullptr);
+    ExpectLevelException<System::NotSupportedException>(
+        [&] { std::rethrow_exception(formatError); },
+        "XNA Framework Reach profile does not support TextureCube format NormalizedByte2.");
+    // An ordinal no XNA SurfaceFormat has is the .xnb whitelist's refusal, still before any level
+    // and before CNA's constructor, which would admit it as an extension format.
+    const auto extensionError = ReadTextureHeaderOnly(
+        reach, TextureCubeReaderName, static_cast<SurfaceFormat>(20), {1, 1});
+    ASSERT_NE(extensionError, nullptr);
+    ExpectLevelException<System::NotSupportedException>(
+        [&] { std::rethrow_exception(extensionError); },
+        "TextureCubeReader: SurfaceFormat 20 is not supported.");
+}
+
+TEST_F(Texture3DTextureCubeContentTypeReaderTest, WrongPositiveLevelSizesAreRefusedBeforeTheNextRead)
+{
+    for (const auto& test : LevelReaders)
+    {
+        SCOPED_TRACE(test.name);
+        if (test.dimensions.size() == 3 && !CanSubmitLevels(gd, test)) continue;
+        for (const int32_t size : {1, test.sizes.front() + 1})
+        {
+            const auto bytes = LevelBody(test, 1, {size});
+            ContentManager manager;
+            manager.setGraphicsDevice(gd);
+            System::IO::MemoryStream stream(bytes.data(), static_cast<int32_t>(bytes.size()));
+            ContentReader reader(&manager, &stream, "levels", 5, 'w');
+            auto typeReader = ContentTypeReaderManager::CreateReader(test.name);
+            ASSERT_NE(typeReader, nullptr);
+            ExpectLevelException<System::ArgumentException>(
+                [&] { (void)typeReader->ReadUntyped(reader, std::any{}); }, InvalidLevelSize);
+            EXPECT_EQ(reader.ReadInt32(), LevelMarker);
+        }
+    }
+}
+
+TEST_F(Texture3DTextureCubeContentTypeReaderTest, CubeFaceOrderStopsAtTheMalformedFaceLevel)
+{
+    if (!CubeStorageSupported()) GTEST_SKIP() << "requires earlier cube uploads";
+    const auto& test = LevelReaders.back();
+    const auto bytes = LevelBody(test, 2, {16, 4, 16, 4, 16, 1}); // face 2, mip 1
+    ContentManager manager;
+    manager.setGraphicsDevice(gd);
+    System::IO::MemoryStream stream(bytes.data(), static_cast<int32_t>(bytes.size()));
+    ContentReader reader(&manager, &stream, "levels", 5, 'w');
+    auto typeReader = ContentTypeReaderManager::CreateReader(test.name);
+    ASSERT_NE(typeReader, nullptr);
+    ExpectLevelException<System::ArgumentException>(
+        [&] { (void)typeReader->ReadUntyped(reader, std::any{}); }, InvalidLevelSize);
+    EXPECT_EQ(reader.ReadInt32(), LevelMarker);
+}
+
+TEST_F(Texture3DTextureCubeContentTypeReaderTest, DxtLevelSizesUseBlocksBeforeConversionOrUpload)
+{
+    for (const auto& original : LevelReaders)
+    {
+        if (original.dimensions.size() == 3 || !CanSubmitLevels(gd, original)) continue;
+        SCOPED_TRACE(original.name);
+        auto test = original;
+        for (auto& dimension : test.dimensions) dimension = 4;
+        // 4x4 and 2x2 each require one DXT1 block (8 bytes).
+        auto bytes = LevelBody(test, 2, {8, 7});
+        bytes[0] = static_cast<uint8_t>(SurfaceFormat::Dxt1);
+        ContentManager manager;
+        manager.setGraphicsDevice(gd);
+        System::IO::MemoryStream stream(bytes.data(), static_cast<int32_t>(bytes.size()));
+        ContentReader reader(&manager, &stream, "levels", 5, 'w');
+        auto typeReader = ContentTypeReaderManager::CreateReader(test.name);
+        ASSERT_NE(typeReader, nullptr);
+        ExpectLevelException<System::ArgumentException>(
+            [&] { (void)typeReader->ReadUntyped(reader, std::any{}); }, InvalidLevelSize);
+        EXPECT_EQ(reader.ReadInt32(), LevelMarker);
     }
 }
