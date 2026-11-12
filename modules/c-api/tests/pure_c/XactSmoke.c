@@ -394,6 +394,19 @@ static int tq084_refusals(const CNA_Handle engine, const CNA_Handle sound_bank)
                         "The specified variable index is invalid.")) {
         return 0;
     }
+    /* ... and keeps the canonical exception type, so a managed caller can throw
+       IndexOutOfRangeException as XNA does. */
+    {
+        static const char expected_type[] = "System.IndexOutOfRangeException";
+        char type[64];
+        uint64_t type_size = UINT64_C(0);
+        if (cna_audio_engine_get_global_variable(engine, view("Nope"), &value) != CNA_RESULT_INVALID_ARGUMENT ||
+            cna_error_copy_last_exception_type_ext(type, sizeof(type), &type_size) != CNA_RESULT_SUCCESS ||
+            type_size != sizeof(expected_type) - 1U ||
+            memcmp(type, expected_type, (size_t)type_size) != 0) {
+            return 0;
+        }
+    }
     if (cna_sound_bank_get_cue(sound_bank, view("Nope"), &rejected) != CNA_RESULT_INVALID_ARGUMENT ||
         rejected != CNA_INVALID_HANDLE ||
         !tq084_error_is(CNA_RESULT_INVALID_ARGUMENT, CNA_ERROR_CATEGORY_ARGUMENT, cue) ||

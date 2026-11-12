@@ -33,6 +33,7 @@
 #include "Microsoft/Xna/Framework/Storage/StorageDeviceNotConnectedException.hpp"
 
 #include "System/ArgumentException.hpp"
+#include "System/IndexOutOfRangeException.hpp"
 #include "System/InvalidCastException.hpp"
 #include "System/IO/IOException.hpp"
 #include "System/UnauthorizedAccessException.hpp"
@@ -552,6 +553,10 @@ template<typename TCallable>
         return Fail(CNA_RESULT_INVALID_STATE, CNA_ERROR_CATEGORY_STATE, exception.what());
     } catch (const System::ArgumentException& exception) {
         return Fail(CNA_RESULT_INVALID_ARGUMENT, CNA_ERROR_CATEGORY_ARGUMENT, exception.what());
+    } catch (const System::IndexOutOfRangeException& exception) {
+        // XNA's IndexOutOfRangeException (an invalid XACT variable, cue or wave index; a collection
+        // index): the same result and category std::out_of_range has, with its own canonical type.
+        return Fail(CNA_RESULT_INVALID_ARGUMENT, CNA_ERROR_CATEGORY_RANGE, exception.what());
     } catch (const System::InvalidCastException& exception) {
         // The caller asked for a value in a shape the object does not have -- a compiled effect
         // parameter read as the wrong class, say. That is their argument, not a CNA failure.

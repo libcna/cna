@@ -113,7 +113,7 @@ families:
 |---|---|---|
 | `std::bad_alloc` | `OUT_OF_MEMORY` | `MEMORY` |
 | numeric overflow/range error | `OVERFLOW` | `RANGE` |
-| `std::out_of_range` | `INVALID_ARGUMENT` | `RANGE` |
+| `std::out_of_range`, `System.IndexOutOfRangeException` (an invalid XACT variable or index) | `INVALID_ARGUMENT` | `RANGE` |
 | argument or invalid-cast exception | `INVALID_ARGUMENT` | `ARGUMENT` |
 | invalid operation, bare logic error, device lost/reset, disconnected storage, sensor or session-join failure | `INVALID_STATE` | `STATE` |
 | filesystem, stream, content-load or unauthorized-access failure | `IO` | `IO` |

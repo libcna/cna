@@ -116,40 +116,28 @@ template<typename TResource>
 }
 
 // Refresh Helpers.GetExceptionFromResult IL_0189-0193 exposes invalid XACT variables
-// as IndexOutOfRangeException. Keep the C ABI's documented INVALID_ARGUMENT result and
-// RANGE category using the barrier's existing std::out_of_range mapping (Detail.hpp).
+// as IndexOutOfRangeException. The barrier (Detail.hpp) answers it with the C ABI's documented
+// INVALID_ARGUMENT result and RANGE category and keeps its canonical type for managed callers.
 [[nodiscard]] float ReadEngineGlobalVariable(AudioEngine& engine, const std::string& name)
 {
-    try { return engine.GetGlobalVariable(name); }
-    catch (const System::IndexOutOfRangeException& error) {
-        throw std::out_of_range(error.what());
-    }
+    return engine.GetGlobalVariable(name);
 }
 
 void WriteEngineGlobalVariable(AudioEngine& engine, const std::string& name, const float value)
 {
-    try { engine.SetGlobalVariable(name, value); }
-    catch (const System::IndexOutOfRangeException& error) {
-        throw std::out_of_range(error.what());
-    }
+    engine.SetGlobalVariable(name, value);
 }
 
 // The same mapping for a cue-scoped variable (Refresh native Cue.GetVariable/SetVariable forward
 // the invalid index's result to the same Helpers translation).
 [[nodiscard]] float ReadCueVariable(Cue& cue, const std::string& name)
 {
-    try { return cue.GetVariable(name); }
-    catch (const System::IndexOutOfRangeException& error) {
-        throw std::out_of_range(error.what());
-    }
+    return cue.GetVariable(name);
 }
 
 void WriteCueVariable(Cue& cue, const std::string& name, const float value)
 {
-    try { cue.SetVariable(name, value); }
-    catch (const System::IndexOutOfRangeException& error) {
-        throw std::out_of_range(error.what());
-    }
+    cue.SetVariable(name, value);
 }
 
 [[nodiscard]] CNA_Result GetCategory(

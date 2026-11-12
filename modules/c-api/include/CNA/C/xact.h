@@ -691,7 +691,8 @@ CNA_C_API CNA_Result cna_sound_bank_play_cue(CNA_Handle sound_bank, CNA_StringVi
  * @param listener Where the ears are.
  * @param emitter Where the sound is.
  * @return The same answers as @ref cna_sound_bank_play_cue, plus `CNA_RESULT_INVALID_ARGUMENT` for
- *         an invalid listener or emitter structure.
+ *         an invalid listener or emitter structure, or for a cue whose authored spatial variable
+ *         (e.g. Distance) is not accessible to it (XNA's IndexOutOfRangeException).
  */
 CNA_C_API CNA_Result cna_sound_bank_play_cue_3d(
     CNA_Handle sound_bank,
@@ -793,8 +794,9 @@ CNA_C_API CNA_Result cna_cue_copy_name(
  * @param listener Where the ears are.
  * @param emitter Where the sound is.
  * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_ARGUMENT` for an invalid listener or emitter,
- *         `CNA_RESULT_INVALID_STATE` for a disposed cue or for a cue that was played before it was
- *         ever positioned, or a documented handle/thread failure.
+ *         or for an authored spatial variable (e.g. Distance) the cue cannot access (XNA's
+ *         IndexOutOfRangeException), `CNA_RESULT_INVALID_STATE` for a disposed cue or for a cue
+ *         that was played before it was ever positioned, or a documented handle/thread failure.
  *
  * This is the cue's own positioning, distinct from a sound effect instance's: it applies to every
  * sound the cue is playing. As in XNA, 3D positioning must start before the cue first plays; once
