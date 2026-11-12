@@ -1,8 +1,11 @@
 // SPDX-License-Identifier: MS-PL
 // ISSUE-058: valid queue aliases must survive replacement until Play finishes.
 #include <gtest/gtest.h>
+#include <filesystem>
 #include <string>
+#include "CNA/TestSupport/TestScratch.hpp"
 #include "Microsoft/Xna/Framework/Media/MediaPlayer.hpp"
+#include "Microsoft/Xna/Framework/Media/SongCollection.hpp"
 #include "System/Environment.hpp"
 
 using namespace Microsoft::Xna::Framework::Media;
@@ -70,8 +73,41 @@ TEST_F(MediaQueueReplayTest, CallerOwnedSongKeepsExistingMutationSemantics)
     EXPECT_EQ(MediaPlayer::getStateProperty(), MediaState::Playing);
 #ifdef SOUND_ENABLED
     EXPECT_EQ(caller.getPlayCountProperty(), 18);
-    EXPECT_GT(caller.getDurationProperty().getTicksProperty(), 0);
+    // RV-MEDIA review #6: XNA's Song keeps the duration its constructor cached (URI .ctor
+    // IL_003a-0040, get_Duration IL_0006-000c); the decoded duration is the queue entry's.
+    EXPECT_EQ(caller.getDurationProperty().getTicksProperty(), 0);
+    EXPECT_GT(queue.getActiveSongProperty()->getDurationProperty().getTicksProperty(), 0);
 #endif
+}
+
+// RV-MEDIA review #1: XNA's queue item is the native item with its metadata (MediaQueue.get_Item
+// IL_001f-0032 -> Song(uint32) IL_0097-00d9). A queue entry rebuilt from the file name lost the
+// duration (and album, artist, genre, track number) of every song not yet played.
+TEST_F(MediaQueueReplayTest, QueueEntriesKeepTheirSongsMetadata)
+{
+    Song first(AudioFile, "First", 1234);
+    Song second(AudioFile, "Second", 5678);
+    SongCollection inputs({&first, &second});
+    MediaPlayer::Play(inputs, 0);
+    auto& queue = MediaPlayer::getQueueProperty();
+    ASSERT_EQ(queue.getCountProperty(), 2);
+    EXPECT_EQ(queue[1]->getDurationProperty().getTotalMillisecondsProperty(), 5678.0);
+    EXPECT_EQ(queue[1]->getNameProperty(), "Second");
+}
+
+// RV-MEDIA review #7: XNA plays the song's handle (MediaQueue.Play(Song) IL_001b-002e); a song
+// whose file was removed after it was made is not rebuilt from the file, so Play does not throw
+// FileNotFoundException, and the queue holds the song.
+TEST_F(MediaQueueReplayTest, PlayingASongWhoseFileWasRemovedDoesNotRebuildItFromTheFile)
+{
+    const auto copy = CNA::TestSupport::FixtureRoot() / "rv-media-7-removed.ogg";
+    std::filesystem::copy_file(AudioFile, copy, std::filesystem::copy_options::overwrite_existing);
+    Song song(copy.string(), "Removed");
+    std::filesystem::remove(copy);
+    EXPECT_NO_THROW(MediaPlayer::Play(&song));
+    auto& queue = MediaPlayer::getQueueProperty();
+    ASSERT_EQ(queue.getCountProperty(), 1);
+    EXPECT_EQ(queue.getActiveSongProperty()->getNameProperty(), "Removed");
 }
 
 TEST_F(MediaQueueReplayTest, ReplaysFirstNonActiveQueueEntry)

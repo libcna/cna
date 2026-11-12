@@ -221,7 +221,8 @@ namespace Microsoft::Xna::Framework::Media
         static void setStateProperty(MediaState value);
         static void LoadSong(Song* song);
         static void NextSong(SharpRuntime::intcs direction);
-        static void PlaySong(Song* song);
+        // Starts the song; false when its audio could not be loaded or played.
+        static bool PlaySong(Song* song);
 
         static void TimerStart();
         static void TimerStop();

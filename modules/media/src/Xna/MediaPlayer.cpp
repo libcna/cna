@@ -330,7 +330,17 @@ namespace Microsoft::Xna::Framework::Media
         LoadSong(song);
         queue_.setActiveSongIndexProperty(0);
 
-        PlaySong(song);
+        // The queue's entry is what plays and learns its decoded duration: XNA's Song keeps the
+        // duration its constructor cached (URI .ctor IL_003a-0040, get_Duration IL_0006-000c), so
+        // the caller's Song is not rewritten. Its play count still counts this play.
+#ifdef SOUND_ENABLED
+        if (PlaySong(queue_.getActiveSongProperty()))
+        {
+            ++song->playCount_;
+        }
+#else
+        (void)PlaySong(queue_.getActiveSongProperty());
+#endif
 
         if (previousSong != song)
         {
@@ -522,7 +532,15 @@ namespace Microsoft::Xna::Framework::Media
         {
             return;
         }
-        queue_.Add(new Song(song->getHandle(), song->name_));
+        // A copy of the song with its metadata -- album, artist, genre, track number, duration --
+        // as XNA's queue item keeps the native item's (MediaQueue.get_Item IL_001f-0032 ->
+        // Song(uint32) IL_0097-00d9), not a fresh file Song that loses it, and that would throw
+        // FileNotFoundException for a file gone since. The entry belongs to the queue: it leaves
+        // content ownership and starts undisposed.
+        auto entry = std::make_unique<Song>(*song);
+        entry->contentOwnership_.Detach();
+        entry->isDisposed_ = false;
+        queue_.Add(entry.release());
     }
 
     void MediaPlayer::NextSong(SharpRuntime::intcs direction)
@@ -565,11 +583,11 @@ namespace Microsoft::Xna::Framework::Media
         NotifyDispatcher(Microsoft::Xna::Framework::FrameworkDispatcher::ActiveSongChanged);
     }
 
-    void MediaPlayer::PlaySong(Song* song)
+    bool MediaPlayer::PlaySong(Song* song)
     {
         if (song == nullptr)
         {
-            return;
+            return false;
         }
 
         if (!initialized_)
@@ -591,21 +609,21 @@ namespace Microsoft::Xna::Framework::Media
             song->getHandle(), /*predecode=*/false);
         if (!g_musicAudio)
         {
-            return;
+            return false;
         }
 
         g_musicTrack = CNA::Internal::Audio::CreateMixerTrack();
         if (!g_musicTrack)
         {
             DestroyMusicAudio();
-            return;
+            return false;
         }
 
         if (!CNA::Internal::Audio::SetMixerTrackAudio(g_musicTrack, g_musicAudio.get()))
         {
             DestroyMusicTrack();
             DestroyMusicAudio();
-            return;
+            return false;
         }
 
         ApplyMusicVolume(volume_, isMuted_);
@@ -632,7 +650,7 @@ namespace Microsoft::Xna::Framework::Media
         {
             DestroyMusicTrack();
             DestroyMusicAudio();
-            return;
+            return false;
         }
 
         ++song->playCount_;
@@ -641,6 +659,7 @@ namespace Microsoft::Xna::Framework::Media
         TimerReset();
         TimerStart();
         setStateProperty(MediaState::Playing);
+        return true;
     }
 
     // --- timer ---
