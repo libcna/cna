@@ -186,6 +186,18 @@ TEST(XactInstanceCount, PublicLookupRetainsVariableDomainAndDisposalValidation)
         EXPECT_THROW((void)cue->GetVariable("Distance"),System::IndexOutOfRangeException);
         EXPECT_THROW(cue->SetVariable("Distance",9.0f),System::IndexOutOfRangeException);
     }
+    {
+        // XACT3DApply writes Distance (IL_005b) before DopplerPitchScalar fails its check
+        // (IL_008c-008f): the Distance write stays, and the cue is not positioned.
+        ScheduledBanks b({{PlayAt(0,0,255)}},0,false,CountRpcXgs(6,"DopplerPitchScalar"));
+        std::unique_ptr<Cue> prepared(b.sound->GetCue("Sequence"));
+        AudioEmitter emitter;
+        emitter.setPositionProperty(Microsoft::Xna::Framework::Vector3(5.0f,0.0f,0.0f));
+        EXPECT_THROW(prepared->Apply3D(AudioListener{},emitter),System::IndexOutOfRangeException);
+        EXPECT_FLOAT_EQ(prepared->GetVariable("Distance"),5.0f) << "the earlier Distance write was undone";
+        prepared->Play();
+        EXPECT_THROW(prepared->Apply3D(AudioListener{},emitter),System::InvalidOperationException);
+    }
     ScheduledBanks absent({{PlayAt(0,0,255)}},0,false,CountRpcXgs(7,"OtherVariable"));
     auto cue=absent.Play();EXPECT_THROW((void)NumInstances(*cue),System::IndexOutOfRangeException);
     auto valid=InstanceCountBanks();auto disposed=CountCue(*valid->sound);disposed->Play();disposed->Dispose();

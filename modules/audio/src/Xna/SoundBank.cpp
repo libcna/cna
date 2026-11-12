@@ -86,8 +86,34 @@ namespace Microsoft::Xna::Framework::Audio
     {
         // A destructor cannot let a Disposing handler's exception out (it is noexcept, and the
         // throw would terminate the process inside an enclosing cascade); it is dropped here.
-        try { Dispose(); }
+        // Destroyed by a handler during its own Dispose, it finishes that teardown here, so no
+        // remaining cue or wave bank keeps a pointer to it.
+        try
+        {
+            if (cascading_) DetachRemainingInternal();
+            else Dispose();
+        }
         catch (...) {}
+    }
+
+    void SoundBank::DetachRemainingInternal() noexcept
+    {
+        std::vector<std::pair<Cue*, std::weak_ptr<char>>> cues;
+        for (auto* cue : activeCues_)
+            if (cue) cues.emplace_back(cue, cue->lifetime_);
+        for (auto& [cue, alive] : cues)
+        {
+            if (alive.expired()) continue;
+            try { cue->Dispose(); }
+            catch (...) {}
+        }
+        activeCues_.clear();
+        // Cue callbacks may have disposed banks already; snapshot only after those cascades have
+        // removed their reciprocal registrations.
+        auto resolved = std::move(resolvedWaveBanks_);
+        resolvedWaveBanks_.clear();
+        for (auto* bank : resolved) bank->UnregisterSoundBank(this);
+        xactImpl_.reset();
     }
 
     // ── Properties ────────────────────────────────────────────────────────────
@@ -280,8 +306,10 @@ namespace Microsoft::Xna::Framework::Audio
             for (auto* cue : activeCues_)
                 if (cue) cues.emplace_back(cue, cue->lifetime_);
             // A handler may also destroy this bank: then nothing of it may be touched again.
+            // Its destructor then finished the teardown (DetachRemainingInternal).
             const std::weak_ptr<char> self = lifetime_;
             std::exception_ptr failure;
+            cascading_ = true;
             for (auto& [cue, alive] : cues)
             {
                 if (alive.expired()) continue;
@@ -293,15 +321,8 @@ namespace Microsoft::Xna::Framework::Audio
                     return;
                 }
             }
-            activeCues_.clear();
-
-            // Cue callbacks may have disposed banks already; snapshot only after
-            // those cascades have removed their reciprocal registrations.
-            auto resolved = std::move(resolvedWaveBanks_);
-            resolvedWaveBanks_.clear();
-            for (auto* bank : resolved) bank->UnregisterSoundBank(this);
-
-            xactImpl_.reset();
+            cascading_ = false;
+            DetachRemainingInternal();
             if (failure) std::rethrow_exception(failure);
             if (disposing)
                 Disposing.Raise(this, System::EventArgs::Empty);

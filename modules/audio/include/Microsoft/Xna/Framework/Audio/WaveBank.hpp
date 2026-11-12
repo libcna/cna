@@ -135,6 +135,10 @@ namespace Microsoft::Xna::Framework::Audio
         // Expires with this object, so a disposal cascade's snapshot skips one that a Disposing
         // handler destroyed meanwhile (XNA's NotifyDestroyedEngine resolves WeakReferences).
         std::shared_ptr<char> lifetime_ = std::make_shared<char>();
+        // Set while Dispose runs its cues' Disposing handlers: a handler that destroys this bank
+        // then leaves the destructor to finish the teardown (DetachRemainingInternal).
+        bool cascading_ = false;
+        void DetachRemainingInternal() noexcept;
 
         struct XactWaveBankImpl;
         std::unique_ptr<XactWaveBankImpl> xactImpl_;

@@ -717,6 +717,26 @@ TEST(AudioEngineTest, ACueHandlerThatDestroysItsBankAndThrowsEndsTheCascade)
     EXPECT_TRUE(cue->getIsDisposedProperty());
 }
 
+// A bank destroyed by a cue's Disposing handler during its own teardown finishes that teardown in its
+// destructor: its other cue is disposed and its wave bank no longer counts it as an owner, so
+// neither keeps a pointer to the freed bank.
+TEST(AudioEngineTest, ABankDestroyedDuringItsOwnTeardownLeavesNoDanglingDependents)
+{
+    AudioEngine engine(XgsFixturePath());
+    WaveBank wave(&engine, WriteFixture("destroyed_parent2.xwb", BuildXA8XwbFixtureBytes()));
+    auto bank = std::make_unique<SoundBank>(&engine, WriteFixture("destroyed_parent2.xsb", BuildXA8XsbFixtureBytes()));
+    std::unique_ptr<Cue> first(bank->GetCue("XA8Cue"));
+    std::unique_ptr<Cue> second(bank->GetCue("XA8Cue"));
+    ASSERT_TRUE(wave.getIsInUseProperty());
+    first->Disposing += [&](System::Object*, const System::EventArgs&) { bank.reset(); };
+    SoundBank* const disposing = bank.get();
+    disposing->Dispose();
+    EXPECT_EQ(bank, nullptr);
+    EXPECT_TRUE(second->getIsDisposedProperty()) << "the second cue kept a pointer to the freed bank";
+    EXPECT_FALSE(wave.getIsInUseProperty()) << "the wave bank still counts the freed bank as an owner";
+    second->Dispose();
+}
+
 // A Disposing handler that throws while its cue is being destroyed (here by a sibling's handler)
 // cannot leave the destructor; the bank's teardown goes on instead of the process terminating.
 TEST(AudioEngineTest, AHandlerThrowingInsideACueDestructorDoesNotTerminate)

@@ -717,13 +717,33 @@ namespace Microsoft::Xna::Framework::Audio
             // XNA 4.0 Refresh: Cue.Apply3D IL_002c-0036 / Apply3DBeforePlaying.
             throw System::InvalidOperationException(
                 "You must call Apply3D on a Cue before calling Play to be able to call Apply3D after calling Play.");
-        // XACT3DApply checks each of its three SetVariable writes (Xact IL_0060-0063, 008c-008f,
-        // 00c4-00c6) and Cue.Apply3D sets applied3D only after success (IL_0086-0088): a project
-        // that authors one of them outside the public cue scope refuses before anything changes.
-        if (AudioEngine* eng = bank_ ? bank_->engine_ : nullptr)
-            for (const char* name : {"Distance", "DopplerPitchScalar", "OrientationAngle"})
-                if (eng->FindVariable(name) && !eng->GetCueVariableInfo(name).valid)
-                    throw System::IndexOutOfRangeException(kInvalidVariableIndex);
+        // P10-RPC-002: matches FAudio's FACT3DApply (FACT3D.c), which unconditionally writes
+        // these three built-in variables from its own F3DAudioCalculate output on every Apply3D
+        // call, regardless of whether a voice is currently active -- so an RPC curve bound to
+        // "Distance"/"OrientationAngle"/"DopplerPitchScalar" now tracks this cue's live 3D state
+        // instead of whatever was last manually SetVariable()-d (or the prior hardcoded 0.0f
+        // default).
+        // XACT3DApply (Xact IL_0039-00c4) and FACT3DApply (FACT3D.c:161-175) write them through
+        // the cue's SetVariable, in this order: an authored variable keeps its range and read-only
+        // flag. XACT3DApply checks each write (IL_0060-0063, 008c-008f, 00c4-00c6): one that is
+        // not public cue-scoped stops it there, the earlier writes kept, before the cue is
+        // positioned, and Cue.Apply3D sets applied3D only after success (IL_0086-0088).
+        const Cue3DVariables vars3d = ComputeCue3DVariables(listener, emitter);
+        AudioEngine* eng = bank_ ? bank_->engine_ : nullptr;
+        const auto writeSpatial = [this, eng](const char* name, float value)
+        {
+            if (eng && eng->FindVariable(name))
+            {
+                const auto info = eng->GetCueVariableInfo(name);
+                if (!info.valid) throw System::IndexOutOfRangeException(kInvalidVariableIndex);
+                if (info.readOnly) return;
+                value = std::clamp(value, info.minValue, info.maxValue);
+            }
+            variables_[name] = value;
+        };
+        writeSpatial("Distance", vars3d.distance);
+        writeSpatial("DopplerPitchScalar", vars3d.dopplerFactor);
+        writeSpatial("OrientationAngle", vars3d.orientationAngleDegrees);
 
         // SDL3_mixer has no per-cue 3D audio graph (FAudio's FACT3DApply); approximate by
         // applying the same pan/distance-attenuation/Doppler SoundEffectInstance::Apply3D already
@@ -737,31 +757,6 @@ namespace Microsoft::Xna::Framework::Audio
         has3D_             = true;
         pending3DListener_ = listener;
         pending3DEmitter_  = emitter;
-
-        // P10-RPC-002: matches FAudio's FACT3DApply (FACT3D.c), which unconditionally writes
-        // these three built-in variables from its own F3DAudioCalculate output on every Apply3D
-        // call, regardless of whether a voice is currently active -- so an RPC curve bound to
-        // "Distance"/"OrientationAngle"/"DopplerPitchScalar" now tracks this cue's live 3D state
-        // instead of whatever was last manually SetVariable()-d (or the prior hardcoded 0.0f
-        // default).
-        // XACT3DApply (Xact IL_0039-00c4) and FACT3DApply (FACT3D.c:161-175) write them through
-        // the cue's SetVariable: an authored variable keeps its range and read-only flag, and one
-        // that is not public cue-scoped is not written.
-        const Cue3DVariables vars3d = ComputeCue3DVariables(listener, emitter);
-        AudioEngine* eng = bank_ ? bank_->engine_ : nullptr;
-        const auto writeSpatial = [this, eng](const char* name, float value)
-        {
-            if (eng && eng->FindVariable(name))
-            {
-                const auto info = eng->GetCueVariableInfo(name);
-                if (!info.valid || info.readOnly) return;
-                value = std::clamp(value, info.minValue, info.maxValue);
-            }
-            variables_[name] = value;
-        };
-        writeSpatial("Distance", vars3d.distance);
-        writeSpatial("DopplerPitchScalar", vars3d.dopplerFactor);
-        writeSpatial("OrientationAngle", vars3d.orientationAngleDegrees);
     }
 
     // ── Play ──────────────────────────────────────────────────────────────────

@@ -214,8 +214,38 @@ namespace Microsoft::Xna::Framework::Audio
     {
         // A destructor cannot let a Disposing handler's exception out (it is noexcept, and the
         // throw would terminate the process inside an enclosing cascade); it is dropped here.
-        try { Dispose(); }
+        // Destroyed by a handler during its own Dispose, it finishes that teardown here.
+        try
+        {
+            if (cascading_) DetachRemainingInternal();
+            else Dispose();
+        }
         catch (...) {}
+    }
+
+    void WaveBank::DetachRemainingInternal() noexcept
+    {
+        std::vector<std::pair<Cue*, std::weak_ptr<char>>> cues;
+        for (auto* cue : activeCues_)
+            if (cue) cues.emplace_back(cue, cue->lifetime_);
+        for (auto& [cue, alive] : cues)
+        {
+            if (alive.expired()) continue;
+            try { cue->Dispose(); }
+            catch (...) {}
+        }
+        activeCues_.clear();
+        // Preserve CNA's existing forced-disposal cascade without leaving cache-owner pointers
+        // dangling; native in-use destruction is unqualified.
+        auto owners = std::move(resolvedBySoundBanks_);
+        resolvedBySoundBanks_.clear();
+        for (auto* bank : owners) bank->ForgetResolvedWaveBank(this);
+        // AUD-11-025: takes the same lock GetSoundEffect() takes before its own first xactImpl_
+        // access, so a concurrent GetSoundEffect() call on another thread either completes
+        // entirely before this reset() runs, or blocks here until reset() (and the isDisposed_
+        // update) has finished -- never observes a half-destroyed xactImpl_.
+        std::lock_guard<std::mutex> lock(xactImplMutex_);
+        xactImpl_.reset();
     }
 
     // ── Properties ────────────────────────────────────────────────────────────
@@ -509,8 +539,10 @@ namespace Microsoft::Xna::Framework::Audio
             for (auto* cue : activeCues_)
                 if (cue) cues.emplace_back(cue, cue->lifetime_);
             // A handler may also destroy this bank: then nothing of it may be touched again.
+            // Its destructor then finished the teardown (DetachRemainingInternal).
             const std::weak_ptr<char> self = lifetime_;
             std::exception_ptr failure;
+            cascading_ = true;
             for (auto& [cue, alive] : cues)
             {
                 if (alive.expired()) continue;
@@ -522,22 +554,8 @@ namespace Microsoft::Xna::Framework::Audio
                     return;
                 }
             }
-            activeCues_.clear();
-
-            // Preserve CNA's existing forced-disposal cascade without leaving
-            // cache-owner pointers dangling; native in-use destruction is unqualified.
-            auto owners = std::move(resolvedBySoundBanks_);
-            resolvedBySoundBanks_.clear();
-            for (auto* bank : owners) bank->ForgetResolvedWaveBank(this);
-
-            // AUD-11-025: takes the same lock GetSoundEffect() takes before its own first
-            // xactImpl_ access, so a concurrent GetSoundEffect() call on another thread either
-            // completes entirely before this reset() runs, or blocks here until reset() (and the
-            // isDisposed_ update) has finished -- never observes a half-destroyed xactImpl_.
-            {
-                std::lock_guard<std::mutex> lock(xactImplMutex_);
-                xactImpl_.reset();
-            }
+            cascading_ = false;
+            DetachRemainingInternal();
             if (failure) std::rethrow_exception(failure);
             if (disposing)
                 Disposing.Raise(this, System::EventArgs::Empty);
