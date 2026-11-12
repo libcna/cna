@@ -14,6 +14,7 @@
 
 #include "CNA/Internal/Renderers/Common/RenderTargetSamplePolicy.hpp"
 
+#include <atomic>
 #include <algorithm>
 #include <bit>
 
@@ -25,14 +26,18 @@ namespace Microsoft::Xna::Framework::Graphics
     // same rule as DynamicVertexBuffer's getter.
     bool RenderTargetCube::getIsContentLostProperty() const
     {
-        if (!contentLost_)
+        // Written only when it turns true, through an atomic reference, so concurrent reads of a
+        // target whose device stays Normal never race (a latching write of false did).
+        std::atomic_ref<bool> latch(contentLost_);
+        if (!latch.load(std::memory_order_relaxed))
         {
             const auto* device = getGraphicsDeviceProperty();
-            contentLost_ = graphicsDeviceLifetime_.expired() || device == nullptr ||
+            if (graphicsDeviceLifetime_.expired() || device == nullptr ||
                 device->getIsDisposedProperty() ||
-                device->getGraphicsDeviceStatusProperty() != GraphicsDeviceStatus::Normal;
+                device->getGraphicsDeviceStatusProperty() != GraphicsDeviceStatus::Normal)
+                latch.store(true, std::memory_order_relaxed);
         }
-        return contentLost_;
+        return latch.load(std::memory_order_relaxed);
     }
 
     using CNA::Internal::Graphics::ProfileDiagnostic;

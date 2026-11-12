@@ -90,6 +90,12 @@ page under `docs/` (index: `docs/README.md`), deliberate divergences from FNA an
   Unmeasured: volume/filter NEW_ON_LOOP, ADD operators, type 6 with both NEW_ON_LOOP kinds, per-pass
   pitch values, Ordered From Random / Random No Immediate Repeats, more than two candidates, raw 255,
   streaming, cross-bank candidates.
+- Graphics resource identity (review rv-tex2, 2026-11-12): `ResourceCreatedEventArgs` carries the
+  resource's address when it was created. CNA resources are C++ values, so one that is moved
+  afterwards -- `Texture2D::FromStream`'s by-value result moved into a `unique_ptr`, as the model
+  loaders do, or any resource moved by its owner -- leaves that address naming the moved-from
+  object; XNA's event reference keeps naming the returned object. A subscriber must not keep the
+  pointer past the creating expression.
 - Graphics: a SpriteEffect passed to `SpriteBatch.Begin` does not run its own matrix (FNA ignores
   `transformMatrix` there); `SpriteBatch.Draw`'s disposed-texture refusal names the texture's Name
   (unchecked against XNA). Out-of-range ShaderIndex on a stock clone (measured on XNA 4.0 under Wine,

@@ -18,6 +18,7 @@
 #include "System/NotSupportedException.hpp"
 #include "System/ObjectDisposedException.hpp"
 
+#include <atomic>
 #include <algorithm>
 #include <cstdint>
 #include <cstring>
@@ -254,14 +255,18 @@ namespace Microsoft::Xna::Framework::Graphics
     // without latching the result or detecting Lost/NotReset while the device is alive.
     bool DynamicVertexBuffer::getIsContentLostProperty() const
     {
-        if (!contentLost_)
+        // Written only when it turns true, through an atomic reference, so concurrent reads of a
+        // target whose device stays Normal never race (a latching write of false did).
+        std::atomic_ref<bool> latch(contentLost_);
+        if (!latch.load(std::memory_order_relaxed))
         {
             const auto* device = getGraphicsDeviceProperty();
-            contentLost_ = graphicsDeviceLifetime_.expired() || device == nullptr ||
+            if (graphicsDeviceLifetime_.expired() || device == nullptr ||
                 device->getIsDisposedProperty() ||
-                device->getGraphicsDeviceStatusProperty() != GraphicsDeviceStatus::Normal;
+                device->getGraphicsDeviceStatusProperty() != GraphicsDeviceStatus::Normal)
+                latch.store(true, std::memory_order_relaxed);
         }
-        return contentLost_;
+        return latch.load(std::memory_order_relaxed);
     }
 
     VertexBuffer::~VertexBuffer()

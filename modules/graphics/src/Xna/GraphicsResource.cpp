@@ -105,7 +105,17 @@ namespace Microsoft::Xna::Framework::Graphics
             graphicsDevice_->AddResourceReference(this);
             if (deferred)
             {
-                MarkUnannounced(this);
+                // The base constructor has not finished, so no destructor would retire the raw
+                // registration if marking it unannounced cannot allocate: retire it here.
+                try
+                {
+                    MarkUnannounced(this);
+                }
+                catch (...)
+                {
+                    graphicsDevice_->RemoveResourceReference(this);
+                    throw;
+                }
                 return;
             }
             try
