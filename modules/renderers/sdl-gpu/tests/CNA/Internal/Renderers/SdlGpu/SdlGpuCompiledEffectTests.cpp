@@ -1498,6 +1498,14 @@ TEST(SdlGpuCompiledEffectDrawTest, SharedHalfPixelCoverageContract)
     CNA::TestSupport::RunCompiledEffectHalfPixelCoverageContract(device);
 }
 
+TEST(SdlGpuCompiledEffectDrawTest, SharedDeviceSamplerAfterApplyContract)
+{
+    GraphicsDevice device;
+    if (!CNA::TestSupport::SupportsCompiledEffects(device))
+        GTEST_SKIP() << "selected renderer does not execute XNA Effect Framework bytecode";
+    CNA::TestSupport::RunCompiledEffectDeviceSamplerAfterApplyContract(device);
+}
+
 TEST(SdlGpuCompiledEffectDrawTest, SharedDeviceTextureSlotAfterApplyContract)
 {
     GraphicsDevice device;

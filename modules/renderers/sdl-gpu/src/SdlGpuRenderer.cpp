@@ -7636,6 +7636,18 @@ namespace CNA::Internal::Renderers::SdlGpu
                         samplerState =
                             (*params->compiledDeviceSamplerStates)[static_cast<int>(slot)];
                     }
+                    // Apply publishes the pass's sampler assignments to the device's collection,
+                    // and a sampler the game sets there afterwards is the one XNA uses
+                    // (SamplerStateCollection.set_Item IL_0029-0045), as for the vertex stage
+                    // above. Only a SpriteBatch draw keeps the pass's own state (MSR-003): its
+                    // sprite path does not go through the device's state flush.
+                    else if (samplerAssigned && spriteTextureOverride == nullptr &&
+                             params != nullptr && params->compiledDeviceSamplerStates != nullptr &&
+                             slot < static_cast<unsigned int>(SamplerStateCollection::MaxSamplers))
+                    {
+                        samplerState =
+                            (*params->compiledDeviceSamplerStates)[static_cast<int>(slot)];
+                    }
                 }
                 if (!vertexStage && slot == 0 && spriteTextureOverride != nullptr &&
                     *spriteTextureOverride)
