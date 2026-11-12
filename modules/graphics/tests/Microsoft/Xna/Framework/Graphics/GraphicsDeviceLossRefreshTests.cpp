@@ -14,6 +14,7 @@
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
 #include "Microsoft/Xna/Framework/Graphics/PresentationParameters.hpp"
 #include "Microsoft/Xna/Framework/Graphics/RenderTarget2D.hpp"
+#include "Microsoft/Xna/Framework/Graphics/RenderTargetCube.hpp"
 #include "System/ArgumentException.hpp"
 #include "System/ArgumentNullException.hpp"
 #include "System/ArgumentOutOfRangeException.hpp"
@@ -60,6 +61,41 @@ namespace
             EXPECT_EQ(std::string(e.what()), body);
         }
     }
+}
+
+// RV-TEX review #3: a render target's IsContentLost latches its device's loss when read, as XNA's
+// getter does (RenderTarget2D/RenderTargetCube.get_IsContentLost IL_0008-001f), without raising
+// ContentLost. GraphicsDevice.get_IsDeviceLost (IL_0000-000b) counts a released device as lost.
+TEST(GraphicsDeviceLossRefreshTest, ARenderTargetReadsItsDisposedDeviceAsContentLost)
+{
+    GraphicsDevice d(GraphicsAdapter::getDefaultAdapterProperty(), GraphicsProfile::HiDef, Parameters());
+    RenderTarget2D flat(d, 4, 4);
+    RenderTargetCube cube(d, 4, false, SurfaceFormat::Color, DepthFormat::None);
+    int raised = 0;
+    flat.ContentLost += [&](System::Object*, const System::EventArgs&) { ++raised; };
+    cube.ContentLost += [&](System::Object*, const System::EventArgs&) { ++raised; };
+    EXPECT_FALSE(flat.getIsContentLostProperty());
+    EXPECT_FALSE(cube.getIsContentLostProperty());
+    d.Dispose();
+    EXPECT_TRUE(flat.getIsContentLostProperty());
+    EXPECT_TRUE(cube.getIsContentLostProperty());
+    EXPECT_EQ(raised, 0);
+}
+
+// The live loss: inside DeviceLost the device is Lost, so a target read there is already lost --
+// not only after the reset that raises ContentLost.
+TEST(GraphicsDeviceLossRefreshTest, ARenderTargetReadDuringDeviceLostIsContentLost)
+{
+    CNA_SKIP_IF_RENDERER_IS_NOT(CNA::GraphicsRendererType::WebGPU);
+    GraphicsDevice d(GraphicsAdapter::getDefaultAdapterProperty(), GraphicsProfile::HiDef, Parameters());
+    RenderTarget2D target(d, 4, 4);
+    std::optional<bool> lostInHandler;
+    d.DeviceLost += [&](System::Object*, const System::EventArgs&) { lostInHandler = target.getIsContentLostProperty(); };
+    d.GetRenderer().DebugSimulateContextLoss();
+    ASSERT_TRUE(lostInHandler.has_value());
+    EXPECT_TRUE(*lostInHandler);
+    d.GetRenderer().DebugRestoreContext();
+    EXPECT_TRUE(target.getIsContentLostProperty()) << "the latch holds until the content is written";
 }
 
 TEST(GraphicsDeviceLossRefreshTest, RecoveryReportsLostNotResetNormalWithExactEventPayloads)

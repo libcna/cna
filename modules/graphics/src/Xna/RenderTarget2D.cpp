@@ -21,6 +21,22 @@
 
 namespace Microsoft::Xna::Framework::Graphics
 {
+    // Refresh RenderTarget2D.get_IsContentLost IL_0008-0014 stores the parent's IsDeviceLost while the
+    // flag is false and returns the latch (IL_0019-001f), without raising ContentLost;
+    // GraphicsDevice.get_IsDeviceLost IL_0000-000b also treats a released device as lost. The
+    // same rule as DynamicVertexBuffer's getter.
+    bool RenderTarget2D::getIsContentLostProperty() const
+    {
+        if (!contentLost_)
+        {
+            const auto* device = getGraphicsDeviceProperty();
+            contentLost_ = graphicsDeviceLifetime_.expired() || device == nullptr ||
+                device->getIsDisposedProperty() ||
+                device->getGraphicsDeviceStatusProperty() != GraphicsDeviceStatus::Normal;
+        }
+        return contentLost_;
+    }
+
     using CNA::Internal::Graphics::ProfileDiagnostic;
     using CNA::Internal::Graphics::ProfileFormatName;
     using CNA::Internal::Renderers::IRenderTargetRenderer;

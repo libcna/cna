@@ -79,8 +79,11 @@ namespace Microsoft::Xna::Framework::Graphics
          * bound (Clear IL_01e4-020f; a refused Clear leaves it set), or a completed `SetData` into
          * it (CopyData; a refused `SetData` and every `GetData` leave it set). Binding the target
          * alone does not clear it. Renderers whose API cannot lose a device never set it.
+         *
+         * While false, a read also latches the device's own loss: a device that is lost, not
+         * reset, disposed or destroyed makes it true (XNA get_IsContentLost IL_0008-001f).
          */
-        [[nodiscard]] bool getIsContentLostProperty() const { return contentLost_; }
+        [[nodiscard]] bool getIsContentLostProperty() const;
 
         /** @brief Marks the content lost and raises ContentLost. */
         CNAEXT void NotifyContentLostEXT() override
@@ -122,6 +125,6 @@ namespace Microsoft::Xna::Framework::Graphics
 
     private:
         /** @brief Set by a real renderer-reported device reset; cleared by the next write. */
-        bool contentLost_ = false;
+        mutable bool contentLost_ = false;
     };
 }
