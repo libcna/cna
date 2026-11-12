@@ -2803,7 +2803,10 @@ TEST(SaveAsPngRoundingTest, AFloatTexelRoundsHalfToEvenAsXnaPacksAColor)
                           PresentationParameters::CreateWindowedEXT(64, 64));
     std::unique_ptr<Texture2D> single;
     try { single = std::make_unique<Texture2D>(device, 1, 1, false, SurfaceFormat::Single); }
-    catch (const System::NotSupportedException&) { GTEST_SKIP() << "renderer has no Single textures"; }
+    // The profile refuses with NotSupportedException; a renderer without the format (HEADLESS) with
+    // InvalidOperationException.
+    catch (const System::NotSupportedException&) { GTEST_SKIP() << "no Single textures here"; }
+    catch (const System::InvalidOperationException&) { GTEST_SKIP() << "renderer has no Single textures"; }
     ASSERT_EQ(0.3f * 255.0f, 76.5f);
     const float texel = 0.3f;
     single->SetData(&texel, 1);
