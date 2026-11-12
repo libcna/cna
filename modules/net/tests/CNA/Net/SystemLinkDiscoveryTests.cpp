@@ -778,5 +778,95 @@ TEST_F(SystemLinkDiscoveryTest, TwoPathsTrainsAreTimedApart)
     ASSERT_EQ(found.size(), 1u);
     EXPECT_GT(Downstream(found, "FarHost"), 300'000) << "the two paths' trains were spliced";
 }
+
+// Two probes by the listed address (its six between them lost) span the same eight indices as the
+// second address's complete train, but they are not the more complete measurement.
+TEST_F(SystemLinkDiscoveryTest, TheTrainWithMoreProbesReceivedIsTheMeasurement)
+{
+    FakeFarHost firstPath("127.0.0.1"), secondPath("127.0.0.3");
+    ASSERT_TRUE(firstPath.Ready() && secondPath.Ready());
+    SystemLinkDiscovery::setExtraSearchAddressesProperty({firstPath.SearchAddress(), secondPath.SearchAddress()});
+
+    auto host = std::async(std::launch::async, [&]
+    {
+        const auto toFirst = firstPath.WaitForQuery();
+        const auto toSecond = secondPath.WaitForQuery();
+        if (!toFirst || !toSecond) return false;
+        bool sent = firstPath.Send(*toFirst, NetDiscoveryProtocol::Encode(FarAnnounce("FarHost", 40000, 6)));
+        sent = secondPath.Send(*toSecond, NetDiscoveryProtocol::Encode(FarAnnounce("FarHost", 40000, 6))) && sent;
+        for (uint8_t index = 0; index < kQosProbeCount; ++index)
+        {
+            std::this_thread::sleep_for(std::chrono::milliseconds(1));
+            sent = secondPath.Send(*toSecond, Probe(40000, index)) && sent;
+        }
+        // Back to back: seven indices over microseconds would read as far beyond 20 MB/s.
+        sent = firstPath.Send(*toFirst, Probe(40000, 0)) && sent;
+        return firstPath.Send(*toFirst, Probe(40000, kQosProbeCount - 1)) && sent;
+    });
+    const auto found = FoundFar(ENetDiscoveryService::FindSessions(NetworkSessionType::SystemLink));
+    ASSERT_TRUE(host.get());
+    ASSERT_EQ(found.size(), 1u);
+    const int downstream = Downstream(found, "FarHost");
+    EXPECT_GT(downstream, 0);
+    EXPECT_LT(downstream, 20'000'000) << "two probes outranked a complete train";
+}
+
+// A host that answered two copies of the query sends two trains by one address. A partial first
+// train is not extended by the second one's tail.
+TEST_F(SystemLinkDiscoveryTest, ARepeatedTrainByOneAddressDoesNotExtendAPartialOne)
+{
+    FakeFarHost far("127.0.0.1");
+    ASSERT_TRUE(far.Ready());
+    SystemLinkDiscovery::setExtraSearchAddressesProperty({far.SearchAddress()});
+
+    auto host = std::async(std::launch::async, [&]
+    {
+        const auto from = far.WaitForQuery();
+        if (!from) return false;
+        bool sent = far.Send(*from, NetDiscoveryProtocol::Encode(FarAnnounce("FarHost", 40000, 7)));
+        for (uint8_t index = 0; index < 4; ++index)
+        {
+            std::this_thread::sleep_for(std::chrono::milliseconds(1));
+            sent = far.Send(*from, Probe(40000, index)) && sent;
+        }
+        std::this_thread::sleep_for(std::chrono::milliseconds(60));
+        for (uint8_t index = 0; index < kQosProbeCount; ++index)
+        {
+            std::this_thread::sleep_for(std::chrono::milliseconds(1));
+            sent = far.Send(*from, Probe(40000, index)) && sent;
+        }
+        return sent;
+    });
+    const auto found = FoundFar(ENetDiscoveryService::FindSessions(NetworkSessionType::SystemLink));
+    ASSERT_TRUE(host.get());
+    ASSERT_EQ(found.size(), 1u);
+    // The first train alone: three intervals of about 1 ms, near 1.2 MB/s; spliced, ~70 ms.
+    EXPECT_GT(Downstream(found, "FarHost"), 300'000) << "the repeated train extended the first one";
+}
+
+// Two older hosts on one port; the second then answers by its own address with the first one's
+// gamertag. Its address, already its own, keeps it the second host, and so does its report.
+TEST_F(SystemLinkDiscoveryTest, ALegacyHostsOwnAddressWinsOverAnotherHostsGamertag)
+{
+    FakeFarHost first("127.0.0.2"), second("127.0.0.3");
+    ASSERT_TRUE(first.Ready() && second.Ready());
+    SystemLinkDiscovery::setExtraSearchAddressesProperty({first.SearchAddress(), second.SearchAddress()});
+
+    auto hosts = std::async(std::launch::async, [&]
+    {
+        const auto toFirst = first.WaitForQuery();
+        const auto toSecond = second.WaitForQuery();
+        if (!toFirst || !toSecond) return false;
+        bool sent = first.Send(*toFirst, NetDiscoveryProtocol::Encode(FarAnnounce("FarOldA", 40008, 0)));
+        sent = second.Send(*toSecond, NetDiscoveryProtocol::Encode(FarAnnounce("FarOldB", 40008, 0))) && sent;
+        sent = second.Send(*toSecond, NetDiscoveryProtocol::Encode(FarAnnounce("FarOldA", 40008, 0))) && sent;
+        return second.Send(*toSecond, Report(40008, 22222)) && sent;
+    });
+    const auto found = FoundFar(ENetDiscoveryService::FindSessions(NetworkSessionType::SystemLink));
+    ASSERT_TRUE(hosts.get());
+    ASSERT_EQ(found.size(), 2u);
+    EXPECT_EQ(Upstream(found, "FarOldB"), 22222);
+    EXPECT_EQ(Upstream(found, "FarOldA"), 0);
+}
 #endif
 #endif

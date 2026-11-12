@@ -67,6 +67,11 @@ namespace CNA::Internal::Net
             {
                 std::string Address;
                 int FirstIndex = -1, LastIndex = -1;
+                // Probes recorded: the span alone would rank two of eight probes like eight.
+                int Received = 0;
+                // A second train began on this path (the host answered two copies of the query);
+                // its later probes would time the first train's tail by the second's.
+                bool Closed = false;
                 std::chrono::steady_clock::time_point FirstArrival, LastArrival;
             };
             std::vector<ProbeTrain> Trains;
@@ -106,12 +111,16 @@ namespace CNA::Internal::Net
                 [&](const Found::ProbeTrain& candidate) { return candidate.Address == address; });
             if (train == found.Trains.end())
             {
-                found.Trains.push_back(Found::ProbeTrain{address, probe.Index, probe.Index, at, at});
+                found.Trains.push_back(Found::ProbeTrain{address, probe.Index, probe.Index, 1, false, at, at});
                 return;
             }
+            if (train->Closed) return;
+            // Index 0 is a train's first probe: after later ones it starts a repeated train.
+            if (probe.Index == 0 && train->LastIndex > 0) { train->Closed = true; return; }
             if (probe.Index <= train->LastIndex) return;
             train->LastIndex = probe.Index;
             train->LastArrival = at;
+            ++train->Received;
         }
 
         // Bytes per second of a train: the probes after the first over the time they took to arrive.
@@ -125,15 +134,19 @@ namespace CNA::Internal::Net
             return static_cast<int>(std::min(rate, 2147483647.0));
         }
 
-        // The most complete of a host's trains; on a tie, the one by the address it is listed with.
+        // The host's train with the most probes received, then the longest; on a tie, the one by
+        // the address it is listed with.
         int DownstreamEstimate(const Found& found)
         {
             const Found::ProbeTrain* best = nullptr;
             for (const Found::ProbeTrain& train : found.Trains)
             {
+                if (best == nullptr) { best = &train; continue; }
                 const int span = train.LastIndex - train.FirstIndex;
-                const int bestSpan = best != nullptr ? best->LastIndex - best->FirstIndex : -1;
-                if (span > bestSpan || (span == bestSpan && train.Address == found.Address))
+                const int bestSpan = best->LastIndex - best->FirstIndex;
+                if (train.Received != best->Received ? train.Received > best->Received
+                    : span != bestSpan ? span > bestSpan
+                    : train.Address == found.Address)
                     best = &train;
             }
             return best != nullptr
@@ -538,17 +551,22 @@ namespace CNA::Internal::Net
                             // gamertag, so two such hosts on one port still list apart unless they
                             // also share the gamertag; an address it already answered from stays
                             // its own even if the gamertag changed between two replies.
-                            const auto known = std::find_if(
-                                currentResults_->begin(), currentResults_->end(),
-                                [&](const Found& existing)
+                            const auto sameHost = [&](bool byAddress)
+                            {
+                                return [&, byAddress](const Found& existing)
                                 {
                                     return existing.Announce.ConnectPort == announce.ConnectPort
                                         && existing.Announce.HostInstance == announce.HostInstance
                                         && (announce.HostInstance != 0
-                                            || existing.Announce.HostGamertag == announce.HostGamertag
-                                            || AnsweredFrom(existing, address));
-                                }
-                            );
+                                            || (byAddress ? AnsweredFrom(existing, address)
+                                                          : existing.Announce.HostGamertag == announce.HostGamertag));
+                                };
+                            };
+                            // A legacy host's own address decides before its gamertag, which another
+                            // host on the port may share.
+                            auto known = std::find_if(currentResults_->begin(), currentResults_->end(), sameHost(true));
+                            if (known == currentResults_->end())
+                                known = std::find_if(currentResults_->begin(), currentResults_->end(), sameHost(false));
                             if (known != currentResults_->end())
                             {
                                 if (!AnsweredFrom(*known, address) && known->Aliases.size() < 8)
