@@ -920,3 +920,59 @@ TEST_F(Texture3DTextureCubeContentTypeReaderTest, ANonPositiveLevelCountCreatesA
         }
     }
 }
+
+// Refresh Texture3DReader.Read and TextureCubeReader.Read never load their existingInstance argument
+// (no ldarg.2): a supplied texture is neither refused for its size nor written, and the result is new.
+TEST_F(Texture3DTextureCubeContentTypeReaderTest, BothReadersIgnoreAnExistingInstance)
+{
+    const auto read = [this](bool cube, std::any existing) {
+        System::IO::MemoryStream stream;
+        System::IO::BinaryWriter writer(&stream, true);
+        writer.Write(static_cast<int32_t>(SurfaceFormat::Color));
+        writer.Write(static_cast<int32_t>(1));
+        if (!cube)
+        {
+            writer.Write(static_cast<int32_t>(1));
+            writer.Write(static_cast<int32_t>(1));
+        }
+        writer.Write(static_cast<int32_t>(1));
+        for (int level = 0; level < (cube ? 6 : 1); ++level)
+        {
+            writer.Write(static_cast<int32_t>(4));
+            for (int i = 0; i < 4; ++i) writer.Write(static_cast<std::uint8_t>(0x21));
+        }
+        writer.Flush();
+        const auto bytes = stream.ToArray();
+        ContentManager content;
+        content.setGraphicsDevice(gd);
+        System::IO::MemoryStream body(bytes.data(), static_cast<int32_t>(bytes.size()));
+        ContentReader reader(&content, &body, "test", 5, 'w');
+        auto typeReader = ContentTypeReaderManager::CreateReader(
+            cube ? "Microsoft.Xna.Framework.Content.TextureCubeReader"
+                 : "Microsoft.Xna.Framework.Content.Texture3DReader");
+        return typeReader->ReadUntyped(reader, std::move(existing));
+    };
+    const Color fill(0x7a, 0x7a, 0x7a, 0x7a);
+    if (CubeStorageSupported())
+    {
+        TextureCube existing(gd, 2, false, SurfaceFormat::Color);
+        const std::vector<Color> face(4, fill);
+        existing.SetData(CubeMapFace::PositiveX, face.data(), 0, 4);
+        const std::any result = read(true, std::any(existing));
+        const auto& cube = std::any_cast<const TextureCube&>(result);
+        EXPECT_EQ(cube.getSizeProperty(), 1);
+        EXPECT_EQ(existing.getSizeProperty(), 2);
+        std::vector<std::uint8_t> back(16);
+        existing.GetData(CubeMapFace::PositiveX, back.data(), 16);
+        EXPECT_EQ(back, std::vector<std::uint8_t>(16, 0x7a)) << "the existing cube was written";
+    }
+    if (gd.SupportsCapability(CNA::GraphicsCapability::Texture3D))
+    {
+        auto existing = std::make_shared<Texture3D>(gd, 2, 2, 2, false, SurfaceFormat::Color);
+        const auto result = std::any_cast<std::shared_ptr<Texture3D>>(read(false, std::any(existing)));
+        ASSERT_NE(result, nullptr);
+        EXPECT_NE(result.get(), existing.get());
+        EXPECT_EQ(result->getWidthProperty(), 1);
+        EXPECT_EQ(existing->getWidthProperty(), 2);
+    }
+}

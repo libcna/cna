@@ -43,7 +43,7 @@ namespace CNA::Internal::Xnb
         }
     }
 
-    TextureCube TextureCubeReader::Read(ContentReader& input, std::optional<TextureCube> existingInstance)
+    TextureCube TextureCubeReader::Read(ContentReader& input, std::optional<TextureCube> /*existingInstance*/)
     {
         const XnbTextureData decoded = DecodeTextureCubeXnbData(input);
         const int32_t size = static_cast<int32_t>(decoded.width);
@@ -56,24 +56,13 @@ namespace CNA::Internal::Xnb
         const SurfaceFormat uploadFormat = keepCompressed
             ? decoded.surfaceFormat
             : (IsCompressed(decoded.surfaceFormat) ? SurfaceFormat::Color : decoded.surfaceFormat);
-        if (existingInstance.has_value()
-            && (existingInstance->getSizeProperty() != size
-                || existingInstance->getFormatProperty() != uploadFormat
-                || existingInstance->getLevelCountProperty() != levels))
-        {
-            throw ContentLoadException(
-                "TextureCubeReader: existing texture size, format, or mip count does not match "
-                "the serialized asset.");
-        }
-
         std::vector<std::vector<uint8_t>> uploadLevels =
             IsCompressed(decoded.surfaceFormat) && !keepCompressed
                 ? ConvertXnbTextureToCnbRgba8(decoded, true).representations.front().levels
                 : decoded.levels;
 
-        TextureCube textureCube = existingInstance.has_value()
-            ? std::move(*existingInstance)
-            : TextureCube(device, size, levels > 1, uploadFormat);
+        // Refresh TextureCubeReader.Read never loads existingInstance: it constructs a new cube.
+        TextureCube textureCube(device, size, levels > 1, uploadFormat);
 
         for (int32_t face = 0; face < 6; ++face)
         {

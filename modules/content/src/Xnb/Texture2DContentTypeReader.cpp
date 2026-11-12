@@ -79,7 +79,7 @@ namespace CNA::Internal::Xnb
         }
     }
 
-    Texture2D Texture2DReader::Read(ContentReader& input, std::optional<Texture2D> existingInstance)
+    Texture2D Texture2DReader::Read(ContentReader& input, std::optional<Texture2D> /*existingInstance*/)
     {
         GraphicsDevice* device = input.getContentManagerProperty()
             ? &CNA::Internal::ContentManagerAccess::GraphicsDeviceFromContentReader(input)
@@ -92,20 +92,17 @@ namespace CNA::Internal::Xnb
         }
         // Refresh Texture2DReader.Read constructs the texture once the header is read
         // (IL_001f-002f) -- the constructor's refusals, the profile's size limit among them, come
-        // before any level is read -- and then reads and sets the levels (IL_0035-0064).
+        // before any level is read -- and then reads and sets the levels (IL_0035-0064). It never
+        // loads its existingInstance argument: a supplied texture is neither checked nor written.
         std::optional<Texture2D> constructed;
-        const bool reload = existingInstance.has_value();
         const XnbTextureData decoded = DecodeTexture2DXnbData(
             input, static_cast<std::uint32_t>(device->GetMaxTextureDimension()),
             [&](const XnbTextureData& header) {
-                if (!reload)
-                {
-                    constructed.emplace(ConstructTexture2DForXnbData(*device, header));
-                }
+                constructed.emplace(ConstructTexture2DForXnbData(*device, header));
             });
         if (!constructed)
         {
-            return CreateTexture2DFromXnbData(input, *device, decoded, std::move(existingInstance));
+            return CreateTexture2DFromXnbData(input, *device, decoded, std::nullopt);
         }
         UploadTexture2DXnbData(*constructed, *device, decoded);
         return std::move(*constructed);

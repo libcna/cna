@@ -119,11 +119,16 @@ page under `docs/` (index: `docs/README.md`), deliberate divergences from FNA an
   lost with the effect that owned it.
 - C API: content tags of meshes/parts have no C route; HND-TQ-22 C route (ObjectValue handles, ABI 0.61)
   not done; `CNA::Net::SystemLinkDiscovery` (GALAXY-NET-01) has no C route (planned, CBIND-127).
-- Content: a level count past the full chain or a wrong level byte count is ContentLoadException in CNA
-  where XNA fails inside SetData (type unconfirmed); the TextureCube reader still decodes before it
-  constructs, so the profile's cube refusals come after the levels; Reach NPOT DXT textures are
-  uploaded as Color by CNA although XNA's Texture2D constructor refuses them (IL_00d0-0122); XNA's
-  Texture2D/Texture3D readers ignore an existing instance, CNA reloads into it. LZX (KI-CONTENT-LZXGRAN,
+- Content (review rv-content, 2026-11-12, source-traced): XNA's three texture readers read and set
+  each level in turn, so a level count past the full chain fails inside SetData with
+  InvalidOperationException ("An unexpected error has occurred.", D3DERR_INVALIDCALL) and a wrong
+  level byte count with ArgumentException (InvalidTotalSize), after the earlier levels are set; CNA
+  decodes every level first and refuses both with ContentLoadException. The TextureCube reader still
+  decodes before it constructs, so the profile's cube refusals come after the levels, and the
+  Texture2D reader looks up the device before it reads the header. Reach NPOT DXT textures are
+  uploaded as Color although XNA's Texture2D constructor refuses them (IL_00d0-0122): this keeps
+  HiDef-built content loadable on a Reach device (owner decision, 2026-11-04), and the Platformer
+  HUD font fixture is such a HiDef XNB. LZX (KI-CONTENT-LZXGRAN,
   measured on XnaNative 4.0.30901): a valid frame after a short one is unmeasured, and the loss of
   buffered output when a chunk fetch fails has no test. sharp-runtime `BinaryReader(nullptr)` names
   the parameter "stream" (.NET 4: "input").

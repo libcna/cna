@@ -31,13 +31,14 @@ namespace CNA::Internal::Xnb
     }
 
     std::shared_ptr<Texture3D> Texture3DReader::Read(
-        ContentReader& input, std::optional<std::shared_ptr<Texture3D>> existingInstance)
+        ContentReader& input, std::optional<std::shared_ptr<Texture3D>> /*existingInstance*/)
     {
         // Refresh Texture3DReader.Read reads the header, looks up the device and constructs the
         // texture (IL_0025-0035) -- whose CreateTexture refuses a profile without volume textures,
         // Reach, before anything else about the request (IL_0050-0074) -- and only then reads the
-        // levels (IL_003c-008a).
-        std::shared_ptr<Texture3D> texture = existingInstance.value_or(nullptr);
+        // levels (IL_003c-008a). Like Texture2DReader it never loads existingInstance, so a
+        // supplied volume is neither written nor a way around Reach's refusal.
+        std::shared_ptr<Texture3D> texture;
         const XnbTextureData decoded = DecodeTexture3DXnbData(
             input, [&](const XnbTextureData& header) {
                 if (!texture)

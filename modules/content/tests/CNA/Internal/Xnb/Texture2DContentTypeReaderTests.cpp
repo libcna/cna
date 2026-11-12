@@ -820,3 +820,42 @@ TEST_F(Texture2DContentTypeReaderTest, MipLevelCountExceedingCeilingThrowsConten
 
     EXPECT_THROW(typeReader->ReadUntyped(reader, std::any{}), ContentLoadException);
 }
+
+// Refresh Texture2DReader.Read never loads its existingInstance argument (no ldarg.2): a supplied
+// texture of another size is not refused, one of the same size is not written, and the result is a
+// new texture either way.
+TEST_F(Texture2DContentTypeReaderTest, TheReaderIgnoresAnExistingInstance)
+{
+    using Microsoft::Xna::Framework::Color;
+    for (const int existingSize : {2, 1})
+    {
+        SCOPED_TRACE(existingSize);
+        Texture2D existing(gd, existingSize, existingSize);
+        const std::vector<Color> fill(static_cast<std::size_t>(existingSize * existingSize),
+                                      Color(0x7a, 0x7a, 0x7a, 0x7a));
+        existing.SetData(fill.data(), static_cast<int>(fill.size()));
+        System::IO::MemoryStream stream;
+        System::IO::BinaryWriter writer(&stream, true);
+        writer.Write(static_cast<int32_t>(SurfaceFormat::Color));
+        writer.Write(static_cast<int32_t>(1));
+        writer.Write(static_cast<int32_t>(1));
+        writer.Write(static_cast<int32_t>(1));
+        writer.Write(static_cast<int32_t>(4));
+        for (int i = 0; i < 4; ++i) writer.Write(static_cast<std::uint8_t>(0x21));
+        writer.Flush();
+        const auto bytes = stream.ToArray();
+        ContentManager cm;
+        cm.setGraphicsDevice(gd);
+        System::IO::MemoryStream body(bytes.data(), static_cast<int32_t>(bytes.size()));
+        ContentReader reader(&cm, &body, "test", 5, 'w');
+        auto typeReader = ContentTypeReaderManager::CreateReader(
+            "Microsoft.Xna.Framework.Content.Texture2DReader");
+        ASSERT_NE(typeReader, nullptr);
+        Texture2D result = std::any_cast<Texture2D>(typeReader->ReadUntyped(reader, std::any(existing)));
+        EXPECT_EQ(result.getWidthProperty(), 1);
+        EXPECT_NE(result.GetRendererWeak().lock(), existing.GetRendererWeak().lock());
+        std::vector<Color> back(fill.size());
+        existing.GetData(back.data(), static_cast<int>(back.size()));
+        EXPECT_EQ(back, fill) << "the existing texture was written";
+    }
+}
