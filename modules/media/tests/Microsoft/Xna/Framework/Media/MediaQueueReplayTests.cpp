@@ -3,7 +3,12 @@
 #include <gtest/gtest.h>
 #include <filesystem>
 #include <string>
+#include "CNA/Internal/Media/MediaLibraryPaths.hpp"
 #include "CNA/TestSupport/TestScratch.hpp"
+#include "Microsoft/Xna/Framework/Media/Album.hpp"
+#include "Microsoft/Xna/Framework/Media/Artist.hpp"
+#include "Microsoft/Xna/Framework/Media/Genre.hpp"
+#include "Microsoft/Xna/Framework/Media/MediaLibrary.hpp"
 #include "Microsoft/Xna/Framework/Media/MediaPlayer.hpp"
 #include "Microsoft/Xna/Framework/Media/SongCollection.hpp"
 #include "System/Environment.hpp"
@@ -93,6 +98,50 @@ TEST_F(MediaQueueReplayTest, QueueEntriesKeepTheirSongsMetadata)
     ASSERT_EQ(queue.getCountProperty(), 2);
     EXPECT_EQ(queue[1]->getDurationProperty().getTotalMillisecondsProperty(), 5678.0);
     EXPECT_EQ(queue[1]->getNameProperty(), "Second");
+}
+
+// Review rv-fix7 #1: a queue entry keeps a scanned song's Album, Artist and Genre while their
+// library lives (XNA's queue item wraps the native item, MediaQueue.get_Item IL_001f-0032, and
+// Song.get_Album/get_Artist/get_Genre IL_002a-0048 query it); once the library is gone the entry
+// answers the Empty sentinels instead of dangling.
+TEST_F(MediaQueueReplayTest, QueueEntriesKeepLibraryRelationshipsWhileTheLibraryLives)
+{
+    CNA::Internal::Media::MediaLibraryPaths::SetMusicRootOverride("tests/assets/media/music");
+    CNA::Internal::Media::MediaLibraryPaths::SetPictureRootOverride("tests/assets/media/pictures");
+    auto library = std::make_unique<MediaLibrary>();
+    Song* scanned = nullptr;
+    for (SharpRuntime::intcs i = 0; i < library->getSongsProperty()->getCountProperty(); ++i)
+    {
+        Song* candidate = (*library->getSongsProperty())[i];
+        if (!candidate->getAlbumProperty()->getNameProperty().empty() &&
+            !candidate->getArtistProperty()->getNameProperty().empty() &&
+            !candidate->getGenreProperty()->getNameProperty().empty())
+        {
+            scanned = candidate;
+            break;
+        }
+    }
+    ASSERT_NE(scanned, nullptr) << "the fixture library has no song with album, artist and genre";
+    Album* album = scanned->getAlbumProperty();
+    Artist* artist = scanned->getArtistProperty();
+    Genre* genre = scanned->getGenreProperty();
+
+    MediaPlayer::Play(scanned);
+    auto& queue = MediaPlayer::getQueueProperty();
+    ASSERT_EQ(queue.getCountProperty(), 1);
+    Song* entry = queue.getActiveSongProperty();
+    ASSERT_NE(entry, scanned) << "the queue holds its own copy";
+    EXPECT_EQ(entry->getAlbumProperty(), album);
+    EXPECT_EQ(entry->getArtistProperty(), artist);
+    EXPECT_EQ(entry->getGenreProperty(), genre);
+
+    library.reset();
+    CNA::Internal::Media::MediaLibraryPaths::SetMusicRootOverride("");
+    CNA::Internal::Media::MediaLibraryPaths::SetPictureRootOverride("");
+    EXPECT_EQ(entry->getAlbumProperty()->getNameProperty(), "");
+    EXPECT_EQ(entry->getArtistProperty()->getNameProperty(), "");
+    EXPECT_EQ(entry->getGenreProperty()->getNameProperty(), "");
+    EXPECT_EQ(entry->getAlbumProperty()->getSongsProperty()->getCountProperty(), 0);
 }
 
 // RV-MEDIA review #7: XNA plays the song's handle (MediaQueue.Play(Song) IL_001b-002e); a song

@@ -291,6 +291,7 @@ namespace Microsoft::Xna::Framework::Media
             // MediaLibraryIndex already parsed this from the file's own tags; it just was never
             // handed to Song, so getTrackNumberProperty() returned a hardcoded 0 for every library
             // song -- real data parsed and then dropped (MEDIA-181).
+            song->library_     = lifetime_;
             song->trackNumber_ = static_cast<SharpRuntime::intcs>(indexed.trackNumber);
             song->rating_      = static_cast<SharpRuntime::intcs>(indexed.rating);
             song->isRated_     = indexed.hasRating;

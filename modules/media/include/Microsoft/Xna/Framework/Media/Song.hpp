@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MS-PL
 #pragma once
 
+#include <memory>
 #include <string>
 
 #include "CNA/CNAHelper.hpp"
@@ -271,12 +272,13 @@ namespace Microsoft::Xna::Framework::Media
         static Genre& EmptyGenreInternal();
         static AlbumCollection& EmptyAlbumsInternal();
         // Non-owning back-pointers into the MediaLibrary that produced this song; null for any
-        // song not created by a library scan. The library outlives the songs it owns, so these do
-        // not dangle in normal use -- the same non-owning-pointer contract Album::songs_ already
-        // relies on (MEDIA-174).
+        // song not created by a library scan. A copy (a MediaPlayer queue entry) can outlive that
+        // library, so the pointers are read only while library_ -- the library's lifetime token --
+        // is alive; afterwards the getters answer XNA's Empty sentinels instead of dangling.
         Album*  album_  = nullptr;
         Artist* artist_ = nullptr;
         Genre*  genre_  = nullptr;
+        std::weak_ptr<const void> library_;
 
         // Populated by MediaLibrary from the file's own tags (MEDIA-181). The index
         // already parsed the track number; it simply was never handed to Song, so this property

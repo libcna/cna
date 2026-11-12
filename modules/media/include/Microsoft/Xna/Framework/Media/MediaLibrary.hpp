@@ -213,5 +213,10 @@ namespace Microsoft::Xna::Framework::Media
         std::unique_ptr<PlaylistCollection> playlistsCollection_;
 
         PictureAlbum* rootPictureAlbum_ = nullptr; // points into ownedPictureAlbums_
+
+        // Songs and their copies hold this weakly: once the library (and with it every Album,
+        // Artist and Genre it owns) is destroyed, a copied Song's relationships read as Empty.
+        // Declared last so it expires before the objects it guards are destroyed.
+        std::shared_ptr<const void> lifetime_ = std::make_shared<char>('\0');
     };
 }

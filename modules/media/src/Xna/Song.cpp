@@ -91,6 +91,7 @@ namespace Microsoft::Xna::Framework::Media
 
     Song::Song(const Song& other)
         : System::Object(other), album_(other.album_), artist_(other.artist_), genre_(other.genre_),
+          library_(other.library_),
           trackNumber_(other.trackNumber_), rating_(other.rating_), isRated_(other.isRated_),
           name_(other.name_), duration_(other.duration_), playCount_(other.playCount_),
           isDisposed_(other.isDisposed_), handle_(other.handle_),
@@ -104,6 +105,7 @@ namespace Microsoft::Xna::Framework::Media
             album_ = other.album_;
             artist_ = other.artist_;
             genre_ = other.genre_;
+            library_ = other.library_;
             trackNumber_ = other.trackNumber_;
             rating_ = other.rating_;
             isRated_ = other.isRated_;
@@ -133,19 +135,19 @@ namespace Microsoft::Xna::Framework::Media
     Album* Song::getAlbumProperty() const
     {
         ThrowIfDisposed(isDisposed_, "Song");
-        return album_ != nullptr ? album_ : &EmptyAlbumInternal();
+        return album_ != nullptr && !library_.expired() ? album_ : &EmptyAlbumInternal();
     }
 
     Artist* Song::getArtistProperty() const
     {
         ThrowIfDisposed(isDisposed_, "Song");
-        return artist_ != nullptr ? artist_ : &EmptyArtistInternal();
+        return artist_ != nullptr && !library_.expired() ? artist_ : &EmptyArtistInternal();
     }
 
     Genre* Song::getGenreProperty() const
     {
         ThrowIfDisposed(isDisposed_, "Song");
-        return genre_ != nullptr ? genre_ : &EmptyGenreInternal();
+        return genre_ != nullptr && !library_.expired() ? genre_ : &EmptyGenreInternal();
     }
 
     System::TimeSpan Song::getDurationProperty() const

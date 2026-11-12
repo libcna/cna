@@ -563,11 +563,8 @@ namespace Microsoft::Xna::Framework::Media
         auto entry = std::make_unique<Song>(*song);
         entry->contentOwnership_.Detach();
         entry->isDisposed_ = false;
-        // Album, Artist and Genre point into the MediaLibrary that scanned the song, which the
-        // queue does not keep alive: the entry does not carry them.
-        entry->album_ = nullptr;
-        entry->artist_ = nullptr;
-        entry->genre_ = nullptr;
+        // Album, Artist and Genre point into the MediaLibrary that scanned the song; the copy keeps
+        // them, read only while that library lives (Song::library_), and Empty afterwards.
         queue_.Add(entry.release());
     }
 
