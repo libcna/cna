@@ -211,6 +211,23 @@ TEST(XactScheduler, ScheduledCueAuthoredStopRunsEventsDuringFadeAndCancelsAtDead
     EXPECT_EQ(CueTestAccess::PendingEvents(*cue),0u);
 }
 
+TEST(XactScheduler, ASecondAuthoredCueStopRestartsTheReleaseUnlikeAPublicStop)
+{
+    // An authored cue-wide Stop event calls BeginFadeOut directly (FAudio FACT_internal.c:
+    // 1224-1252), which restarts the release (:936-940); only the public FACTCue_Stop
+    // (FACT.c:2393-2403) leaves a release under way alone.
+    ScheduledBanks b({{PlayAt(0,0,255),StopAt(20,2)},{StopAt(70,2)}},100);
+    auto cue=b.Play(); b.Tick(20); EXPECT_TRUE(cue->getIsStoppingProperty());
+    b.Tick(70); b.Tick(130);
+    EXPECT_TRUE(cue->getIsStoppingProperty()) << "the second authored stop did not restart the release";
+    b.Tick(170); EXPECT_TRUE(cue->getIsStoppedProperty());
+
+    ScheduledBanks p({{PlayAt(0,0,255)}},100);
+    auto stopped=p.Play(); p.Tick(10); stopped->Stop(AudioStopOptions::AsAuthored);
+    p.Tick(60); stopped->Stop(AudioStopOptions::AsAuthored);
+    p.Tick(115); EXPECT_TRUE(stopped->getIsStoppedProperty()) << "a public authored stop restarted the release";
+}
+
 TEST(XactScheduler, PauseBeforeFirstEventExcludesPausedTimeAndIsIdempotent)
 {
     ScheduledBanks b({{PlayAt(20)}}); auto cue=b.Play();

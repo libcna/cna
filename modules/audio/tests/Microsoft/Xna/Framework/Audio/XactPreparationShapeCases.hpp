@@ -231,3 +231,16 @@ TEST(HndXactPreparation, AuthoredBuiltInCueVariablesKeepTheirInitialValueRangeAn
     cue->SetVariable("AttackTime",5.0f);
     EXPECT_FLOAT_EQ(cue->GetVariable("AttackTime"),0.0f);
 }
+
+TEST(HndXactPreparation, Apply3DKeepsTheAuthoredDistanceRange)
+{
+    // XACT3DApply (Xact IL_0039-0063) writes Distance through the cue's SetVariable; the genuine
+    // project authors it in [0, 1000000].
+    auto b=PreparationShapeBanks("resident");
+    auto cue=CountCue(*b->sound,"ShapeCue");
+    AudioListener listener;
+    AudioEmitter emitter;
+    emitter.setPositionProperty(Microsoft::Xna::Framework::Vector3(2000000.0f,0.0f,0.0f));
+    cue->Apply3D(listener,emitter);
+    EXPECT_FLOAT_EQ(cue->GetVariable("Distance"),1000000.0f);
+}

@@ -171,6 +171,13 @@ TEST(XactInstanceCount, PublicLookupRetainsVariableDomainAndDisposalValidation)
         ScheduledBanks b({{PlayAt(0,0,255)}},0,false,CountRpcXgs(access));auto cue=b.Play();
         EXPECT_THROW((void)NumInstances(*cue),System::IndexOutOfRangeException);
     }
+    // A built-in name the project authors as a private cue variable is refused too; only a
+    // project that does not author it at all falls back to the built-in default.
+    {
+        ScheduledBanks b({{PlayAt(0,0,255)}},0,false,CountRpcXgs(6,"Distance"));auto cue=b.Play();
+        EXPECT_THROW((void)cue->GetVariable("Distance"),System::IndexOutOfRangeException);
+        EXPECT_THROW(cue->SetVariable("Distance",9.0f),System::IndexOutOfRangeException);
+    }
     ScheduledBanks absent({{PlayAt(0,0,255)}},0,false,CountRpcXgs(7,"OtherVariable"));
     auto cue=absent.Play();EXPECT_THROW((void)NumInstances(*cue),System::IndexOutOfRangeException);
     auto valid=InstanceCountBanks();auto disposed=CountCue(*valid->sound);disposed->Play();disposed->Dispose();

@@ -622,8 +622,9 @@ namespace Microsoft::Xna::Framework::Audio
             if (info.valid)
                 return info.initialValue; // never explicitly SetVariable()-d on this cue yet
         }
-        // An XACT project always authors these; only a hand-made project may lack them.
-        if (IsBuiltInCueVariable(name))
+        // An XACT project always authors these; only a hand-made project may lack them. An
+        // authored one that is not public cue-scoped is refused like any other.
+        if (IsBuiltInCueVariable(name) && !(eng && eng->FindVariable(name)))
             return 0.0f;
 
         throw System::IndexOutOfRangeException(kInvalidVariableIndex);
@@ -655,7 +656,7 @@ namespace Microsoft::Xna::Framework::Audio
                 return;
             }
         }
-        if (IsBuiltInCueVariable(name))
+        if (IsBuiltInCueVariable(name) && !(eng && eng->FindVariable(name)))
         {
             variables_[name] = value;
             return;
@@ -686,7 +687,11 @@ namespace Microsoft::Xna::Framework::Audio
             auto cueInfo = eng->GetCueVariableInfo(name);
             if (cueInfo.valid)
                 return cueInfo.initialValue;
-            if (IsBuiltInCueVariable(name))
+            // Internal evaluation reads a cue-scoped variable whether or not it is public.
+            const auto* authored = eng->FindVariable(name);
+            if (authored != nullptr && (authored->accessibility & 0x04) != 0)
+                return authored->initialValue;
+            if (authored == nullptr && IsBuiltInCueVariable(name))
                 return 0.0f;
 
             float globalValue = 0.0f;
@@ -729,10 +734,24 @@ namespace Microsoft::Xna::Framework::Audio
         // "Distance"/"OrientationAngle"/"DopplerPitchScalar" now tracks this cue's live 3D state
         // instead of whatever was last manually SetVariable()-d (or the prior hardcoded 0.0f
         // default).
+        // XACT3DApply (Xact IL_0039-00c4) and FACT3DApply (FACT3D.c:161-175) write them through
+        // the cue's SetVariable: an authored variable keeps its range and read-only flag, and one
+        // that is not public cue-scoped is not written.
         const Cue3DVariables vars3d = ComputeCue3DVariables(listener, emitter);
-        variables_["Distance"]           = vars3d.distance;
-        variables_["DopplerPitchScalar"] = vars3d.dopplerFactor;
-        variables_["OrientationAngle"]   = vars3d.orientationAngleDegrees;
+        AudioEngine* eng = bank_ ? bank_->engine_ : nullptr;
+        const auto writeSpatial = [this, eng](const char* name, float value)
+        {
+            if (eng && eng->FindVariable(name))
+            {
+                const auto info = eng->GetCueVariableInfo(name);
+                if (!info.valid || info.readOnly) return;
+                value = std::clamp(value, info.minValue, info.maxValue);
+            }
+            variables_[name] = value;
+        };
+        writeSpatial("Distance", vars3d.distance);
+        writeSpatial("DopplerPitchScalar", vars3d.dopplerFactor);
+        writeSpatial("OrientationAngle", vars3d.orientationAngleDegrees);
     }
 
     // ── Play ──────────────────────────────────────────────────────────────────
@@ -1497,15 +1516,20 @@ namespace Microsoft::Xna::Framework::Audio
 
     void Cue::Stop(AudioStopOptions options)
     {
+        // FACTCue_Stop (FACT.c:2393-2403): a public authored stop leaves a release already under
+        // way to its own deadline. An authored cue-wide Stop event restarts it instead (FAudio's
+        // event path calls BeginFadeOut/BeginReleaseRPC directly, FACT_internal.c:1224-1252), so
+        // the guard is here and not in StopPlayback.
+        ReconcileState();
+        if (!isDisposed_ && state_ == State::Stopping && options != AudioStopOptions::Immediate)
+            return;
         StopInternal(options == AudioStopOptions::Immediate);
     }
 
     void Cue::StopPlayback(bool immediate)
     {
         if (isDisposed_) return;
-        // FACTCue_Stop (FACT.c:2385-2403): an authored stop leaves a release already under way to
-        // its own deadline, and a stopped cue stays stopped (nothing is left to release).
-        if (state_ == State::Stopping && !immediate) return;
+        // FACTCue_Stop (FACT.c:2385-2391): a stopped cue stays stopped (nothing is left to release).
         // FACTCue_Stop:2407-2414: a paused cue cannot render a release.
         immediate = immediate || paused_ || state_ == State::Prepared || state_ == State::Stopped;
         // Stop exits pending event-level loops too; release may still dispatch
