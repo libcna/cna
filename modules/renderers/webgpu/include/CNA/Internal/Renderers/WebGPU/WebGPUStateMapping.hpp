@@ -294,13 +294,15 @@ namespace CNA::Internal::Renderers::WebGPU
         return h;
     }
 
+    // XNA TextureAddressMode: 0=Wrap, 1=Clamp, 2=Mirror. A value outside the enum is Wrap, as
+    // XNA's ConvertXnaAddressModeToDx maps it (IL_0007-000f).
     [[nodiscard]] inline WGPUAddressMode ToAddressMode(int mode)
     {
         switch (mode)
         {
-            case 0: return WGPUAddressMode_Repeat;
+            case 1: return WGPUAddressMode_ClampToEdge;
             case 2: return WGPUAddressMode_MirrorRepeat;
-            default: return WGPUAddressMode_ClampToEdge;
+            default: return WGPUAddressMode_Repeat;
         }
     }
 
@@ -632,11 +634,17 @@ namespace CNA::Internal::Renderers::WebGPU
                                                           int addressW, int maxMipLevel,
                                                           int maxAnisotropy)
     {
-        return (static_cast<std::uint64_t>(filter) & 0xFFull)
-             | ((static_cast<std::uint64_t>(addressU) & 0xFFull) << 8)
-             | ((static_cast<std::uint64_t>(addressV) & 0xFFull) << 16)
+        // A filter or address outside its enum keys as the value the descriptor reads it as:
+        // Linear (XNA SamplerState.Apply IL_0048-008c) and Wrap (see ToAddressMode). A byte mask
+        // of the raw ordinal aliased 257 onto Point and 256 onto Wrap.
+        const auto filterKey = static_cast<std::uint64_t>(filter >= 0 && filter <= 8 ? filter : 0);
+        const auto addressKey = [](int mode)
+        { return static_cast<std::uint64_t>(mode == 1 || mode == 2 ? mode : 0); };
+        return filterKey
+             | (addressKey(addressU) << 8)
+             | (addressKey(addressV) << 16)
              | (static_cast<std::uint64_t>(std::clamp(maxAnisotropy, 1, 16)) << 24)
-             | ((static_cast<std::uint64_t>(addressW) & 0xFFull) << 32)
+             | (addressKey(addressW) << 32)
              | (static_cast<std::uint64_t>(WGPUSamplerMinLodLevel(maxMipLevel)) << 40);
     }
 

@@ -558,6 +558,37 @@ TEST(WebGPUStateMapping, MaxMipLevelIsALowerLodClampThatNeverExceedsTheUpperOne)
     }
 }
 
+// RV-FIX4 review #4: a filter or address ordinal outside its enum keys as the value the descriptor
+// reads it as -- Linear, and Wrap as XNA's ConvertXnaAddressModeToDx maps it (IL_0007-000f) -- so
+// equal keys are exactly equal descriptors; a byte mask aliased 257 onto Point and 256 onto Wrap.
+TEST(WebGPUStateMapping, TheSlotSamplerKeyDistinguishesExactlyTheDescriptorsFilterAndAddressProduce)
+{
+    EXPECT_EQ(ToAddressMode(3), WGPUAddressMode_Repeat);
+    EXPECT_EQ(ToAddressMode(-1), WGPUAddressMode_Repeat);
+    const std::array<int, 7> filters{{-1, 0, 1, 2, 8, 9, 257}};
+    const std::array<int, 7> addresses{{-1, 0, 1, 2, 3, 256, 258}};
+    const auto same = [](const WGPUSamplerDescriptor& a, const WGPUSamplerDescriptor& b)
+    {
+        return a.magFilter == b.magFilter && a.minFilter == b.minFilter &&
+               a.mipmapFilter == b.mipmapFilter && a.maxAnisotropy == b.maxAnisotropy &&
+               a.addressModeU == b.addressModeU && a.addressModeV == b.addressModeV &&
+               a.addressModeW == b.addressModeW && a.lodMinClamp == b.lodMinClamp;
+    };
+    for (const int fa : filters)
+        for (const int fb : filters)
+            for (const int aa : addresses)
+                for (const int ab : addresses)
+                {
+                    WGPUSamplerDescriptor da{};
+                    WGPUSamplerDescriptor db{};
+                    FillWGPUSamplerDescriptor(da, fa, aa, aa, aa, 0, 4);
+                    FillWGPUSamplerDescriptor(db, fb, ab, ab, ab, 0, 4);
+                    EXPECT_EQ(WGPUSlotSamplerKey(fa, aa, aa, aa, 0, 4) == WGPUSlotSamplerKey(fb, ab, ab, ab, 0, 4),
+                              same(da, db))
+                        << "filter " << fa << "/" << fb << " address " << aa << "/" << ab;
+                }
+}
+
 // RV-MIX3 review #3: the slot-sampler cache key is the descriptor's, so MaxMipLevel 256 does not
 // share level 0's sampler (a byte mask of the raw value did) while levels past the last one, which
 // build the same descriptor, may share. Equal keys exactly when the lower clamps are equal.
