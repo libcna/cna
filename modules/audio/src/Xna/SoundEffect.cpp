@@ -1096,10 +1096,10 @@ namespace Microsoft::Xna::Framework::Audio
                 wave_.bitsPerSample = Le16(format, 14);
                 wave_.formatSize = format.size();
                 wave_.avgBytesPerSec = static_cast<std::uint32_t>(Le32(format, 8));
-                // AudioHelper.LocalizeFormat (IL_000e-0024) zero-extends a shorter format to 18
-                // bytes, so cbSize keeps whatever of it was read.
-                wave_.extensionSize = (format.size() > 16 ? static_cast<std::uint32_t>(format[16]) : 0u) |
-                                      (format.size() > 17 ? static_cast<std::uint32_t>(format[17]) << 8 : 0u);
+                // AudioHelper.LocalizeFormat builds a fresh zeroed 18-byte format for a shorter one
+                // (IL_000e-0024) and copies only its first 16 bytes (IL_0031-0092), so a 16- or
+                // 17-byte format has cbSize 0 whatever its seventeenth byte holds.
+                wave_.extensionSize = format.size() >= 18 ? static_cast<std::uint32_t>(Le16(format, 16)) : 0u;
                 if (tag != 1 || (wave_.channels != 1 && wave_.channels != 2) ||
                     wave_.sampleRate < 8000 || wave_.sampleRate > 48000 ||
                     (wave_.bitsPerSample != 8 && wave_.bitsPerSample != 16) ||

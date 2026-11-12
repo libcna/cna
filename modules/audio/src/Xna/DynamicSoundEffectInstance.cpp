@@ -23,32 +23,65 @@
 namespace Microsoft::Xna::Framework::Audio
 {
 
-    namespace
+    struct DynamicSoundEffectDispatch
     {
-        // FrameworkDispatcher::Update()'s stream step, installed by the first Play().
-        void UpdateFrameworkStreams()
+        static bool Registered(DynamicSoundEffectInstance* instance)
         {
             using Microsoft::Xna::Framework::FrameworkDispatcher;
-            // P11-DISPATCH-001: instance->Update() below can synchronously fire BufferNeeded (a
-            // realistic XNA usage pattern is disposing the instance from inside that very handler
-            // once no more data will be provided), which reaches StopInternal() -- which itself
-            // locks StreamsMutex to remove itself from Streams. A std::mutex is not recursive, so
-            // calling instance->Update() while still holding StreamsMutex here would self-deadlock
-            // the very first time real game code disposed a stream from its own BufferNeeded
-            // handler. Snapshot the list under the lock, then run every instance's Update() with
-            // the lock released; a disposed instance already removes itself from Streams via
-            // StopInternal(), so the trailing cleanup pass is mostly defensive.
+            std::lock_guard<std::mutex> lock(FrameworkDispatcher::StreamsMutex);
+            const auto& streams = FrameworkDispatcher::Streams;
+            return std::find(streams.begin(), streams.end(), instance) != streams.end();
+        }
+
+        // Delivers one instance's batch. Every step re-checks that the instance is still registered
+        // before touching it: a handler may stop it, or dispose or destroy it (directly or through
+        // the C API), and Dispose and Stop take it out of Streams. Returns normally only once the
+        // whole batch was delivered, or the instance left; an exception from a handler propagates
+        // with the batch kept.
+        static void Deliver(DynamicSoundEffectInstance* instance,
+                            const DynamicSoundEffectInstance::NotificationBatch& batch,
+                            bool requireRegistration)
+        {
+            for (SharpRuntime::intcs k = 0; k < batch.count; ++k)
+            {
+                if (requireRegistration && !Registered(instance)) return;
+                if (instance->getIsDisposedProperty() || instance->notificationEpoch_ != batch.epoch) return;
+                instance->BufferNeeded.Raise(instance, System::EventArgs::Empty);
+            }
+            if (requireRegistration && !Registered(instance)) return;
+            if (!instance->getIsDisposedProperty())
+            {
+                instance->FinishNotificationBatch(batch);
+            }
+        }
+
+        // FrameworkDispatcher::Update()'s stream step, installed by the first Play(). Every
+        // instance's batch is taken before any handler runs, so work a handler posts -- for
+        // itself or another stream -- waits for the next update, as XNA's dispatcher copy does.
+        static void UpdateFrameworkStreams()
+        {
+            using Microsoft::Xna::Framework::FrameworkDispatcher;
+            // Handlers run with no lock held: StopInternal() locks StreamsMutex to unregister, so
+            // a handler that stops or disposes a stream would otherwise self-deadlock.
             std::vector<DynamicSoundEffectInstance*> snapshot;
             {
                 std::lock_guard<std::mutex> lock(FrameworkDispatcher::StreamsMutex);
                 snapshot = FrameworkDispatcher::Streams;
             }
-
+            std::vector<std::pair<DynamicSoundEffectInstance*, DynamicSoundEffectInstance::NotificationBatch>> batches;
+            batches.reserve(snapshot.size());
             for (DynamicSoundEffectInstance* instance : snapshot)
             {
-                if (instance != nullptr)
+                if (instance != nullptr && !instance->getIsDisposedProperty())
                 {
-                    instance->Update();
+                    batches.emplace_back(instance, instance->PrepareNotificationBatch());
+                }
+            }
+            for (const auto& [instance, batch] : batches)
+            {
+                if (batch.count > 0)
+                {
+                    Deliver(instance, batch, true);
                 }
             }
 
@@ -63,6 +96,14 @@ namespace Microsoft::Xna::Framework::Audio
                         }),
                     streams.end());
             }
+        }
+    };
+
+    namespace
+    {
+        void UpdateFrameworkStreams()
+        {
+            DynamicSoundEffectDispatch::UpdateFrameworkStreams();
         }
     }
 #ifdef SOUND_ENABLED
@@ -427,6 +468,7 @@ namespace Microsoft::Xna::Framework::Audio
             // on a playing one keeps them, as a starving stream still needs its answer.
             std::lock_guard<std::mutex> lock(queueMutex_);
             pendingNotifications_ = 0;
+            ++notificationEpoch_;
         }
 
         std::lock_guard<std::mutex> lock(Microsoft::Xna::Framework::FrameworkDispatcher::StreamsMutex);
@@ -530,6 +572,9 @@ namespace Microsoft::Xna::Framework::Audio
         // (locking a stream on a track that destruction had already freed).
         {
             std::lock_guard<std::mutex> lock(queueMutex_);
+            // Account for buffers that finished before this one arrives: XNA tests the pending
+            // count when each completes (OnBufferEnd IL_004b-006a), not after later submissions.
+            RetireConsumedChunksLocked();
             queuedBuffers_.push_back(std::move(chunk));
             // XNA submits to the voice whatever its state (AllocateData IL_001c-0029), so data
             // given to a paused instance is already there when it resumes.
@@ -593,6 +638,9 @@ namespace Microsoft::Xna::Framework::Audio
         // submit must happen under the same lock as the push.
         {
             std::lock_guard<std::mutex> lock(queueMutex_);
+            // Account for buffers that finished before this one arrives: XNA tests the pending
+            // count when each completes (OnBufferEnd IL_004b-006a), not after later submissions.
+            RetireConsumedChunksLocked();
             queuedBuffers_.push_back(std::move(chunk));
             // XNA submits to the voice whatever its state (AllocateData IL_001c-0029), so data
             // given to a paused instance is already there when it resumes.
@@ -632,22 +680,33 @@ namespace Microsoft::Xna::Framework::Audio
         {
             return;
         }
-        SharpRuntime::intcs notifications = 0;
-        {
-            std::lock_guard<std::mutex> lock(queueMutex_);
-            // Submit any freshly queued buffers.
-            if (getStateProperty() == SoundState::Playing)
-            {
-                SubmitQueuedToStreamLocked();
-            }
-            RetireConsumedChunksLocked();
-            notifications = std::exchange(pendingNotifications_, 0);
-        }
         // XNA delivers each posted notification once (DynamicSoundEffectInstance.OnBufferNeeded
         // IL_0000-0012), with no lock held, so a handler may submit, stop or dispose.
-        for (; notifications > 0 && !getIsDisposedProperty(); --notifications)
+        const NotificationBatch batch = PrepareNotificationBatch();
+        if (batch.count > 0)
         {
-            BufferNeeded.Raise(this, System::EventArgs::Empty);
+            DynamicSoundEffectDispatch::Deliver(this, batch, false);
+        }
+    }
+
+    DynamicSoundEffectInstance::NotificationBatch DynamicSoundEffectInstance::PrepareNotificationBatch()
+    {
+        std::lock_guard<std::mutex> lock(queueMutex_);
+        // Submit any freshly queued buffers.
+        if (getStateProperty() == SoundState::Playing)
+        {
+            SubmitQueuedToStreamLocked();
+        }
+        RetireConsumedChunksLocked();
+        return {pendingNotifications_, notificationEpoch_};
+    }
+
+    void DynamicSoundEffectInstance::FinishNotificationBatch(const NotificationBatch& batch)
+    {
+        std::lock_guard<std::mutex> lock(queueMutex_);
+        if (notificationEpoch_ == batch.epoch)
+        {
+            pendingNotifications_ = std::max<SharpRuntime::intcs>(0, pendingNotifications_ - batch.count);
         }
     }
 
@@ -702,10 +761,16 @@ namespace Microsoft::Xna::Framework::Audio
             DestroyStream();
         }
 
-        audioStream_ = CNA::Internal::Audio::CreateMixerStream({
+        void* const created = CNA::Internal::Audio::CreateMixerStream({
             sampleRate_, static_cast<int>(channels_),
             isFloat_ ? CNA::Internal::Audio::MixerSampleFormat::Float32
                      : CNA::Internal::Audio::MixerSampleFormat::Signed16});
+        {
+            // Published under queueMutex_: PendingBufferCount reads it from any thread to retire
+            // played chunks (DestroyStream() frees it under the same lock).
+            std::lock_guard<std::mutex> lock(queueMutex_);
+            audioStream_ = created;
+        }
         streamIsFloat_ = isFloat_;
 #endif
     }

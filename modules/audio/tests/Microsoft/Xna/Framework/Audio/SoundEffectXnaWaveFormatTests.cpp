@@ -175,7 +175,12 @@ TEST(SoundEffectXnaWaveKernelFormatTest, RefusesWhatTheKernelRejectsAfterClosing
         for (unsigned word : extension) U16(bytes, word);
         return Chunk("fmt ", bytes);
     };
-    for (const auto& accepted : {fmt(16000, {}), fmt(16000, {0})})
+    // A 17-byte format: LocalizeFormat copies only the first 16 bytes into a fresh zeroed 18-byte
+    // format (IL_000e-0092), so the seventeenth byte never becomes cbSize (review rv-fix8 #3).
+    Bytes fmt17Payload;
+    U16(fmt17Payload, 1); U16(fmt17Payload, 1); U32(fmt17Payload, 8000); U32(fmt17Payload, 16000);
+    U16(fmt17Payload, 2); U16(fmt17Payload, 16); fmt17Payload.push_back(1);
+    for (const auto& accepted : {fmt(16000, {}), fmt(16000, {0}), Chunk("fmt ", fmt17Payload)})
     {
         TrackedStream stream(Wave({accepted, data}));
         std::unique_ptr<SoundEffect> sound;

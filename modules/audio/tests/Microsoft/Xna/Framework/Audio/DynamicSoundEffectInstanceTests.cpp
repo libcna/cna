@@ -4,7 +4,9 @@
 #include <atomic>
 #include <chrono>
 #include <cstdlib>
+#include <memory>
 #include <semaphore>
+#include <stdexcept>
 #include <thread>
 #include "Microsoft/Xna/Framework/FrameworkDispatcher.hpp"
 #include <typeinfo>
@@ -1498,6 +1500,119 @@ TEST(DynamicSoundEffectInstanceTest, DryStreamCadenceAndPauseStopGatesUseLiteral
     d.Update();
     EXPECT_EQ(calls, 2) << "each start from Stopped posts one";
     EXPECT_EQ(d.getPendingBufferCountProperty(), 0);
+}
+
+namespace
+{
+    // Plays d (already holding any submitted buffers) on the dummy driver; false without a device.
+    bool PlayOnDummy(DynamicSoundEffectInstance& d)
+    {
+        UseDummyAudioDriver();
+        try
+        {
+            d.Play();
+        }
+        catch (...)
+        {
+            return false;
+        }
+        return d.getStateProperty() == SoundState::Playing;
+    }
+}
+
+// Review rv-fix8 #2: XNA's dispatcher clears its copied batch only after every callback returned
+// (FrameworkDispatcher.Update IL_0031-0037, IL_00de-00e5, IL_0112-0117), so a handler that throws
+// leaves the whole batch for the next update: three completions, a first callback that throws,
+// then a clean update -- four callbacks in all.
+TEST(DynamicSoundEffectInstanceTest, AThrowingHandlerLeavesTheWholeBatchForTheNextUpdate)
+{
+    DynamicSoundEffectInstance d(8000, AudioChannels::Stereo);
+    const std::vector<unsigned char> pcm(4 * 64, 0); // 8 ms each
+    d.SubmitBuffer(pcm);
+    d.SubmitBuffer(pcm);
+    d.SubmitBuffer(pcm);
+    int calls = 0;
+    d.BufferNeeded += [&](System::Object*, const System::EventArgs&) {
+        if (calls++ == 0) throw std::runtime_error("first handler call fails");
+    };
+    if (!PlayOnDummy(d)) GTEST_SKIP() << "no audio device (dummy driver unavailable)";
+    const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(10);
+    while (d.getPendingBufferCountProperty() != 0 && std::chrono::steady_clock::now() < deadline)
+        std::this_thread::sleep_for(std::chrono::milliseconds(5));
+    ASSERT_EQ(d.getPendingBufferCountProperty(), 0);
+    EXPECT_THROW(d.Update(), std::runtime_error);
+    EXPECT_EQ(calls, 1);
+    d.Update();
+    EXPECT_EQ(calls, 4) << "the failed batch of three is delivered again in full";
+    d.Update();
+    EXPECT_EQ(calls, 4);
+    d.Stop(true);
+}
+
+// Review rv-fix8 #6: the dispatcher takes every stream's batch before any handler runs, so a
+// notification a handler causes on another stream waits for the next update. A is registered
+// before B; A's handler restarts B, whose start from Stopped posts one.
+TEST(DynamicSoundEffectInstanceTest, ANotificationPostedByAHandlerWaitsForTheNextUpdate)
+{
+    DynamicSoundEffectInstance a(8000, AudioChannels::Stereo);
+    DynamicSoundEffectInstance b(8000, AudioChannels::Stereo);
+    if (!PlayOnDummy(a) || !PlayOnDummy(b)) GTEST_SKIP() << "no audio device (dummy driver unavailable)";
+    int aCalls = 0, bCalls = 0;
+    b.BufferNeeded += [&](System::Object*, const System::EventArgs&) { ++bCalls; };
+    b.Update(); // delivers B's own start notification
+    ASSERT_EQ(bCalls, 1);
+    a.BufferNeeded += [&](System::Object*, const System::EventArgs&) {
+        ++aCalls;
+        b.Stop(true);
+        b.Play();
+    };
+    Microsoft::Xna::Framework::FrameworkDispatcher::Update();
+    EXPECT_EQ(aCalls, 1);
+    EXPECT_EQ(bCalls, 1) << "B's new start notification belongs to the next update";
+    Microsoft::Xna::Framework::FrameworkDispatcher::Update();
+    EXPECT_EQ(bCalls, 2);
+    a.Stop(true);
+    b.Stop(true);
+}
+
+// Review rv-fix8 #7: a handler that destroys another stream must not leave the dispatcher calling
+// into it (its snapshot holds a raw pointer); the destroyed stream has left Streams, which the
+// dispatcher checks before every delivery. Meaningful under AddressSanitizer.
+TEST(DynamicSoundEffectInstanceTest, AHandlerMayDestroyAnotherStreamDuringTheDispatch)
+{
+    auto a = std::make_unique<DynamicSoundEffectInstance>(8000, AudioChannels::Stereo);
+    auto b = std::make_unique<DynamicSoundEffectInstance>(8000, AudioChannels::Stereo);
+    if (!PlayOnDummy(*a) || !PlayOnDummy(*b)) GTEST_SKIP() << "no audio device (dummy driver unavailable)";
+    int bCalls = 0;
+    b->BufferNeeded += [&](System::Object*, const System::EventArgs&) { ++bCalls; };
+    a->BufferNeeded += [&](System::Object*, const System::EventArgs&) { b.reset(); };
+    EXPECT_NO_THROW(Microsoft::Xna::Framework::FrameworkDispatcher::Update());
+    EXPECT_EQ(b, nullptr);
+    EXPECT_EQ(bCalls, 0);
+    a->Stop(true);
+}
+
+// Review rv-fix8 #5: XNA tests the pending count when each buffer completes (OnBufferEnd
+// IL_004b-006a). Three short buffers that finish before three long ones are submitted have
+// posted three notifications, even though nobody read the count in between.
+TEST(DynamicSoundEffectInstanceTest, CompletionsBeforeALaterSubmissionStillPost)
+{
+    DynamicSoundEffectInstance d(8000, AudioChannels::Stereo);
+    const std::vector<unsigned char> shortPcm(4 * 64, 0); // 8 ms each
+    d.SubmitBuffer(shortPcm);
+    d.SubmitBuffer(shortPcm);
+    d.SubmitBuffer(shortPcm);
+    int calls = 0;
+    d.BufferNeeded += [&](System::Object*, const System::EventArgs&) { ++calls; };
+    if (!PlayOnDummy(d)) GTEST_SKIP() << "no audio device (dummy driver unavailable)";
+    std::this_thread::sleep_for(std::chrono::milliseconds(600));
+    const std::vector<unsigned char> longPcm(4 * 8000, 0); // one second each
+    d.SubmitBuffer(longPcm);
+    d.SubmitBuffer(longPcm);
+    d.SubmitBuffer(longPcm);
+    d.Update();
+    EXPECT_EQ(calls, 3) << "the three short buffers completed with two, one and none pending";
+    d.Stop(true);
 }
 
 // ClearBuffersEXT (a CNA extension; XNA has none) empties a playing stream without stopping it, so

@@ -93,7 +93,10 @@ page under `docs/` (index: `docs/README.md`), deliberate divergences from FNA an
   Audio -- an immediate DynamicSoundEffectInstance.Stop flushes XNA's voice, and each flushed buffer that
   leaves one or two pending posts a BufferNeeded (KernelSoundEffectInstance.Stop IL_0011-0062 with
   OnBufferEnd IL_004b-006a in the Stopping state, source-traced, unmeasured); CNA's Stop posts none
-  and discards undelivered notifications.
+  and discards undelivered notifications. CNA notices a completed buffer when the count is read, at
+  a submission and at the dispatcher step, not at the completion itself: a buffer that finishes in
+  the instant between a submission's retirement and its append is judged with that new buffer
+  pending (review rv-fix8 #5, residual).
   Media -- queue and collection reads share disposal state XNA keeps apart (rv-media #3); switching
   between distinct Videos of equal size recreates the frame textures XNA reuses (#5); public playback
   calls have no serialization (#9); PlayPosition past 2,147,483,647 ms (about 24.86 days) returns

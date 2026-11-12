@@ -23,6 +23,7 @@ namespace Microsoft::Xna::Framework::Audio
     {
         // Read-only native regression seam: disposal must still clear both buffer queues.
         CNAEXT friend struct DynamicSoundEffectInstanceTestAccess;
+        friend struct DynamicSoundEffectDispatch;
 
     public:
         /** @brief Raised when the instance needs more submitted audio buffers. */
@@ -239,6 +240,22 @@ namespace Microsoft::Xna::Framework::Audio
         // one per completed buffer that leaves at most two (KernelDynamicSoundEffectInstance.Play
         // IL_001a-0061, OnBufferEnd IL_004b-006a); FrameworkDispatcher.Update delivers them.
         mutable SharpRuntime::intcs pendingNotifications_ = 0;
+        // Bumped when Stop discards undelivered notifications, so a batch taken before the discard
+        // is neither delivered further nor subtracted from notifications posted after it.
+        std::uint64_t notificationEpoch_ = 0;
+
+        // XNA's FrameworkDispatcher.Update copies every posted message, invokes them, and clears the
+        // copy only after all succeeded (IL_0031-0037, IL_00de-00e5, IL_0112-0117): a handler that
+        // throws leaves the whole batch for the next update, and a message posted meanwhile waits
+        // for the next one. Prepare submits, retires and reports the batch; Finish removes a batch
+        // that was delivered in full.
+        struct NotificationBatch
+        {
+            SharpRuntime::intcs count = 0;
+            std::uint64_t epoch = 0;
+        };
+        NotificationBatch PrepareNotificationBatch();
+        void FinishNotificationBatch(const NotificationBatch& batch);
 
         static constexpr std::size_t BUFFER_NEEDED_AT_OR_BELOW = 2;
 
