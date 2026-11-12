@@ -191,20 +191,17 @@ namespace Microsoft::Xna::Framework::Audio
          */
         CNAEXT void RefreshCueInstanceCount(SharpRuntime::ushortcs cueIndex);
 
-        // Fire-and-forget cues from PlayCue() — kept alive while playing (FNA has no C#-visible
-        // handle for these; FACT tracks cue lifetime natively), swept once IsPlaying goes false
-        // on the next PlayCue() call. A long safety-net timeout also force-sweeps a still-playing
-        // entry so a caller that only ever PlayCue()s a looping/very long cue can't grow this
-        // list unbounded; ordinary finite-duration cues are always swept via IsPlaying first.
+        // Fire-and-forget cues from PlayCue() — kept alive while playing, paused or stopping (FNA
+        // has no C#-visible handle for these; FACT tracks cue lifetime natively) and swept once
+        // stopped. A looping cue therefore lives until it is stopped (through its category) or
+        // its bank goes, as in XNA, whose PlayCue (Refresh IL_001f-0034/004f-0064) sets no expiry.
         struct FireAndForget
         {
             std::unique_ptr<Cue> cue;
-            std::chrono::steady_clock::time_point created;
         };
         std::vector<FireAndForget> fireAndForget_;
 
-        // Tests need to inspect fireAndForget_'s size and backdate entries to exercise the sweep
-        // logic's time-based branches without a real-time wait.
+        // Tests need to inspect fireAndForget_'s size.
         CNAEXT friend struct SoundBankTestAccess;
     };
 }

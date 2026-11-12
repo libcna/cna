@@ -901,37 +901,17 @@ TEST(SoundBankTest, IsInUseFalseSoonAfterFireAndForgetCueNaturallyFinishes)
 
 // Regression coverage for XA-2's XA-1 sibling bug: PlayCue()'s sweep used to remove any
 // fire-and-forget cue older than 5 seconds regardless of whether it was still playing, cutting
-// off any one-shot or music cue longer than that. It must now only remove entries that have
-// actually finished playing (or exceeded the long safety-net timeout -- see the next test).
-TEST(SoundBankTest, FireAndForgetCueSurvivesSweepPastOldFiveSecondThresholdWhileStillPlaying)
+// off any one-shot or music cue longer than that. A later five-minute "safety net" did the same
+// to music. XNA's PlayCue (Refresh IL_001f-0034/004f-0064) sets no expiry: only a cue that has
+// finished is swept, at any age.
+TEST(SoundBankTest, AStillPlayingFireAndForgetCueIsNeverSweptByAge)
 {
     SoundBank bank(&SharedEngine(), XsbFixturePath());
     bank.PlayCue("Explosion");
     ASSERT_EQ(SoundBankTestAccess::FireAndForgetCount(bank), 1u);
-
-    // Backdate well past the OLD buggy 5-second threshold, but nowhere near the new 5-minute
-    // safety net -- exactly the scenario the bug got wrong: a long-but-still-playing cue.
-    SoundBankTestAccess::BackdateLastFireAndForget(bank, std::chrono::seconds(30));
 
     bank.PlayCue("Explosion"); // triggers the sweep again
     EXPECT_EQ(SoundBankTestAccess::FireAndForgetCount(bank), 2u); // first entry must have survived
-
-    bank.Dispose();
-}
-
-TEST(SoundBankTest, FireAndForgetCueIsForceSweptPastSafetyNetEvenIfStillPlaying)
-{
-    SoundBank bank(&SharedEngine(), XsbFixturePath());
-    bank.PlayCue("Explosion");
-    ASSERT_EQ(SoundBankTestAccess::FireAndForgetCount(bank), 1u);
-
-    // Past the 5-minute safety net (the audio plan Fáze 7 D6): must be force-swept even though
-    // Cue never reports itself as finished, so a caller that only ever PlayCue()s a
-    // looping/very-long cue can't grow this list unbounded.
-    SoundBankTestAccess::BackdateLastFireAndForget(bank, std::chrono::minutes(10));
-
-    bank.PlayCue("Explosion");
-    EXPECT_EQ(SoundBankTestAccess::FireAndForgetCount(bank), 1u); // old entry swept; only the new one remains
 
     bank.Dispose();
 }

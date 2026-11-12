@@ -20,6 +20,10 @@ The experimental C ABI goes from `0.50.0` to `0.52.0`.
 
 ### Changed
 
+- **A cue started with `SoundBank.PlayCue` plays until it ends.** A still-playing, paused or
+  stopping fire-and-forget cue was destroyed five minutes after it started, so music played with
+  `PlayCue` stopped after five minutes. XNA's `PlayCue` sets no expiry; only a finished cue is
+  released now.
 - **F9 and F10 no longer touch the graphics context in a release build.** `Game` turned every
   F9 press into `DebugSimulateContextLoss()` and F10 into `DebugRestoreContext()` in every build,
   so a player's F9 recreated a shipped game's GL context, and on the web left the canvas black

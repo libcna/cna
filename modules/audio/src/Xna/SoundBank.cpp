@@ -21,14 +21,6 @@
 
 namespace Microsoft::Xna::Framework::Audio
 {
-    namespace
-    {
-        // Force-sweep a still-playing fire-and-forget cue after this long, purely as a safety
-        // net against unbounded growth (see FireAndForget's comment in SoundBank.hpp) -- far
-        // longer than any normal one-shot SFX, so it never affects ordinary playback.
-        constexpr std::chrono::minutes kFireAndForgetSafetyNet{5};
-    }
-
     // ── Internal impl ─────────────────────────────────────────────────────────
 
     struct SoundBank::XactSoundBankImpl
@@ -147,26 +139,20 @@ namespace Microsoft::Xna::Framework::Audio
 
     void SoundBank::SweepFireAndForget()
     {
-        // Sweep fire-and-forget cues that have finished playing (destroying a Cue whose sound
-        // has already stopped is effectively a no-op) plus any still-playing entry past the
-        // safety-net timeout -- NOT simply "older than N seconds", which would cut off any
-        // one-shot or music cue longer than that regardless of whether it was still playing.
-        auto now = std::chrono::steady_clock::now();
+        // Sweep the fire-and-forget cues that have finished (destroying a Cue whose sound has
+        // already stopped is effectively a no-op), never by age: a music cue or a long one-shot
+        // plays for as long as it is authored to.
         fireAndForget_.erase(
             std::remove_if(
                 fireAndForget_.begin(), fireAndForget_.end(),
-                [&now](const FireAndForget& faf)
+                [](const FireAndForget& faf)
                 {
                     // XA-7: a paused cue is still alive too -- only a genuinely stopped cue
-                    // (neither playing nor paused) should be swept unconditionally. Without
-                    // this, pausing a fire-and-forget cue's category made the very next
-                    // PlayCue() on this bank silently destroy it.
-                    if (faf.cue && (faf.cue->getIsPlayingProperty() || faf.cue->getIsPausedProperty()
-                                    || faf.cue->getIsStoppingProperty()))
-                    {
-                        return now - faf.created >= kFireAndForgetSafetyNet;
-                    }
-                    return true;
+                    // (neither playing nor paused) is swept. Without this, pausing a
+                    // fire-and-forget cue's category made the very next PlayCue() on this bank
+                    // silently destroy it.
+                    return !(faf.cue && (faf.cue->getIsPlayingProperty() || faf.cue->getIsPausedProperty()
+                                         || faf.cue->getIsStoppingProperty()));
                 }),
             fireAndForget_.end());
     }
@@ -258,7 +244,7 @@ namespace Microsoft::Xna::Framework::Audio
         if (cue->getIsStoppedProperty()) return;
         // Keep the Cue alive so its SoundEffectInstances (and their SDL3_mixer
         // tracks) are not destroyed before the sound has had a chance to play.
-        fireAndForget_.push_back({std::move(cue), std::chrono::steady_clock::now()});
+        fireAndForget_.push_back({std::move(cue)});
     }
 
     // ── Dispose ───────────────────────────────────────────────────────────────
