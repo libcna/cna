@@ -105,6 +105,13 @@ page under `docs/` (index: `docs/README.md`), deliberate divergences from FNA an
   cascade's list (out of memory), which then propagates. XNA serializes AudioEngine.Update and every Cue/bank call with one lock (UnsafeNativeMethods
   pSyncObject); CNA has none, so calling Update on one thread while another stops or disposes a
   cue, or disposes the engine, is a data race (review rv-cue #3, not reproduced).
+- A missing SoundEffect asset (found re-pinning CNA.NET, 2026-11-13): `ContentManager::Load<SoundEffect>`
+  finds no `.xnb`/`.cnb` and reaches the loose-file tier, whose reader constructs
+  `SoundEffect(path)` for the bare path; the mixer cannot open it and the constructor throws
+  NotSupportedException ("Failed to load sound: ... No such file or directory",
+  `modules/content/src/Xna/ContentSoundEffectLoaders.cpp`, `modules/audio/src/Xna/SoundEffect.cpp`).
+  XNA's ReadAsset opens the stream first, so a missing asset is ContentLoadException ("file not
+  found") for every type. CNA.NET compensates (it keeps ContentLoadException when the file is absent).
 - Texture content with a zero-byte level (CNA.NET review dn-fix-rv, 2026-11-12): CNA's readers
   always refuse it as ArgumentOutOfRangeException("elementCount")
   (`modules/content/src/Xnb/XnbCanonicalTextures.cpp`, the `byteCount == 0` check). XNA reads each
