@@ -97,8 +97,8 @@ page under `docs/` (index: `docs/README.md`), deliberate divergences from FNA an
   raise no events. CNA disposes them in a cascade. R1: XNA clears its back buffer lazily after
   construction, Reset and Present (`Present` IL_009e-00a5, `GetBackBufferData` IL_0066-006f,
   IL_01da-01ee) to RGBA(68,34,136,255) on the next draw or read; CNA keeps the back buffer's contents.
-  The XNA-faithful implementation exists only on the local, unpushed branch `work/hnd-gfx`
-  (56239f345 R2, e8d5ecd69 R1, 2026-11-09). Integrated locally it failed 114 EasyGL example programs
+  The XNA-faithful implementation is kept on the backup branch `work/hnd-gfx` (pushed to origin
+  2026-11-13; 56239f345 R2, e8d5ecd69 R1, 2026-11-09, three commits on an older `next`). Integrated locally it failed 114 EasyGL example programs
   in `cmake-build-multi` (about 99 on the discard colour, about 15 across device disposal), because
   they read the back buffer repeatedly or use resources after the device is disposed. Adopting it
   means rebasing that branch onto `next` and changing those examples first. Recorded in
