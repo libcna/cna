@@ -6045,10 +6045,13 @@ namespace
             effect->getParametersProperty()["Transform"]->SetValue(Matrix::getIdentityProperty());
 
             struct Vertex { float x, y, z, u, v; };
+            // D3D9 pixel (1,1) is centred at (1,1). Put the left edge at window x=1.1:
+            // the centre is outside, but the samples at x=1+1/8 and x=1+3/8 are inside.
+            // TEXCOORD0.x is negative at the centre and positive at a covered centroid.
             const Vertex triangle[3] = {
-                {-0.2f,  1.0f, 0.0f, 0.0f, 0.0f},
-                {-0.2f, -1.0f, 0.0f, 0.0f, 0.0f},
-                { 0.9f,  0.0f, 0.0f, 1.0f, 0.0f},
+                {-0.45f,  1.0f, 0.0f, 0.0f, 0.0f},
+                {-0.45f, -1.0f, 0.0f, 0.0f, 0.0f},
+                { 0.65f,  0.0f, 0.0f, 1.0f, 0.0f},
             };
             const VertexDeclaration declaration(static_cast<int>(sizeof(Vertex)), {
                 VertexElement(0, VertexElementFormat::Vector3,
@@ -6095,8 +6098,8 @@ namespace
                   "probe " + std::to_string(static_cast<int>(semanticProbe)) + " (r=" +
                       std::to_string(edge.getRProperty()) + ", g=" +
                       std::to_string(edge.getGProperty()) + "; footprint" + footprint + ")");
-            Check((expectsCentroid ? edge.getGProperty() : edge.getRProperty()) > 32,
-                  "compiled D3D9 centroid interpolation produced no covered output for probe " +
+            Check(std::abs((expectsCentroid ? edge.getGProperty() : edge.getRProperty()) - 128) <= 1,
+                  "compiled D3D9 centroid interpolation did not resolve two covered samples for probe " +
                       std::to_string(static_cast<int>(semanticProbe)));
         }
     }

@@ -32,7 +32,10 @@ page under `docs/` (index: `docs/README.md`), deliberate divergences from FNA an
   DynamicSoundEffectInstance test per audio tree that read the live PendingBufferCount while a short
   buffer could finish (fixed in the tests: ten-second buffers), two XACT authored-tail tests in the
   NULL-audio headless tree (they now skip without a mixer, as the other voice tests do), and
-  `Software_CompiledEffectRuntime` (one cause fixed in the test, the other listed under Defects).
+  `Software_CompiledEffectRuntime`, which sweep 21 ran for the first time with Software compiled
+  effects on: its line check drew after a stock draw without re-applying its pass, and its centroid
+  fixture still assumed half-integer pixel centres, which baf453c9c (XNA's integer centres on a
+  multisampled target) had replaced (both test errors, fixed).
   GitHub CI for 011460b7f was green in all nine workflows. GPU and window tests must run through
   `tools/platform/run_gpu_tests_private.sh`, never on the live desktop.
 
@@ -45,17 +48,6 @@ page under `docs/` (index: `docs/README.md`), deliberate divergences from FNA an
   in order, then Wine reported "Unhandled page fault on execute access" at process teardown (exit
   code 5); sweep 18 passed it. Not traced. If it recurs, capture `+loaddll,+seh` and a WineDbg
   stack; never suppress the nonzero result.
-- **Software compiled-effect draws into a multisampled target land half a pixel right and down.**
-  `Software_CompiledEffectRuntime` (`CheckCompiledCentroidInterpolation`) draws one triangle with
-  a compiled effect into a 4x4, 4-sample RenderTarget2D through `GraphicsDevice`; the left column the
-  triangle only partly covers receives no sample. The per-sample coverage the rasterizer writes
-  (traced with gdb on `WriteCompiledPixelResult`) matches the triangle moved by +0.5 pixel on both
-  axes, not a missing MSAA path: the target has 4 samples, MultiSampleAntiAlias is on, the viewport
-  and scissor are 0,0,4,4 and MultiSampleMask is all ones. It passed in sweep 18 (837b687c3) and
-  fails since sweep 19 (acaf9ac9b); no commit in that range changes a pixel-centre or viewport
-  formula or the sample pattern, so the shift arrives some other way (the RV-LATCH/RV-STAGE stage
-  and constant changes are the first suspects). Not bisected. The same test's other failure, a
-  compiled draw after a stock draw without re-applying its pass, was a test error (fixed).
 - **`scripts/check_cnaext_matrix.py` fails and runs nowhere.** It looks for a heading
   (`### Every renderer identity`) that `docs/cnaext-engine-layer.md` no longer has since 4f346aada;
   no CI workflow or CMake test calls it, so nothing noticed. Either repair its anchor or delete it.
