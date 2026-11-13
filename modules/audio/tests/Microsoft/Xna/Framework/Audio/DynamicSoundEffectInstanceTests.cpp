@@ -448,8 +448,9 @@ TEST(DynamicSoundEffectInstanceTest, SubmitFloatBufferWithSampleCountNotDivisibl
 // A refused partial-frame submission while playing leaves the buffer bookkeeping intact.
 TEST(DynamicSoundEffectInstanceTest, SubmitBufferRefusesPartialFramesWhilePlaying)
 {
+    // PendingBufferCount is live: a 10-second buffer cannot finish under the test's next reads.
     DynamicSoundEffectInstance d(44100, AudioChannels::Stereo);
-    if (!tryStartHeadless(d))
+    if (!tryStartHeadless(d, 44100 * 10))
     {
         GTEST_SKIP() << "no audio device (dummy driver unavailable)";
     }
@@ -910,8 +911,9 @@ TEST(DynamicSoundEffectInstanceTest, Apply3DOnPlayingInstanceAttenuatesLiveTrack
 // count is exactly what it was right before pausing.
 TEST(DynamicSoundEffectInstanceTest, PendingBufferCountUnaffectedAcrossPause)
 {
+    // PendingBufferCount is live: a 10-second buffer cannot finish under the test's next reads.
     DynamicSoundEffectInstance d(44100, AudioChannels::Stereo);
-    if (!tryStartHeadless(d))
+    if (!tryStartHeadless(d, 44100 * 10))
     {
         GTEST_SKIP() << "no audio device (dummy driver unavailable)";
     }
@@ -934,8 +936,9 @@ TEST(DynamicSoundEffectInstanceTest, PendingBufferCountUnaffectedAcrossPause)
 // SubmittedBuffers above covers the never-played case.
 TEST(DynamicSoundEffectInstanceTest, PendingBufferCountResetsToZeroAfterStopWhilePlaying)
 {
+    // PendingBufferCount is live: a 10-second buffer cannot finish under the test's next reads.
     DynamicSoundEffectInstance d(44100, AudioChannels::Stereo);
-    if (!tryStartHeadless(d))
+    if (!tryStartHeadless(d, 44100 * 10))
     {
         GTEST_SKIP() << "no audio device (dummy driver unavailable)";
     }
@@ -951,8 +954,9 @@ TEST(DynamicSoundEffectInstanceTest, PendingBufferCountResetsToZeroAfterStopWhil
 // (via its own Stop() call), matching FNA's Dispose(bool) -> Stop(true) -> ClearBuffers().
 TEST(DynamicSoundEffectInstanceTest, PendingBufferCountResetsToZeroAfterDisposeWhilePlaying)
 {
+    // PendingBufferCount is live: a 10-second buffer cannot finish under the test's next reads.
     DynamicSoundEffectInstance d(44100, AudioChannels::Stereo);
-    if (!tryStartHeadless(d))
+    if (!tryStartHeadless(d, 44100 * 10))
     {
         GTEST_SKIP() << "no audio device (dummy driver unavailable)";
     }
@@ -969,8 +973,9 @@ TEST(DynamicSoundEffectInstanceTest, PendingBufferCountResetsToZeroAfterDisposeW
 // the stream -- matches FNA, where a buffer stays in queuedBuffers.Count either way).
 TEST(DynamicSoundEffectInstanceTest, SubmitBufferWhilePlayingIncrementsPendingBufferCount)
 {
+    // PendingBufferCount is live: a 10-second buffer cannot finish under the test's next reads.
     DynamicSoundEffectInstance d(44100, AudioChannels::Stereo);
-    if (!tryStartHeadless(d))
+    if (!tryStartHeadless(d, 44100 * 10))
     {
         GTEST_SKIP() << "no audio device (dummy driver unavailable)";
     }

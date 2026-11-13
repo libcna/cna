@@ -38,6 +38,16 @@
 #include <vector>
 #include "System/Environment.hpp"
 
+// The authored-tail cases need a voice that keeps playing. CNA_AUDIO_PLATFORM=NULL builds no
+// mixer (no SOUND_ENABLED): a SoundEffectInstance never reaches Playing there, so a cue's sound
+// has already ended when Stop(AsAuthored) reconciles it (RV-CUE-2) and there is no tail to keep.
+#if defined(SOUND_ENABLED)
+#define CNA_REQUIRE_MIXER_FOR_TAIL() do { } while (false)
+#else
+#define CNA_REQUIRE_MIXER_FOR_TAIL() \
+    GTEST_SKIP() << "CNA_AUDIO_PLATFORM=NULL has no mixer: a cue's sound never keeps playing"
+#endif
+
 using Microsoft::Xna::Framework::Audio::AudioCategory;
 using Microsoft::Xna::Framework::Audio::AudioEngine;
 using Microsoft::Xna::Framework::Audio::AudioEngineTestAccess;
@@ -1433,6 +1443,7 @@ TEST(AudioEngineTest, RepeatedCategoryOperationsDoNotDuplicateActiveCueRegistryE
 // leave the cue registered until it's actually immediate-stopped or disposed.
 TEST(AudioEngineTest, StopAsAuthoredDoesNotUnregisterFromAudioEngineWhileTailStillPlaying)
 {
+    CNA_REQUIRE_MIXER_FOR_TAIL();
     System::Environment::SetEnvironmentVariable("SDL_AUDIODRIVER", "dummy");
 
     try
@@ -1476,6 +1487,7 @@ TEST(AudioEngineTest, StopAsAuthoredDoesNotUnregisterFromAudioEngineWhileTailSti
 // every frame to keep every active fade progressing.
 TEST(AudioEngineTest, UpdateProgressesInProgressAuthoredFadeWithoutAnyOtherCueQuery)
 {
+    CNA_REQUIRE_MIXER_FOR_TAIL();
     System::Environment::SetEnvironmentVariable("SDL_AUDIODRIVER", "dummy");
 
     try

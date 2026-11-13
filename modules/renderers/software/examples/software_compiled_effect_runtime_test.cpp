@@ -7966,7 +7966,10 @@ namespace
             FindParameter(*runtime, "Transform"), matrix, sizeof(matrix));
         runtime->SetTechnique(0);
         CompiledEffectPassStateChanges changes;
-        runtime->ApplyPass(1, {}, changes);
+        // A stock draw replaces the device's shaders (RV-STAGE, XNA BasicEffect's Apply), so every
+        // compiled draw that follows one applies its pass again, as an XNA game does.
+        const auto applyCompiledPass = [&] { runtime->ApplyPass(1, {}, changes); };
+        applyCompiledPass();
 
         struct CompiledPosition
         {
@@ -8010,6 +8013,7 @@ namespace
                                                  const std::string& label)
         {
             clear();
+            applyCompiledPass();
             renderer.DrawPrimitivesEx(*compiledBuffer, identity, identity, identity,
                                       primitive, primitiveCount, params);
             const auto compiled = ReadBackbufferPixels(renderer);
@@ -8034,6 +8038,7 @@ namespace
         auto indexBuffer = renderer.CreateIndexBuffer16(3);
         indexBuffer->SetData16(indices, 3);
         clear();
+        applyCompiledPass();
         renderer.DrawIndexedPrimitivesEx(
             *compiledBuffer, *indexBuffer, identity, identity, identity,
             PrimitiveType::LineStrip, 2, params);
@@ -8053,6 +8058,7 @@ namespace
         renderer.ApplyRasterizerState(
             static_cast<int>(CullMode::None), 1, false, 0.02f, 0.0f);
         renderer.ClearColorAndDepth(0.0f, 0.0f, 0.0f, 1.0f, 0.51f);
+        applyCompiledPass();
         renderer.DrawPrimitivesEx(*compiledBuffer, identity, identity, identity,
                                   PrimitiveType::TriangleList, 1, params);
         Check(CountBackbufferColor(renderer, {255u, 128u, 0u, 255u}) == 0,
@@ -8060,6 +8066,7 @@ namespace
         renderer.ApplyRasterizerState(
             static_cast<int>(CullMode::None), 1, false, -0.02f, 0.0f);
         renderer.ClearColorAndDepth(0.0f, 0.0f, 0.0f, 1.0f, 0.49f);
+        applyCompiledPass();
         renderer.DrawPrimitivesEx(*compiledBuffer, identity, identity, identity,
                                   PrimitiveType::TriangleList, 1, params);
         Check(CountBackbufferColor(renderer, {255u, 128u, 0u, 255u}) > 0,
@@ -8078,6 +8085,7 @@ namespace
         renderer.ApplyRasterizerState(static_cast<int>(CullMode::None), 0, false);
         renderer.ApplyRasterizerMultiSampleState(true);
         clear();
+        applyCompiledPass();
         renderer.DrawPrimitivesEx(*compiledBuffer, identity, identity, identity,
                                   PrimitiveType::LineList, 1, params);
         bool foundPartialCoverage = false;
@@ -8098,6 +8106,7 @@ namespace
 
         renderer.ApplyRasterizerMultiSampleState(false);
         clear();
+        applyCompiledPass();
         renderer.DrawPrimitivesEx(*compiledBuffer, identity, identity, identity,
                                   PrimitiveType::LineList, 1, params);
         bool foundReplicatedCoverage = false;
