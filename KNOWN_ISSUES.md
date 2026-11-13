@@ -26,11 +26,14 @@ page under `docs/` (index: `docs/README.md`), deliberate divergences from FNA an
   MojoShader fork 6f1e91b; their CNA patches and open defects are in
   `docs/fna3d-dependency-defects.md`. SDL 86296ac8 with five CNA patches (`cmake/patches/`).
   sharp-runtime (CNA's `System.*`) is the sibling repository.
-- **Tests.** The last full run, sweep 18 on 2026-11-11 (837b687c3), built seven configurations (multi,
-  sdlgpu, webgpu, fna3d, software, headless and opengl33; about 102,900 CTest cases). Its failures were a
-  reference file's line endings (fixed in 4ef67873b) and `GamerServices_DirectoryServiceContract`, whose
-  server fixture build had been deleted (rebuilt, it passes). The thirteen consumer repositories were
-  rechecked on 4ef67873b the same day; none needed a code change. GPU and window tests must run through
+- **Tests.** The last full run, sweep 21 on 2026-11-12/13 (011460b7f), built seven configurations
+  (multi, sdlgpu, webgpu, fna3d, software, headless and opengl33; about 103,700 CTest cases; ctest
+  `-j2`, evidence `../cnaplan/evidence/rev002/sweep21-011460b7f/`). Its failures: one
+  DynamicSoundEffectInstance test per audio tree that read the live PendingBufferCount while a short
+  buffer could finish (fixed in the tests: ten-second buffers), two XACT authored-tail tests in the
+  NULL-audio headless tree (they now skip without a mixer, as the other voice tests do), and
+  `Software_CompiledEffectRuntime` (one cause fixed in the test, the other listed under Defects).
+  GitHub CI for 011460b7f was green in all nine workflows. GPU and window tests must run through
   `tools/platform/run_gpu_tests_private.sh`, never on the live desktop.
 
 ## Defects
@@ -42,6 +45,17 @@ page under `docs/` (index: `docs/README.md`), deliberate divergences from FNA an
   in order, then Wine reported "Unhandled page fault on execute access" at process teardown (exit
   code 5); sweep 18 passed it. Not traced. If it recurs, capture `+loaddll,+seh` and a WineDbg
   stack; never suppress the nonzero result.
+- **Software compiled-effect draws into a multisampled target land half a pixel right and down.**
+  `Software_CompiledEffectRuntime` (`CheckCompiledCentroidInterpolation`) draws one triangle with
+  a compiled effect into a 4x4, 4-sample RenderTarget2D through `GraphicsDevice`; the left column the
+  triangle only partly covers receives no sample. The per-sample coverage the rasterizer writes
+  (traced with gdb on `WriteCompiledPixelResult`) matches the triangle moved by +0.5 pixel on both
+  axes, not a missing MSAA path: the target has 4 samples, MultiSampleAntiAlias is on, the viewport
+  and scissor are 0,0,4,4 and MultiSampleMask is all ones. It passed in sweep 18 (837b687c3) and
+  fails since sweep 19 (acaf9ac9b); no commit in that range changes a pixel-centre or viewport
+  formula or the sample pattern, so the shift arrives some other way (the RV-LATCH/RV-STAGE stage
+  and constant changes are the first suspects). Not bisected. The same test's other failure, a
+  compiled draw after a stock draw without re-applying its pass, was a test error (fixed).
 - **`scripts/check_cnaext_matrix.py` fails and runs nowhere.** It looks for a heading
   (`### Every renderer identity`) that `docs/cnaext-engine-layer.md` no longer has since 4f346aada;
   no CI workflow or CMake test calls it, so nothing noticed. Either repair its anchor or delete it.
@@ -91,6 +105,14 @@ page under `docs/` (index: `docs/README.md`), deliberate divergences from FNA an
   cascade's list (out of memory), which then propagates. XNA serializes AudioEngine.Update and every Cue/bank call with one lock (UnsafeNativeMethods
   pSyncObject); CNA has none, so calling Update on one thread while another stops or disposes a
   cue, or disposes the engine, is a data race (review rv-cue #3, not reproduced).
+- Texture content with a zero-byte level (CNA.NET review dn-fix-rv, 2026-11-12): CNA's readers
+  always refuse it as ArgumentOutOfRangeException("elementCount")
+  (`modules/content/src/Xnb/XnbCanonicalTextures.cpp`, the `byteCount == 0` check). XNA reads each
+  level into ContentManager's shared byte buffer (GetByteBuffer IL_0000-0046): when no earlier,
+  larger buffer is still held -- a fresh manager, or the weak reference collected -- a zero-byte
+  first level gets a new empty array, which SetData refuses as ArgumentNullException("data") (as
+  the review reads it; not measured);
+  only a reused non-empty buffer reaches the elementCount refusal. CNA keeps no such buffer.
 - Reviews of 2026-11-12 (rv-sfx, rv-media, rv-storage, rv-fix7), source-traced and not fixed:
   Audio -- immediate Stop accounts for its flush during the call; native XNA flush-callback timing
   and transient PendingBufferCount observations remain unmeasured. CNA notices a completed buffer
