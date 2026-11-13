@@ -91,6 +91,18 @@ page under `docs/` (index: `docs/README.md`), deliberate divergences from FNA an
 
 ### Divergences from XNA, not fixed (state of 2026-11-11)
 
+- **GraphicsDevice teardown and the back buffer (HND-TQ-47 R1/R2), kept by owner decision
+  2026-11-09.** R2: XNA's `!GraphicsDevice` IL_0012-0020 -> `ReleaseAllDeviceResources`
+  IL_009e-00a7 only releases each child's native object; the children stay `IsDisposed == false` and
+  raise no events. CNA disposes them in a cascade. R1: XNA clears its back buffer lazily after
+  construction, Reset and Present (`Present` IL_009e-00a5, `GetBackBufferData` IL_0066-006f,
+  IL_01da-01ee) to RGBA(68,34,136,255) on the next draw or read; CNA keeps the back buffer's contents.
+  The XNA-faithful implementation exists only on the local, unpushed branch `work/hnd-gfx`
+  (56239f345 R2, e8d5ecd69 R1, 2026-11-09). Integrated locally it failed 114 EasyGL example programs
+  in `cmake-build-multi` (about 99 on the discard colour, about 15 across device disposal), because
+  they read the back buffer repeatedly or use resources after the device is disposed. Adopting it
+  means rebasing that branch onto `next` and changing those examples first. Recorded in
+  `docs/xna-fna-behavior-decisions.md` (b5f3629ff, with HND-TQ-49 D3).
 - XACT teardown (reviews rv-cue3 to rv-cue5, 2026-11-12): an AudioEngine destroyed by a Disposing
   handler during its own disposal cascade stops the cascade; the banks it had not yet disposed stay
   undisposed, detached from it (no engine); so do all of them when the engine cannot allocate its
