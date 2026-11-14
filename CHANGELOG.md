@@ -20,6 +20,16 @@ The experimental C ABI goes from `0.50.0` to `0.52.0`.
 
 ### Changed
 
+- **CNA requires sharp-runtime 0.3.0** (`cmake/DependencyVersions.cmake`), released on
+  2026-11-14 as [`v0.3.0`](https://github.com/libcna/sharp-runtime/releases/tag/v0.3.0). It is
+  the first sharp-runtime release with the .NET Framework 4.0 parity work CNA asked for:
+  - `BinaryReader` decoding (HND-TQ-16) and `PeekChar` (KI-SHARP-PEEKCHAR);
+  - `BinaryWriter`'s character and array overloads (rv-netapi #1/#4);
+  - `XmlReader`'s UTF-8 checks (GAP-22) and source locations (HND-TQ-01);
+  - `OrdinalIgnoreCase` (TQ-078).
+
+  The configure-time check refuses a sharp-runtime checkout that declares `0.2.x`. sharp-runtime
+  0.3.0 makes `System::Version`'s data members private, which CNA does not use.
 - **XACT `Cue` follows XNA in four places.** An unknown or inaccessible cue variable throws
   `IndexOutOfRangeException` ("The specified variable index is invalid.") instead of
   `InvalidOperationException` (the C routes `cna_cue_get_variable`/`cna_cue_set_variable` now give
