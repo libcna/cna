@@ -1,7 +1,9 @@
 # CNA — Instructions for AI Agents
 
-`CLAUDE.md` and `AGENTS.md` are symbolic links to this file, so Claude Code, Codex and every other
-agent read the same rules. Edit only `AI.md`.
+These are the project-specific instructions referred to by the AI Contribution Policy in
+`AGENTS.md`. They supplement that policy and never override it: AI acts as an advisor unless a human
+authorizes changes for a defined task, and AI never creates or rewrites Git commits. `CLAUDE.md`
+loads both files.
 
 ## Project
 
@@ -126,7 +128,7 @@ struct Color : public Graphics::PackedVector::IPackedVectorT<UInt32> { … };
 ```
 
 Where an exact mapping is not practical, implement equivalent behaviour and explain that API-shape
-deviation in the commit message, not in a source comment.
+deviation in the commit message (when AI proposes it), not in a source comment.
 
 ### IDisposable
 
@@ -341,7 +343,7 @@ configure time (`cmake/RendererCombinations.cmake`); the design decisions are in
 
 A standalone probe proving a new renderer's underlying API works, before any renderer code exists,
 lives in `spikes/<name>-spike/` (precedent: `spikes/dx9-spike/README.md`), never in the scratchpad.
-While the renderer is a candidate or supported, commit the probe source and a short `README.md` of
+While the renderer is a candidate or supported, keep the probe source and a short `README.md` of
 what it proved, and gitignore only the built binaries (`*.exe`, `*.o`). When the renderer is retired
 or rejected, delete the spike directory and its ignore rules; Git history keeps the source.
 
@@ -490,6 +492,9 @@ sudo apt-get install -y libdraco-dev   # only with -DCNA_USE_SYSTEM_DRACO=ON
 
 ## Finishing a task
 
+These steps apply only to a task a human has authorized AI to change (see `AGENTS.md`); in the
+advisory role, AI only proposes.
+
 1. **Build** the affected targets. There is no `CNA` target: build the whole configuration
    (`cmake --build <dir> --parallel 6`) or a test/example target by its own name; for a small edit,
    only the named targets.
@@ -497,12 +502,12 @@ sudo apt-get install -y libdraco-dev   # only with -DCNA_USE_SYSTEM_DRACO=ON
    the change touches.
 3. **Record** a change of current state in `KNOWN_ISSUES.md` and changed subsystem behaviour in that
    subsystem's `docs/` page.
-4. **Commit** as soon as the task is finished, without waiting to be asked. Never push unless the
-   user asks.
-   - Stage only the task's files, by name (`git add <file> …`). Never `git add -A` or `git add .`:
-     the tree routinely holds unrelated local changes.
-   - Write the message in this repository's style (`git log --oneline`):
+4. **Do not commit.** AI never creates, amends, signs or rewrites a commit, and pushes only when a
+   human explicitly asks; the human reviews the change and commits it.
+   - Propose a commit message in this repository's style (`git log --oneline`):
      `type(TASK-ID): what changed and why`, e.g. `fix(RV-SFX-8): …`, `docs(KNOWN_ISSUES): …`.
+   - List the task's files by name so the human can stage exactly those; the tree routinely holds
+     unrelated local changes.
    - One task, one commit.
 5. **Report** the changed files, added stubs, missing dependencies, intentional deviations, the
    build result and any remaining errors.
