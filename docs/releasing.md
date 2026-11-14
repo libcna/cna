@@ -1,10 +1,10 @@
 # Releasing CNA
 
-*Product release: 0.2.0 (2026-10-28); procedure checked 2026-11-01.*
+*Product release: 0.3.0 (2026-11-14); procedure checked 2026-11-14.*
 
 CNA follows [Semantic Versioning 2.0.0](https://semver.org/spec/v2.0.0.html). A release is a
 reviewed commit with an annotated Git tag and a `CHANGELOG.md` entry. Use the owner's approved
-release branch; 0.2.0 was cut from `next`. This procedure covers the native repository release,
+release branch; 0.2.0 and 0.3.0 were cut from `next`. This procedure covers the native repository release,
 while C ABI publication and external consumer packages have their own readiness requirements.
 
 ## Where the version lives
@@ -13,13 +13,13 @@ The version is decided in exactly **one** place:
 
 ```cmake
 # CMakeLists.txt (repository root)
-project(CNA VERSION 0.2.0 LANGUAGES CXX)
+project(CNA VERSION 0.3.0 LANGUAGES CXX)
 set(CNA_VERSION_PRERELEASE "")   # e.g. "beta.1"; empty on a final release
 ```
 
 `project(VERSION …)` accepts numeric components only, so the pre-release identifier sits beside
-it and the two are joined into `CNA_VERSION_STRING` (`0.2.0`, or a chosen pre-release such as
-`0.2.0-beta.1`). `CNA_VERSION_PRERELEASE`
+it and the two are joined into `CNA_VERSION_STRING` (`0.3.0`, or a chosen pre-release such as
+`0.3.0-beta.1`). `CNA_VERSION_PRERELEASE`
 is deliberately a normal variable and not a cache entry: a cached copy would keep an existing
 build directory reporting the previous release after a bump.
 

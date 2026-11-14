@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.20)
 
-project(CNA VERSION 0.2.0 LANGUAGES CXX)
+project(CNA VERSION 0.3.0 LANGUAGES CXX)
 
 # Keep CNA, Sharp Runtime and configure-time vendored dependencies on one explicit MSVC CRT.
 # The dynamic CRT is the normal Windows application contract; projects that deliberately need a

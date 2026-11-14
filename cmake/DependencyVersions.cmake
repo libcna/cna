@@ -18,8 +18,8 @@
 # =====================================================================================
 
 set(CNA_REQUIRED_SHARP_RUNTIME_VERSION "0.3.0")
-set(CNA_REQUIRED_EASYGL_VERSION        "0.1.1")
-set(CNA_REQUIRED_METAGL_VERSION        "0.4.1")
+set(CNA_REQUIRED_EASYGL_VERSION        "0.1.2")
+set(CNA_REQUIRED_METAGL_VERSION        "0.4.2")
 
 option(CNA_CHECK_DEPENDENCY_VERSIONS
     "Fail configuration when a sibling checkout (sharp-runtime, easy-gl, meta-gl) declares a version this CNA release does not support; OFF reports it as a warning instead"
