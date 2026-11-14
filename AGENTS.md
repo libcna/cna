@@ -1,107 +1,37 @@
-# AI Contribution Policy (v4)
+# AI Contribution Policy (v5)
 
-AI-assisted contributions are permitted under the conditions below.
-The human contributor remains responsible for the entire contribution,
-including any material generated or modified by AI.
+AI must not be used to create or modify anything in this project for contributions.
+This includes source code, tests, build scripts, configuration files, 
+documentation, examples, HTML, CSS, JavaScript, and other web-related content,
+images, artwork, audio, models, and other project assets, commit messages, 
+pull request descriptions, issue reports.
 
-“AI” includes Large Language Models (“LLMs”) and other generative AI tools,
-such as ChatGPT, Claude, Copilot, and similar systems.
+"AI" in this case means a Large Language Model ("LLM"), such as ChatGPT,
+Claude, Copilot, Grok, etc.
 
-This policy applies to all project content, including source code, tests,
-build scripts, configuration, documentation, examples, assets, commit
-messages, pull or merge request descriptions, and issue reports.
+AI-generated code is based upon sources of unknown origins and may not be 
+compatible with the licenses applicable to this project, or may introduce 
+conflicting license terms if it includes code from other projects.
 
-## Authorization to make changes
+AI can be used to identify issues with contributions to this project, 
+explain existing code and documentation and architecture, research technologies 
+and standards and APIs and external documentation.
+But the solutions to contributions in this project must be authored by humans.
 
-AI must act only as an advisor unless a human explicitly authorizes it
-to make changes for a defined task or scope.
+AI may provide hints or questions that guide human contributors toward their own 
+solutions. AI must not provide ready-to-use implementations or project-specific 
+solutions, including complete function bodies, classes, patches, or replacement 
+code. Small, self-contained educational code examples are permitted, provided 
+they are not ready-to-use solutions for the project. The purpose of AI assistance 
+is to improve human understanding and independent problem-solving, not to replace 
+human implementation.
 
-In its advisory role, AI may analyze existing content, explain code and
-architecture, research external documentation, identify possible issues,
-and propose solutions or draft text for human consideration. It must not
-apply changes to the project.
+We have found that AI will frequently hallucinate issues that are not actually
+problems in practice, report incorrect information, and describe problems that
+are actually not issues at all. If AI identifies a problem with this codebase,
+please make sure you understand what it is saying and have independently
+confirmed that the issue exists before submitting a bug report or pull request.
 
-A human instruction to implement or fix something within a defined scope
-authorizes the edits reasonably necessary for that task. Separate approval
-is not required for every individual edit within that scope.
-
-A request for advice, review, explanation, or a proposal does not authorize
-changes. If the authorization is unclear, AI must ask before making changes.
-If additional work falls outside the authorized scope, AI must obtain
-further authorization.
-
-Authorization to edit does not by itself authorize pushing, publishing,
-or merging changes.
-
-## Human understanding and responsibility
-
-The human contributor must review the complete contribution, including
-all AI-generated or AI-modified content.
-
-Before submitting the contribution, the human contributor must:
-
-- Understand the changes and their effects.
-- Be able to explain their purpose, behavior, and relevant design choices.
-- Verify factual claims and confirm that reported issues actually exist.
-- Perform appropriate validation and inspect the actual results.
-- Correct or remove errors, unnecessary changes, and other deficiencies.
-- Be able to address review feedback and correct problems in the contribution.
-
-AI-generated explanations, another person's approval, or passing automated
-checks do not replace the contributor's own understanding.
-
-AI-assisted changes must not be submitted or merged if the human contributor
-does not understand them. If the contributor cannot adequately evaluate or
-explain a change, they must obtain the necessary understanding or remove
-that change before proceeding.
-
-These responsibilities apply equally to contributions made without AI.
-
-## Git commits
-
-AI must not create Git commits, amend commits, rewrite commit history,
-or sign commits. This prohibition applies whether performed directly
-or indirectly through tools, scripts, APIs, or other automation.
-
-Operations that create or rewrite commits must be performed by a human.
-
-AI may propose commit messages for human review. The human must verify
-that the final message accurately describes the changes and must perform
-the commit operation themselves.
-
-Permission to modify project content does not waive this restriction.
-
-## Quality, provenance, and licensing
-
-AI output must be treated as unverified material.
-
-The human contributor must evaluate the contribution for correctness,
-maintainability, security, and compliance with project requirements.
-
-Using AI does not establish the origin, ownership, or licensing status
-of its output. The contributor must ensure that they have the necessary
-rights to contribute all included material and preserve any required
-attribution and notices.
-
-Contributors must not describe AI-generated material as entirely
-human-authored.
-
-## Disclosure and submission
-
-Pull and merge requests must state whether AI was used to generate or
-modify contribution content. If it was, briefly describe its role,
-the affected parts, and the validation performed.
-
-By submitting a contribution, the human contributor confirms that they
-understand and accept responsibility for it, have the necessary rights
-to contribute it under the project's applicable license terms, and have
-complied with this policy.
-
-## Project-specific instructions
-
-Additional project-specific instructions may be provided in `AI.md`.
-That file is optional.
-
-Those instructions supplement this policy. They do not by themselves
-authorize edits or waive the requirements for human understanding,
-human responsibility, or human-performed commits.
+By submitting a pull request to this project, you confirm that you are the
+author of your changes, have the necessary rights to contribute them, and
+comply with all applicable licensing requirements of this project.
