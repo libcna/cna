@@ -68,7 +68,7 @@ Each topic follows the same evidence loop:
 
 When a change is warranted, finish the whole bounded task: implementation, public documentation,
 tests, maintained subsystem document and `KNOWN_ISSUES.md` when its current-state record changes. Follow
-[`AGENTS.md`](../AGENTS.md) for build, test, staging and commit rules.
+[`AI.md`](../AI.md) for build, test, staging and commit rules.
 
 ## Questions for each file or coherent group
 
@@ -185,7 +185,7 @@ This is a starting template, not a permanent project schedule:
 
 ## Assistance and change discipline
 
-[`AGENTS.md`](../AGENTS.md) is the active contribution policy. Assistance may generate inventories,
+[`AI.md`](../AI.md) is the active contribution policy. Assistance may generate inventories,
 mechanical cross-references, candidate diffs, fixtures and implementation drafts, but correctness
 comes from XNA/FNA evidence and regression tests. Do not infer semantic authority from who or what
 wrote a line, and do not replace review with arbitrary AI line or file quotas.

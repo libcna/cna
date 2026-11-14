@@ -4,8 +4,8 @@
 # byte-identical to the FNA reference tree; this script is that enforcement, not just a comment.
 #
 # Usage: scripts/verify-d3d9-stock-effects-vendored.sh [path-to-FNA-tree]
-# Defaults to /rv/data/library/github.com/FNA-XNA/FNA (this project's own documented reference
-# tree location, per CLAUDE.md's "Source Reference"). Override via the first argument or
+# Defaults to /rv/data/library/github.com/FNA-XNA/FNA, the owner's machine's FNA checkout (AI.md's
+# "Source Reference" requires no particular location). Override via the first argument or
 # CNA_FNA_TREE if the reference tree lives somewhere else on a given machine.
 #
 # Exit code 0 = every vendored file is byte-identical to the FNA tree; 1 = at least one delta

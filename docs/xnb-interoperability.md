@@ -546,7 +546,7 @@ in the tree). Both are build-time and test-time only; no CNA runtime module link
 ### 9.1 Source rules for the content-pipeline parity work
 
 These are the clean-room source rules of the XNA Content Pipeline parity work (`XNAPP-*`). They
-concern deriving content-building implementations; the project's [AGENTS.md](../AGENTS.md)
+concern deriving content-building implementations; the project's [AI.md](../AI.md)
 governs ongoing work, including the normal local FNA runtime reference and approved exact-runtime
 IL measurements.
 
@@ -579,7 +579,7 @@ ignored `build/`.
 The local **FNA reference tree** is the normal runtime/read-side reference. It supplies no
 corresponding XNA content-building implementation; the build side uses the metadata, black-box
 tools and public sample sources above. No fixed checkout path is required. Where XNA and FNA
-disagree, XNA wins (`CLAUDE.md`).
+disagree, XNA wins (`AI.md`).
 
 The sample `.xnb` sweep (`XNASWEEP-*`, [`tools/xna-sample-sweep/README.md`](../tools/xna-sample-sweep/README.md))
 keeps these rules, with one addition: **the public

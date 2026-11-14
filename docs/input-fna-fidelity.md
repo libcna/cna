@@ -115,8 +115,8 @@ singletons (`isSystemSingleton_` guard) — MonoGame's `PlatformDispose()` frees
 unconditionally, corrupting the singleton for all other holders. The move constructor/assignment (a
 C++ addition with no C# analogue) has a self-move-assignment regression test.
 - **Disposed-cursor behavior deviates from the project's general `IDisposable` convention (P3-033,
-  accepted):** `MouseCursor::Dispose()` never throws, and — unlike the CLAUDE.md-documented default
-  ("throw `std::runtime_error` if used after disposal") — `Mouse::SetCursor` on a disposed cursor is
+  accepted):** `MouseCursor::Dispose()` never throws, and — unlike the AI.md default ("where XNA refuses use
+  after disposal, throw `System::ObjectDisposedException`") — `Mouse::SetCursor` on a disposed cursor is
   an intentional safe no-op (tested by
   `SetCursorIsSafeNoOpForDisposedCursor`). This is deliberate: MonoGame's own `MouseCursor` (the
   source this CNAEXT type is modeled on) defines no post-Dispose exception contract either, and a

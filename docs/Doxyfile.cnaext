@@ -8,7 +8,7 @@
 #     doxygen docs/Doxyfile.cnaext
 #
 # Output lands in build/doxygen-cnaext/ (gitignored). WARN_AS_ERROR is on for undocumented members,
-# which is what makes this configuration a check rather than a rendering: CLAUDE.md requires a
+# which is what makes this configuration a check rather than a rendering: AI.md requires a
 # Doxygen block on every public member, and here that requirement is enforced instead of asserted.
 
 PROJECT_NAME           = "CNA Engine Layer"
@@ -36,7 +36,7 @@ HIDE_UNDOC_CLASSES     = NO
 WARNINGS               = YES
 WARN_IF_UNDOCUMENTED   = YES
 WARN_IF_DOC_ERROR      = YES
-# Deliberately NO. CLAUDE.md allows a one-line `/** @brief ... */` on a simple getter, setter or
+# Deliberately NO. AI.md allows a one-line `/** @brief ... */` on a simple getter, setter or
 # constant, and this repository uses that allowance everywhere; WARN_NO_PARAMDOC=YES would report
 # several hundred of those as errors, which would make the check about a rule the project does not
 # have. WARN_IF_UNDOCUMENTED above is the rule it does have -- a public member with no block at all.

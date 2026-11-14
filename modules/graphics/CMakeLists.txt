@@ -1,7 +1,7 @@
 file(GLOB_RECURSE CNA_GRAPHICS_CORE_SOURCES CONFIGURE_DEPENDS
     "src/Xna/*.cpp"
     "src/Internal/*.cpp"
-    # CLAUDE.md's src/ area convention: CNAEXT extension surfaces live in src/CnaExt/. The graphics
+    # AI.md's src/ area convention: CNAEXT extension surfaces live in src/CnaExt/. The graphics
     # core had none until XNA-MISSING-006 needed VertexTypeRegistryEXT, which is a public CNA
     # facility rather than an internal one, so it is not src/Internal/.
     "src/CnaExt/*.cpp"

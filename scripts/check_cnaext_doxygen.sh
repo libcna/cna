@@ -26,7 +26,7 @@ if [ "$status" -ne 0 ]; then
     echo "$output"
     echo
     echo "doxygen reported problems in the CNA::Graphics headers (WARN_AS_ERROR is on)."
-    echo "Every public member of the engine layer needs a Doxygen block; see CLAUDE.md."
+    echo "Every public member of the engine layer needs a Doxygen block; see AI.md."
     exit 1
 fi
 

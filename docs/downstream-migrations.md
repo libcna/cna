@@ -1,7 +1,7 @@
 # Downstream migrations
 
 What other repositories must change because of a CNA change. CNA does not edit these repositories itself
-(CLAUDE.md: "If old game code breaks after the API is corrected, fix the game code separately").
+(AI.md: "If old game code breaks after the API is corrected, fix the game code separately").
 Remove an entry when its migration has landed. Retired code (`cna-cemetery`) and vendored CNA copies
 (`openeggbert/mobile-eggbertlite/cna`) are not migrated.
 

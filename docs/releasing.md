@@ -88,7 +88,7 @@ are `alpha.N` → `beta.N` → `rc.N`, ordered as SemVer orders them. `0.1.0-alp
        git -C ../$r status --short                       # must be clean
    done
    ```
-4. **Build and test** in an existing build directory (see the build rules in `CLAUDE.md` —
+4. **Build and test** in an existing build directory (see the build rules in `AI.md` —
    reuse a `cmake-build-<variant>/` tree):
 
    ```bash
@@ -102,7 +102,7 @@ are `alpha.N` → `beta.N` → `rc.N`, ordered as SemVer orders them. `0.1.0-alp
    FNA3D, SOFTWARE, HEADLESS and STUB; it does not replace other platform/renderer qualification.
    GL-family configurations exercise easy-gl and meta-gl alongside Sharp Runtime; they are not
    unique to this one build tree. GPU and window tests must run on the private display,
-   never on the owner's desktop (`CLAUDE.md` § *Running GPU/window tests*). The configure output
+   never on the owner's desktop (`AI.md` § *Running GPU/window tests*). The configure output
    prints `CNA: version <x.y.z>` and one `CNA: <sibling> <version> at <path>` line per sibling —
    check the product and every sibling selected by that configuration. Retain actual pass/fail/skip
    results, platform/compiler/dependency identities and remaining limitations; a skipped path is

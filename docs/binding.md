@@ -7,7 +7,7 @@ boundary and how to assess a consumer.
 
 ## Approved scope and current status
 
-The approved planning boundary in [AGENTS.md](../AGENTS.md#language-bindings) is CNA's native
+The approved planning boundary in [AI.md](../AI.md#language-bindings) is CNA's native
 C API/C ABI. Language-specific binding plans and implementations require explicit project-owner
 authorization. Documentation about an existing external consumer is not authorization to start
 another binding or modify a consumer repository.

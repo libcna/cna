@@ -40,14 +40,14 @@ because game code puts them on runtime types.
 | C# | C++ | Why |
 |---|---|---|
 | `class Foo` (reference type) | `class Foo : public System::Object` with `CNAEXT GetTypeName()` returning the .NET full name | CNA's convention for XNA classes; makes `Foo` polymorphic and boxable |
-| property `X { get; set; }` | `getXProperty()` / `setXProperty(v)` | CNA convention (`AGENTS.md`) |
+| property `X { get; set; }` | `getXProperty()` / `setXProperty(v)` | CNA convention (`AI.md`) |
 | a reference content value | `std::shared_ptr<T>` through `Carrier<T>` for System::Object-derived T | shared identity permits in-place graph mutation; DateTime/TimeSpan/Decimal have value-carrier specializations |
 | value types (int, Vector3, enum) | `T` | primitive API spellings use the established SharpRuntime aliases |
 | C# string | `std::string` / SharpRuntime String by value | nullable-string semantics require an explicit optional/specialized carrier where needed |
 | `object` as a pipeline payload | `CNA::Content::Pipeline::ContentValue`, spelled `ContentObject` in the façade | the canonical type-erased box; carries the stable .NET type name the XNB writer needs |
 | `null` for a reference-typed property | empty `std::shared_ptr`; for `ContentIdentity`, an identity whose three strings are empty | `ContentIdentity` is a small value class here |
 | `IEnumerable<T>` return | `std::vector<T>` (or `const std::vector<T>&`) | range-iterable; matches sharp-runtime's `Dictionary::getKeysProperty()` precedent |
-| `IDictionary<string,T>`, `Collection<T>`, `ReadOnlyCollection<T>` bases | sharp-runtime `System::Collections::Generic::IDictionary`, `System::Collections::ObjectModel::Collection<T>` / `ReadOnlyCollection<T>` | interfaces preserved as abstract bases (`AGENTS.md`) |
+| `IDictionary<string,T>`, `Collection<T>`, `ReadOnlyCollection<T>` bases | sharp-runtime `System::Collections::Generic::IDictionary`, `System::Collections::ObjectModel::Collection<T>` / `ReadOnlyCollection<T>` | interfaces preserved as abstract bases (`AI.md`) |
 | `Type` | `System::Type` (sharp-runtime, `typeid`-backed) for `InputType`/`OutputType`/`TargetType`; the .NET name comes from `ContentTypeName<T>` | |
 | `string.Format(format, params object[])` | variadic template over `std::format` (`{0}` and `{}` both work) forwarding to a non-template virtual; a subclass overriding the virtual adds `using ContentBuildLogger::LogMessage;` to keep the template visible on its own type | C++ virtuals cannot be templates, and an override hides same-named base overloads |
 | generic method `BuildAsset<TInput,TOutput>(…)` | member template forwarding to a non-template virtual `BuildAssetCore(…)` carrying the two type names | same reason; a test double overrides the `*Core` virtual |

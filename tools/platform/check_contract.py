@@ -15,7 +15,7 @@ guarding properties that are easy to state and easy to let slip:
             probe silently weakens every time someone adds a file and forgets. This makes that a
             test failure rather than an invisible gap.
 
-  doxygen   Every public member of every contract header carries a Doxygen block. CLAUDE.md
+  doxygen   Every public member of every contract header carries a Doxygen block. AI.md
             requires this repo-wide; for this module it matters more than usual, because the
             documentation IS the specification a second implementation is written against. A
             future terminal, Win32 or other platform author has nothing else to work from.
